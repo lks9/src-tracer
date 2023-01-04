@@ -20,7 +20,7 @@ int _cflow_fd;
 #define _IF_INST            _cflow_put('I');
 #define _ELSE_INST          _cflow_put('E');
 #define _SWITCH_INST(i)     _cflow_put_num('S', i);
-#define _LOOP_START(i)      int _cflow_##i = 0; \
+#define _LOOP_START(id)     int _cflow_counter_##id = 0; \
                             _cflow_put('L');
-#define _LOOP_BODY(i)       _cflow_##i ++;
-#define _LOOP_END(i)        _cflow_put_num('P', _cflow_##i);
+#define _LOOP_BODY(id)      _cflow_counter_##id ++;
+#define _LOOP_END(id)       _cflow_put_num('P', _cflow_counter_##id);
