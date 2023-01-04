@@ -28,7 +28,7 @@ int main_original (int argc, char **argv) { _FUNC_INST(1)
 }
 
 int main (int argc, char **argv) {
-    _CFLOW_INIT
+    _CFLOW_INIT("cflow_file.txt")
     int retval = main_original(argc, argv);
     _CFLOW_CLEANUP
     return retval;

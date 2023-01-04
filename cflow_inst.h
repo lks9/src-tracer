@@ -5,8 +5,6 @@
 #include <unistd.h>
 #include <stdio.h>
 
-#define _CFLOW_FILENAME     "cflow_file.txt"
-
 char _cflow_tmpstr[17];
 int _cflow_tmpstr_count;
 int _cflow_fd;
@@ -16,7 +14,7 @@ int _cflow_fd;
 #define _cflow_put_num(c,i) _cflow_tmpstr[0] = c; \
                             _cflow_tmpstr_count = snprintf(&_cflow_tmpstr[1], 16, "%x", i); \
                             write(_cflow_fd, _cflow_tmpstr, _cflow_tmpstr_count + 1);
-#define _CFLOW_INIT         _cflow_fd = open(_CFLOW_FILENAME, O_WRONLY | O_CREAT | O_TRUNC);
+#define _CFLOW_INIT(fname)  _cflow_fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC);
 #define _CFLOW_CLEANUP      close(_cflow_fd);
 #define _FUNC_INST(i)       _cflow_put_num('C', i);
 #define _IF_INST            _cflow_put('I');
