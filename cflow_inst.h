@@ -24,9 +24,3 @@ int _cflow_fd;
                             _cflow_put('L');
 #define _LOOP_BODY(i)       _cflow_##i ++;
 #define _LOOP_END(i)        _cflow_put_num('P', _cflow_##i);
-
-// effectless
-#define _FUNC_END           ;
-#define _IE_BLOCK_INST      ;
-#define _IE_BLOCK_END       ;
-#define _IFELSE_END         ;
