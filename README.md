@@ -4,7 +4,7 @@ This is a draft of a control flow tracer based on source code instrumentation wi
 When running instrumented software, the trace is written into a file `cflow_file.txt`.
 The format is basically one character (plus an optional number)
 for each source code block on the trace.
-For accurate retracing, `trace_replay.py` uses symbolic execution.
+For accurate retracing, `replay_trace.py` uses symbolic execution.
 
 ## Which Software to Trace
 
@@ -26,32 +26,42 @@ help yourself by doing it manually)
 
 * C compiler (or your build system at choice) to compile the instrumented software
 * python3
-* angr for symbolic execution
+* [angr](https://angr.io) for symbolic execution (`pip install angr`)
+
+## Instrumentation
+
+1. Add to each source file
+   ```C
+   #include "cflow_inst.h"
+   ```
+2. Add macros to the respective code blocks. A list of all macros is given below.
+
+For an example instrumentation, see `checksum_inst.c`
+and the original `checksum.c`.
 
 ## Trace Format
 
-Each element consists of one capital letter + an optional hex num in lower case.
+Each element consists of one capital letter + an optional hex `num` in lower case.
 Elements are written sequentially without any separator.
 
-| Macro                   | Emits     | Explanation                                             |
-|-------------------------|-----------|---------------------------------------------------------|
-| `_FUNC_INST(num)`       | `C` + num | Function call, use `num` to distinguish functions       |
-| `_IF_INST`              | `I`       | The if-branch of an if-clause is taken                  |
-| `_ELSE_INST`            | `E`       | The else-branch of an if-clause is taken                |
-| `_SWITCH_INST(num)`     | `S` + num | Jump to case indicated with `num` in a switch-clause    |
-| `_LOOP_START(id)`       | `L`       | Beginning of a loop (for, while etc.)                   |
-| `_LOOP_BODY(id)`        |           | Loop iteration, nothing is emitted                      |
-| `_LOOP_END(id)`         | `P` + num | End of a loop, `num` indicates the number of iterations |
-| `_CFLOW_INIT(filename)` |           | Initialize, write trace to `filename`                   |
-| `_CFLOW_CLEANUP`        |           | Close the cflow tracer                                  |
+| Macro                | Emits       | Explanation                                             |
+|----------------------|-------------|---------------------------------------------------------|
+| `_FUNC_INST(num)`    | `F` + `num` | Function call, use `num` to distinguish functions       |
+| `_IF_INST`           | `I`         | The if-branch of an if-clause is taken                  |
+| `_ELSE_INST`         | `E`         | The else-branch of an if-clause is taken                |
+| `_SWITCH_INST(num)`  | `S` + `num` | Jump to case indicated with `num` in a switch-clause    |
+| `_LOOP_START(id)`    | `L`         | Beginning of a loop (for, while etc.)                   |
+| `_LOOP_BODY(id)`     |             | Loop iteration, nothing is emitted                      |
+| `_LOOP_END(id)`      | `P` + `num` | End of a loop, `num` indicates the number of iterations |
+| `_CFLOW_INIT(fname)` |             | Initialize, write trace to file named `fname`           |
+| `_CFLOW_CLEANUP`     |             | Close the cflow tracer                                  |
 
-The macros are written into the source code. For an example instrumentation, see `checksum_inst.c`
-and the original `checksum.c`. A example trace is `C1EC2LP2I`, which has a sub-trace `C2LP2`.
+The macros are written into the source code.
+An example trace is `F1EF2LP2I`, which includes sub-traces, for example `F2LP2` or `LP2`.
 
 ## Example `checksum.c`
 
-* Start with `checksum.c`
-* Instrument it, see `checksum_inst.c`
+* Instrumentation is in `checksum_inst.c`
 * Compile it
   ```
   gcc checksum_inst.c -o checksum_inst
@@ -62,6 +72,6 @@ and the original `checksum.c`. A example trace is `C1EC2LP2I`, which has a sub-t
   ```
 * Retrace it
   ```
-  python trace_replay.py checksum_inst main C1EC2LP2I
-  python trace_replay.py checksum_inst checksum C2LP2
+  python replay_trace.py checksum_inst main F1EF2LP2I
+  python replay_trace.py checksum_inst checksum F2LP2
   ```

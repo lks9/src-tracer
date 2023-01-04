@@ -16,7 +16,7 @@ int _cflow_fd;
                             write(_cflow_fd, _cflow_tmpstr, _cflow_tmpstr_count + 1);
 #define _CFLOW_INIT(fname)  _cflow_fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC);
 #define _CFLOW_CLEANUP      close(_cflow_fd);
-#define _FUNC_INST(i)       _cflow_put_num('C', i);
+#define _FUNC_INST(i)       _cflow_put_num('F', i);
 #define _IF_INST            _cflow_put('I');
 #define _ELSE_INST          _cflow_put('E');
 #define _SWITCH_INST(i)     _cflow_put_num('S', i);
