@@ -84,7 +84,7 @@ class SourceTraceReplayer:
         trace_pos = 0
         for elem in elems:
             find = lambda s: self.dump(s)[trace_pos:] == elem
-            avoid = lambda s: self.dump(s)[trace_pos:] not in elem
+            avoid = lambda s: self.dump(s)[trace_pos:] not in (b'', elem)
             simgr.explore(find=find, avoid=avoid)
 
             if len(simgr.found) != 1:
