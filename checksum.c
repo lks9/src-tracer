@@ -3,7 +3,6 @@
 
 int checksum (char *str) {
     int sum = 0;
-    int i = 0;
     for (int i = 0; str[i] != '\0'; i++) {
         sum = sum + str[i] - '0';
     }

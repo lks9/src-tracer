@@ -46,10 +46,10 @@ Elements are written sequentially without any separator.
 
 | Macro                | Emits       | Explanation                                             |
 |----------------------|-------------|---------------------------------------------------------|
-| `_FUNC_INST(num)`    | `F` + `num` | Function call, use `num` to distinguish functions       |
-| `_IF_INST`           | `I`         | The if-branch of an if-clause is taken                  |
-| `_ELSE_INST`         | `E`         | The else-branch of an if-clause is taken                |
-| `_SWITCH_INST(num)`  | `S` + `num` | Jump to case indicated with `num` in a switch-clause    |
+| `_FUNC(num)`         | `F` + `num` | Function call, use `num` to distinguish functions       |
+| `_IF`                | `I`         | The if-branch of an if-clause is taken                  |
+| `_ELSE`              | `E`         | The else-branch of an if-clause is taken                |
+| `_SWITCH(num)`       | `S` + `num` | Jump to case indicated with `num` in a switch-clause    |
 | `_LOOP_START(id)`    | `L`         | Beginning of a loop (for, while etc.)                   |
 | `_LOOP_BODY(id)`     |             | Loop iteration, nothing is emitted                      |
 | `_LOOP_END(id)`      | `P` + `num` | End of a loop, `num` indicates the number of iterations |
@@ -66,7 +66,7 @@ An example trace is `F1EF2LP2I`, which includes sub-traces, for example `F2LP2` 
   ```
   gcc checksum_inst.c cflow_inst.c -o checksum_inst
   ```
-* Run it
+* Run it (replace `42` to get another trace) 
   ```
   ./checksum_inst 42
   ```
