@@ -59,21 +59,6 @@ class SourceTraceReplayer:
         state.options["COPY_STATES"] = False
         return state
 
-    ### Format of the trace string
-    #
-    # Each element consists of one capital letter + an optional hex num in lower case.
-    # Elements are written sequentially without any separator.
-    #
-    # "C" + num     A function call, where num can be used to distinguish between functions
-    # "I"           The if-branch of an if-clause is taken
-    # "E"           The else-branch of an if-clause is taken (there is one else for each if in the code!)
-    # "S" + num     Jump to number num in a switch-clause
-    # "L"           Beginning of a loop (for, while etc.)
-    # "P" + num     End of a loop, where num indicates the number of iterations
-    #
-    # We use source instrumentation to emit the trace string.
-    # example: trace_str = 'C1EC2LP2I'
-
     def follow_trace(self, trace_str: str, func_name: str):
         # start_state, simulation manager
         simgr = self.p.factory.simulation_manager(self.start_state(func_name), auto_drop=("avoid",))
