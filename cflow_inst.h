@@ -5,19 +5,15 @@
 #include <unistd.h>
 #include <stdio.h>
 
-char _cflow_tmpstr[18];
-int _cflow_tmpstr_count;
-int _cflow_fd;
+extern char _cflow_tmpstr[18];
+extern int _cflow_put_count;
 
-#define _cflow_put(c)       _cflow_tmpstr[0] = c; \
-                            _cflow_tmpstr[1] = '\0'; \
-                            write(_cflow_fd, _cflow_tmpstr, 1);
-#define _cflow_put_num(c,num) \
-                            _cflow_tmpstr[0] = c; \
-                            _cflow_tmpstr_count = snprintf(&_cflow_tmpstr[1], 17, "%x", num); \
-                            write(_cflow_fd, _cflow_tmpstr, _cflow_tmpstr_count + 1);
-#define _CFLOW_INIT(fname)  _cflow_fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC);
-#define _CFLOW_CLEANUP      close(_cflow_fd);
+extern void _cflow_put(char c);
+extern void _cflow_put_num(char c, int num);
+
+extern void _cflow_open(char *fname);
+extern void _cflow_close();
+
 #define _FUNC_INST(num)     _cflow_put_num('F', num);
 #define _IF_INST            _cflow_put('I');
 #define _ELSE_INST          _cflow_put('E');

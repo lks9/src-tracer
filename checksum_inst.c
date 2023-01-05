@@ -28,8 +28,8 @@ int main_original (int argc, char **argv) { _FUNC_INST(1)
 }
 
 int main (int argc, char **argv) {
-    _CFLOW_INIT("cflow_file.txt")
+    _cflow_open("checksum_cflow_trace.txt");
     int retval = main_original(argc, argv);
-    _CFLOW_CLEANUP
+    _cflow_close();
     return retval;
 }
