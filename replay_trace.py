@@ -14,8 +14,8 @@ class SourceTraceReplayer:
     def __init__(self, binary_name, fd=0, **kwargs):
         self.p = angr.Project(binary_name, **kwargs)
 
-        self.fd = fd
-        self.fd_addr = self.addr("_cflow_fd")
+        self.tmpstr_addr = self.addr("_cflow_tmpstr");
+        self.put_count_addr = self.addr("_cflow_put_count");
 
     def addr(self, sym_name):
         return self.p.loader.main_object.get_symbol(sym_name).rebased_addr
@@ -27,15 +27,10 @@ class SourceTraceReplayer:
         return int(sub)
 
     # dump the file given for a state s
-    def dump(self, state):
-        if self.fd == 0:
-            # maybe correct fd in memory (results 0 otherwise if still symbolic)
-            self.fd = state.mem[self.fd_addr].int.concrete
-            if self.fd == 0:
-                return b''
-        try:
-            return state.posix.dumps(self.fd)
-        except:
+    def dump_elem(self, state, elem_count):
+        if state.mem[self.put_count_addr].int.concrete == elem_count:
+            return state.mem[self.tmpstr_addr].string.concrete
+        else:
             return b''
 
     def make_globals_symbolic(self, state):
@@ -47,6 +42,8 @@ class SourceTraceReplayer:
             elif section.name == ".bss":
                 bss_bvs = claripy.BVS(".bss", 8*(section.max_addr - section.min_addr))
                 state.memory.store(section.min_addr, bss_bvs)
+
+        state.mem[self.put_count_addr].int = 0
 
     def start_state(self, func_name: str):
         if func_name == "main":
@@ -81,10 +78,11 @@ class SourceTraceReplayer:
         elems = re.findall(br"[A-Z][0-9a-z]*", trace_str)
 
         # do the actual tracing
-        trace_pos = 0
+        elem_count = 0
         for elem in elems:
-            find = lambda s: self.dump(s)[trace_pos:] == elem
-            avoid = lambda s: self.dump(s)[trace_pos:] not in elem
+            elem_count += 1
+            find = lambda s: self.dump_elem(s, elem_count) == elem
+            avoid = lambda s: self.dump_elem(s, elem_count) not in elem
             simgr.explore(find=find, avoid=avoid)
 
             if len(simgr.found) != 1:
@@ -95,7 +93,6 @@ class SourceTraceReplayer:
             # start over with active
             simgr.move(from_stash='found', to_stash='active')
 
-            trace_pos += len(elem)
             l.debug("%s", elem.decode())
 
         return simgr

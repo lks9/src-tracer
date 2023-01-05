@@ -7,6 +7,8 @@
 
 #include "cflow_inst.h"
 
+#define _CFLOW_NO_RECORD
+
 char _cflow_tmpstr[18];
 int _cflow_put_count = 0;
 #ifndef _CFLOW_NO_RECORD
