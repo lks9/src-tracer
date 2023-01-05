@@ -82,7 +82,7 @@ class SourceTraceReplayer:
         for elem in elems:
             elem_count += 1
             find = lambda s: self.dump_elem(s, elem_count) == elem
-            avoid = lambda s: self.dump_elem(s, elem_count) not in elem
+            avoid = lambda s: self.dump_elem(s, elem_count) not in (b'', elem)
             simgr.explore(find=find, avoid=avoid)
 
             if len(simgr.found) != 1:
