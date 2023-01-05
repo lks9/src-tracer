@@ -55,6 +55,8 @@ class SourceTraceReplayer:
         addr = self.p.loader.main_object.get_symbol(func_name).rebased_addr
         state = self.p.factory.blank_state(addr=addr)
         self.make_globals_symbolic(state)
+        # optimize a bit
+        state.options["COPY_STATES"] = False
         return state
 
     ### Format of the trace string
@@ -74,7 +76,7 @@ class SourceTraceReplayer:
 
     def follow_trace(self, trace_str: str, func_name: str):
         # start_state, simulation manager
-        simgr = self.p.factory.simulation_manager(self.start_state(func_name))
+        simgr = self.p.factory.simulation_manager(self.start_state(func_name), auto_drop=("avoid",))
 
         # Split trace_str into elements
         trace_str = trace_str.encode()
@@ -85,13 +87,13 @@ class SourceTraceReplayer:
         for elem in elems:
             find = lambda s: self.dump(s)[trace_pos:] == elem
             avoid = lambda s: self.dump(s)[trace_pos:] not in (b'', elem)
-            simgr.explore(find=find, avoid=avoid)
+            simgr.explore(find=find, avoid=avoid, avoid_priority=True)
 
             if len(simgr.found) != 1:
                 l.error("Found %i canditates in simgr %s", len(simgr.found), simgr)
 
             # avoid all states not in found
-            simgr.move(from_stash='active', to_stash='avoid')
+            simgr.drop()
             # start over with active
             simgr.move(from_stash='found', to_stash='active')
 
