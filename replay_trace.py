@@ -24,14 +24,14 @@ class SourceTraceReplayer:
         return int(sub)
 
     # dump the file given for a state s
-    def dump(self, s):
+    def dump(self, state):
         if self.fd == 0:
             # maybe correct fd in memory (results 0 otherwise if still symbolic)
-            self.fd = s.mem[self.fd_addr].int.concrete
+            self.fd = state.mem[self.fd_addr].int.concrete
             if self.fd == 0:
                 return b''
         try:
-            return s.posix.dumps(self.fd)
+            return state.posix.dumps(self.fd)
         except:
             return b''
 
