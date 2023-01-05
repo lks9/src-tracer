@@ -53,8 +53,8 @@ Elements are written sequentially without any separator.
 | `_LOOP_START(id)`    | `L`         | Beginning of a loop (for, while etc.)                   |
 | `_LOOP_BODY(id)`     |             | Loop iteration, nothing is emitted                      |
 | `_LOOP_END(id)`      | `P` + `num` | End of a loop, `num` indicates the number of iterations |
-| `_CFLOW_INIT(fname)` |             | Initialize, write trace to file named `fname`           |
-| `_CFLOW_CLEANUP`     |             | Close the cflow tracer                                  |
+| `_cflow_open(fname)` |             | Initialize, write trace to file named `fname`           |
+| `_cflow_close()`     |             | Close the cflow tracer                                  |
 
 The macros are written into the source code.
 An example trace is `F1EF2LP2I`, which includes sub-traces, for example `F2LP2` or `LP2`.
@@ -62,15 +62,19 @@ An example trace is `F1EF2LP2I`, which includes sub-traces, for example `F2LP2` 
 ## Example `checksum.c`
 
 * Instrumentation is in `checksum_inst.c`
-* Compile it
+* Compile it (you might want different compiler optimizations for recording/replaying)
   ```
-  gcc checksum_inst.c -o checksum_inst
+  gcc checksum_inst.c cflow_inst.c -o checksum_inst
   ```
 * Run it
   ```
   ./checksum_inst 42
   ```
-* Retrace it
+* Display the trace
+  ```
+  cat checksum_cflow_trace.txt
+  ```
+* Retrace it (use `python -i` to work with the traced `state` in the interactive shell)
   ```
   python replay_trace.py checksum_inst main F1EF2LP2I
   python replay_trace.py checksum_inst checksum F2LP2
