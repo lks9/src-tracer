@@ -18,7 +18,7 @@ class SourceTraceReplayer:
         self.fd_addr = self.addr("_cflow_fd")
 
     def addr(self, sym_name):
-        return self.p.loader.main_object.get_symbol("_cflow_fd").rebased_addr
+        return self.p.loader.main_object.get_symbol(sym_name).rebased_addr
 
     def int_of_elem(self, elem: str):
         sub = elem[1:]

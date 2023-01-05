@@ -5,9 +5,6 @@
 #include <unistd.h>
 #include <stdio.h>
 
-extern char _cflow_tmpstr[18];
-extern int _cflow_put_count;
-
 extern void _cflow_put(char c);
 extern void _cflow_put_num(char c, int num);
 
