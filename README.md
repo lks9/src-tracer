@@ -14,9 +14,8 @@ Any software which is written in C, with the source code available.
 ### For the Instrumentation
 
 * Any source code editor
+* python3 with clang.cindex (`pip install libclang`)
 
-(Automatic source instrumentation is currently work in progress, so
-help yourself by doing it manually)
 
 ### For the Trace Recording
 
