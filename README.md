@@ -13,9 +13,8 @@ Any software which is written in C, with the source code available.
 ## Dependencies
 ### For the Instrumentation
 
-* Any source code editor
-* python3 with clang.cindex (`pip install libclang`)
-
+* python3
+* libclang (`pip install libclang`)
 
 ### For the Trace Recording
 
@@ -34,6 +33,7 @@ Any software which is written in C, with the source code available.
    #include "cflow_inst.h"
    ```
 2. Add macros to the respective code blocks. A list of all macros is given below.
+3. Add a wrapper for the main function to call `_cflow_open` and `_cflow_close`.
 
 For an example instrumentation, see `checksum_inst.c`
 and the original `checksum.c`.
@@ -56,25 +56,29 @@ Elements are written sequentially without any separator.
 | `_cflow_close()`     |             | Close the cflow tracer                                  |
 
 The macros are written into the source code.
-An example trace is `F1EF2LP2I`, which includes sub-traces, for example `F2LP2` or `LP2`.
+An example trace is `F1EF0LP2I`, which includes sub-traces, for example `F0LP2` or `LP2`.
 
 ## Example `checksum.c`
 
-* Instrumentation is in `checksum_inst.c`
+* Instrument it
+  ```
+  python instrumenter.py checksum.c
+  ```
 * Compile it (you might want different compiler optimizations for recording/replaying)
   ```
-  gcc checksum_inst.c cflow_inst.c -o checksum_inst
+  gcc checksum.c cflow_inst.c -o checksum
   ```
 * Run it (replace `42` to get another trace) 
   ```
-  ./checksum_inst 42
+  ./checksum 42
   ```
 * Display the trace
   ```
-  cat checksum_cflow_trace.txt
+  cat checksum.c.trace.txt
   ```
 * Retrace it (use `python -i` to work with the traced `state` in the interactive shell)
   ```
-  python replay_trace.py checksum_inst main F1EF2LP2I
-  python replay_trace.py checksum_inst checksum F2LP2
+  python replay_trace.py checksum main F1EF0LP2I
+  python replay_trace.py checksum checksum F0LP2
   ```
+  The last one just retraces function `checksum`.

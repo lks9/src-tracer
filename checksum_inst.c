@@ -1,11 +1,12 @@
-#include <stdio.h>
 #include "cflow_inst.h"
+#include <stdio.h>
 
-int checksum (char *str) { _FUNC(2)
+
+int checksum (char *str) { _FUNC(0)
     int sum = 0;
-    _LOOP_START(1) for (int i = 0; str[i] != '\0'; i++) { _LOOP_BODY(1)
+    _LOOP_START(0) for (int i = 0; str[i] != '\0'; i++) { _LOOP_BODY(0)
         sum = sum + str[i] - '0';
-    } _LOOP_END(1)
+    } _LOOP_END(0)
     return sum;
 }
 
@@ -27,7 +28,7 @@ int main_original (int argc, char **argv) { _FUNC(1)
 }
 
 int main (int argc, char **argv) {
-    _cflow_open("checksum_cflow_trace.txt");
+    _cflow_open("checksum.c.trace.txt");
     int retval = main_original(argc, argv);
     _cflow_close();
     return retval;
