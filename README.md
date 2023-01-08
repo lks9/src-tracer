@@ -1,7 +1,7 @@
 # Source Tracer
 
 This is a draft of a control flow tracer based on source code instrumentation with a low overhead.
-When running instrumented software, the trace is written into a file.
+Instrument your software with `instrumenter.py`. When running instrumented software, the trace is written into a file.
 The format is basically one character (plus an optional number)
 for each source code block on the trace.
 For accurate retracing, `replay_trace.py` uses symbolic execution.
