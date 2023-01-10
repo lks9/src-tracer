@@ -156,6 +156,8 @@ def traverse(node):
         visit_loop(node)
     elif (node.kind == CursorKind.SWITCH_STMT):
         visit_switch(node)
+    elif (node.kind == CursorKind.GOTO_STMT):
+        raise Exception("goto is not supported. Please refactor or do the instrumentation manually.")
 
     for child in node.get_children():
         traverse(child)
