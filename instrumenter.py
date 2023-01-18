@@ -7,8 +7,11 @@ from clang.cindex import Index, CursorKind
 
 class Instrumenter:
 
-    def __init__(self):
-        self.functions = []
+    def __init__(self, functions=None):
+        if functions:
+            self.functions = functions
+        else:
+            self.functions = []
         self.ifs = []
         self.loops = []
         self.switchis = []
@@ -43,9 +46,15 @@ class Instrumenter:
                 body = child
         if not body:
             return
-        func_num = str(len(self.functions))
-        self.add_annotation(" _FUNC(" + func_num + ") ", body.extent.start, 1)
-        self.functions.append(node)
+        func_num = len(self.functions)
+        self.add_annotation(" _FUNC(" + str(func_num) + ") ", body.extent.start, 1)
+        self.functions.append({"num": func_num,
+                               "file": node.extent.start.file.name,
+                               "name": node.spelling,
+                               "line": node.extent.start.line,
+                               "offset": node.extent.start.offset,
+                               "end": node.extent.end.offset,
+                               })
 
         # special treatment for main function
         if node.spelling == "main":
@@ -129,9 +138,9 @@ int main (int argc, char **argv) {
             with open(filename) as f:
                 content = f.read()
             # overwrite
-            if ('#include "cflow_file.h"' in content):
+            if ('#include "cflow_inst.h"' in content):
                 print("Skipping " + filename + " (already annotated)")
-                return
+                return False
             print("Overwriting " + filename + "...")
             prevchar = ' '
             with open(filename, "w") as f:
@@ -147,8 +156,10 @@ int main (int argc, char **argv) {
                         f.write(ann)
                     f.write(char)
                     prevchar = char
+            return True
         else:
             print("Skipping " + filename + " (nothing to annotate)")
+            return False
 
     def traverse(self, node):
         if (node.kind == CursorKind.FUNCTION_DECL):
@@ -167,6 +178,7 @@ int main (int argc, char **argv) {
 
 
 if __name__ == '__main__':
+    import json
     filename = sys.argv[1]
 
     index = Index.create()
@@ -174,6 +186,19 @@ if __name__ == '__main__':
 
     root = tu.cursor
 
-    instrumenter = Instrumenter()
+    try:
+        # We don't want to overwrite existing func_nums...
+        with open("cflow_functions.json") as f:
+            print("Reading cflow_functions.json")
+            functions = json.load(f)
+    except FileNotFoundError:
+        print("Creating cflow_functions.json")
+        functions = []
+
+    instrumenter = Instrumenter(functions)
     instrumenter.traverse(root)
-    instrumenter.annotate_all(filename)
+    annotated = instrumenter.annotate_all(filename)
+    if (annotated):
+        with open("cflow_functions.json", "w") as f:
+            print("Writing cflow_functions.json")
+            json.dump(instrumenter.functions, f, indent=2)
