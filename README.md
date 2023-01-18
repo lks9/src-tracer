@@ -60,9 +60,19 @@ An example trace is `F1EF0LP2I`, which includes sub-traces, for example `F0LP2` 
 
 ## Example `checksum.c`
 
+* Copy the example directory, add `cflow_inst.h` and `cflow_inst.c`
+  ```
+  cp -Tr examples/ examples_inst/
+  cp cflow_inst.h examples_inst/
+  cp cflow_inst.c examples_inst/
+  ```
+* Change into the new directory
+  ```
+  cd examples_inst
+  ```
 * Instrument it
   ```
-  python instrumenter.py checksum.c
+  python ../instrumenter.py checksum.c
   ```
 * Compile it (you might want different compiler optimizations for recording/replaying)
   ```
@@ -78,7 +88,31 @@ An example trace is `F1EF0LP2I`, which includes sub-traces, for example `F0LP2` 
   ```
 * Retrace it (use `python -i` to work with the traced `state` in the interactive shell)
   ```
-  python replay_trace.py checksum main F1EF0LP2I
-  python replay_trace.py checksum checksum F0LP2
+  python ../replay_trace.py checksum main F1EF0LP2I
+  python ../replay_trace.py checksum checksum F0LP2
   ```
   The last one just retraces function `checksum`.
+
+## Other Software
+
+This is the same as for the `checksum.c` example
+
+  ```sh
+  # Copy sources
+  cp -Tr SRCDIR/ SRCDIR_inst/
+  cp cflow_inst.h SRCDIR_inst/
+  cp cflow_inst.c SRCDIR_inst/
+  # Instrument
+  for file in $(find SRCDIR_inst/ -name "*.c")
+    do
+      python instrumenter.py $file
+    done
+  # Now compile the sources & link them with cflow_inst.c
+  
+  # Run your instrumented software
+  ./APP WITH ARGUMENTS
+  # Display the trace
+  cat APP.c.trace.txt
+  # Retrace
+  python replay_trace.py APP main YOUR_TRACE
+  ```
