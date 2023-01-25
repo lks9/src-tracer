@@ -39,14 +39,15 @@ class SourceTraceReplayer:
             return b''
 
     def make_globals_symbolic(self, state):
-        sections = self.p.loader.main_object.sections
-        for section in sections:
-            if section.name == ".data":
-                data_bvs = claripy.BVS(".data", 8*(section.max_addr - section.min_addr))
-                state.memory.store(section.min_addr, data_bvs)
-            elif section.name == ".bss":
-                bss_bvs = claripy.BVS(".bss", 8*(section.max_addr - section.min_addr))
-                state.memory.store(section.min_addr, bss_bvs)
+        for obj in self.p.loader.all_elf_objects:
+            for section in obj.sections:
+                if section.name == ".data":
+                    data_bvs = claripy.BVS(".data", 8*(section.max_addr - section.min_addr))
+                    state.memory.store(section.min_addr, data_bvs)
+                elif section.name == ".bss":
+                    bss_bvs = claripy.BVS(".bss", 8*(section.max_addr - section.min_addr))
+                    state.memory.store(section.min_addr, bss_bvs)
+        state.mem[self.addr("_cflow_writing")].int = 1
 
     def start_state(self, func_name: str):
         if func_name == "main":

@@ -1,0 +1,76 @@
+#!/bin/sh
+
+# this is "${SRC_TRACER_DIR}/cc_wrapper/cc1"
+
+#    usage:
+# export SRC_TRACER_DIR=.........
+# export CFLAGS="-Wno-error -Wno-implicit-fallthrough -L${SRC_TRACER_DIR} -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
+#    (you might also add "-save-temps" to CFLAGS)
+# export LIBS="-lcflow_inst"
+# export CFLOW_INSTRUMENT=
+#    and then you can ./configure your project...
+#    before the actual compilation:
+# export CFLOW_INSTRUMENT=1
+#    then you can run make, gcc, whatever
+
+
+echo_outfile () {
+    while [ ! -z "$1" ]; do
+        case "$1" in
+            -o)
+                shift
+                echo "$1"
+                ;;
+            *)
+                ;;
+        esac
+        shift
+    done
+}
+
+echo_infile () {
+    while [ ! -z "$1" ]; do
+        case "$1" in
+            *.c)
+                echo "$1"
+                ;;
+            *)
+                ;;
+        esac
+        shift
+    done
+}
+
+if [ ! ${CFLOW_INSTRUMENT} ]; then
+    # just compile it
+    exec $(${COLLECT_GCC} --print-prog-name=cc1) $@
+fi
+
+if [ "$1" = "-E" ]; then
+    outfile=$( echo_outfile $@ )
+    infile=$( echo_infile $@ )
+
+    # annotate if needed
+    if [ $(grep -c "cflow_inst" "${infile}") -gt 0 ]; then
+        echo "skipping ${infile} (already annotated)"
+        # just call gcc (or the preprocessor)
+        exec $(${COLLECT_GCC} --print-prog-name=cc1) $@
+    else
+        # call gcc (or the preprocessor)
+        $(${COLLECT_GCC} --print-prog-name=cc1) $@
+
+        # do the instrumentation
+        python3 "${SRC_TRACER_DIR}/instrumenter.py" "${outfile}"
+
+        # save the instrumentation output
+        cp "${outfile}" "${outfile}.tmp.c"
+        echo "${outfile}.tmp.c"
+
+        # rerun preprocessor to resolve instrumentation macros
+        cpp "${outfile}" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}"
+        mv "${outfile}.tmp.i" "${outfile}"
+    fi
+elif [ "$1" = "-fpreprocessed" ]; then
+    # just compile it
+    exec $(${COLLECT_GCC} --print-prog-name=cc1) $@
+fi
