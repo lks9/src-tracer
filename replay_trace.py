@@ -107,14 +107,17 @@ if __name__ == "__main__":
     if len(sys.argv) == 3:
         binary_name = sys.argv[1]
         func_name = "main"
-        trace_str = sys.argv[2]
+        trace_file = sys.argv[2]
     elif len(sys.argv) == 4:
         binary_name = sys.argv[1]
         func_name = sys.argv[2]
-        trace_str = sys.argv[3]
+        trace_file = sys.argv[3]
     else:
-        usage = "Usage: python3 -i {} <binary_name> <func_name> <trace_str>".format(sys.argv[0])
+        usage = "Usage: python3 -i {} <binary_name> <func_name> <trace_file>".format(sys.argv[0])
         raise Exception(usage)
+
+    with open(trace_file) as f:
+        trace_str = f.read()
 
     source_tracer = SourceTraceReplayer(binary_name)
     simgr = source_tracer.follow_trace(trace_str, func_name)

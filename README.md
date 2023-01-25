@@ -92,8 +92,9 @@ An example trace is `F1EF0LP2I`, which includes sub-traces, for example `F0LP2` 
   ```
 * Retrace it (use `python -i` to work with the traced `state` in the interactive shell)
   ```
-  python ../replay_trace.py checksum main F1EF0LP2I
-  python ../replay_trace.py checksum checksum F0LP2
+  python ../replay_trace.py checksum main checksum.c.trace.txt
+  echo "F0LP2" > sub_trace.txt
+  python ../replay_trace.py checksum checksum sub_trace.txt
   ```
   The last one just retraces function `checksum`.
 
@@ -118,5 +119,5 @@ This is the same as for the `checksum.c` example
   # Display the trace
   cat APP.c.trace.txt
   # Retrace
-  python replay_trace.py APP main YOUR_TRACE
+  python replay_trace.py APP main APP.c.trace.txt
   ```

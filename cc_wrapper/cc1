@@ -4,7 +4,7 @@
 
 #    usage:
 # export SRC_TRACER_DIR=.........
-# export CFLAGS="-Wno-error -Wno-implicit-fallthrough -L${SRC_TRACER_DIR} -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
+# export CFLAGS="-Wno-error -Wno-implicit-fallthrough -O0 -L${SRC_TRACER_DIR} -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
 #    (you might also add "-save-temps" to CFLAGS)
 # export LIBS="-lcflow_inst"
 # export CFLOW_INSTRUMENT=
@@ -52,7 +52,7 @@ if [ "$1" = "-E" ]; then
 
     # annotate if needed
     if [ $(grep -c "cflow_inst" "${infile}") -gt 0 ]; then
-        echo "skipping ${infile} (already annotated)"
+        # echo "skipping ${infile} (already annotated)"
         # just call gcc (or the preprocessor)
         exec $(${COLLECT_GCC} --print-prog-name=cc1) $@
     else
@@ -64,7 +64,7 @@ if [ "$1" = "-E" ]; then
 
         # save the instrumentation output
         cp "${outfile}" "${outfile}.tmp.c"
-        echo "${outfile}.tmp.c"
+        # echo "${outfile}.tmp.c"
 
         # rerun preprocessor to resolve instrumentation macros
         cpp "${outfile}" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}"

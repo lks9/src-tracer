@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+import re
 
 from clang.cindex import Index, CursorKind
 
@@ -11,7 +12,7 @@ class Instrumenter:
         if functions:
             self.functions = functions
         else:
-            self.functions = []
+            self.functions = {"hex_list": []}
         self.ifs = []
         self.loops = []
         self.switchis = []
@@ -26,6 +27,40 @@ class Instrumenter:
             self.annotations[filename] = {"content": content}
             self.annotations[filename][0] = b'#include "cflow_inst.h"\n'
         return filename
+
+    def orig_file_and_line(self, location):
+        filename = self.filename(location)
+        line_no = 0
+
+        content = self.annotations[filename]["content"]
+        up_to = content[:location.offset]
+        loc_line = re.compile(rb'\# ([0-9]+) "([^"]+)"')
+        for line in up_to.splitlines():
+            line_no += 1
+            m = loc_line.match(line)
+            if m:
+                line_no = int(m.group(1))
+                filename = (m.group(2)).decode("utf-8")
+        return (filename, line_no)
+
+    def func_num(self, node):
+        pre_filename = self.filename(node.extent.start)
+        (file, line) = self.orig_file_and_line(node.extent.start)
+        if str(line) + ":" + file in self.functions:
+            func_num = int(self.functions[str(line) + ":" + file], 0)
+            # print("Re-using saved func num " + hex(func_num) + ' for ' + str(line) + ':"' + file + '"')
+            return func_num
+        func_num = len(self.functions["hex_list"])
+        self.functions["hex_list"].append({"num": hex(func_num),
+                                           "file": file,
+                                           "line": line,
+                                           "name": node.spelling,
+                                           "pre_file": pre_filename,
+                                           "offset": node.extent.start.offset,
+                                           })
+        self.functions[str(line) + ":" + file] = hex(func_num)
+        return func_num
+
 
     def add_annotation(self, annotation, location, add_offset=0):
         offset = location.offset + add_offset
@@ -49,14 +84,7 @@ class Instrumenter:
                 body = child
         if not body:
             return
-        func_num = len(self.functions)
-        self.functions.append({"num": func_num,
-                               "file": self.filename(node.extent.start),
-                               "name": node.spelling,
-                               "line": node.extent.start.line,
-                               "offset": node.extent.start.offset,
-                               "end": node.extent.end.offset,
-                               })
+        func_num = self.func_num(node)
         if self.check_location(body.extent.start, [b"{"]) == False:
             print("Check location failed for function " + node.spelling)
             return
@@ -64,7 +92,7 @@ class Instrumenter:
 
         # special treatment for main function
         if node.spelling == "main":
-            print('Log trace to "' + filename + '.trace.txt"')
+            # print('Log trace to "' + filename + '.trace.txt"')
             token_end = None
             for token in node.get_tokens():
                 if token.spelling == "main":
@@ -222,9 +250,9 @@ class Instrumenter:
             content = annotation["content"]
             # overwrite
             if (b'#include "cflow_inst.h"' in content):
-                print("Skipping " + filename + " (already annotated)")
+                # print("Skipping " + filename + " (already annotated)")
                 return False
-            print("Overwriting " + filename + "...")
+            # print("Overwriting " + filename + "...")
             prevchar = b' '
             with open(filename, "wb") as f:
                 for offset, char_int in enumerate(content):
@@ -245,7 +273,7 @@ class Instrumenter:
                     prevchar = char
             return True
         else:
-            print("Skipping " + filename + " (nothing to annotate)")
+            # print("Skipping " + filename + " (nothing to annotate)")
             return False
 
     def traverse(self, node):
@@ -282,16 +310,16 @@ if __name__ == '__main__':
     try:
         # We don't want to overwrite existing func_nums...
         with open("cflow_functions.json") as f:
-            print("Reading cflow_functions.json")
+            # print("Reading cflow_functions.json")
             functions = json.load(f)
     except FileNotFoundError:
-        print("Creating cflow_functions.json")
-        functions = []
+        # print("Creating cflow_functions.json")
+        functions = None
 
     instrumenter = Instrumenter(functions)
     instrumenter.traverse(root)
     annotated = instrumenter.annotate_all(filename)
     if (annotated):
         with open("cflow_functions.json", "w") as f:
-            print("Writing cflow_functions.json")
+            # print("Writing cflow_functions.json")
             json.dump(instrumenter.functions, f, indent=2)
