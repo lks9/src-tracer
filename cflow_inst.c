@@ -28,7 +28,7 @@ void _cflow_put(char c) {
     }
 }
 
-void _cflow_put_num(char c, int num) {
+int _cflow_put_num(char c, int num) {
     if (_cflow_writing) {
         _cflow_writing = false;
         _cflow_tmpstr[0] = c;
@@ -39,6 +39,7 @@ void _cflow_put_num(char c, int num) {
         _cflow_put_count += 1;
         _cflow_writing = true;
     }
+    return num;
 }
 
 void _cflow_open(const char *fname) {

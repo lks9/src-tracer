@@ -98,7 +98,7 @@ class Instrumenter:
                 if token.spelling == "main":
                     token_end = token.extent.end
             self.add_annotation(b"_original", token_end)
-            new_main = b'_MAIN_FUN("' + bytes(filename, "utf-8") + b'.trace.txt")';
+            new_main = b' _MAIN_FUN("' + bytes(filename, "utf-8") + b'.trace.txt") ';
             self.add_annotation(new_main, node.extent.end)
 
     def find_next_semi(self, location):
@@ -156,10 +156,10 @@ class Instrumenter:
                     else_semi_off = self.find_next_semi(else_body.extent.end)
                     self.prepent_annotation(b" _IF ", if_body.extent.start, 1)
                     self.prepent_annotation(b" { _ELSE ", else_body.extent.start)
-                    self.prepent_annotation(b" }", else_body.extent.end, else_semi_off + 1)
+                    self.prepent_annotation(b" } ", else_body.extent.end, else_semi_off + 1)
             else:
                 self.prepent_annotation(b" _IF ", if_body.extent.start, 1)
-                self.prepent_annotation(b" else { _ELSE }", node.extent.end)
+                self.prepent_annotation(b" else { _ELSE } ", node.extent.end)
         else:
             if_semi_off = self.find_next_semi(if_body.extent.end)
             if else_body:
@@ -170,12 +170,12 @@ class Instrumenter:
                 else:
                     else_semi_off = self.find_next_semi(else_body.extent.end)
                     self.prepent_annotation(b" { _IF ", if_body.extent.start)
-                    self.prepent_annotation(b" }", if_body.extent.end, if_semi_off + 1)
+                    self.prepent_annotation(b" } ", if_body.extent.end, if_semi_off + 1)
                     self.prepent_annotation(b" { _ELSE ", else_body.extent.start)
-                    self.prepent_annotation(b" }", else_body.extent.end, else_semi_off + 1)
+                    self.prepent_annotation(b" } ", else_body.extent.end, else_semi_off + 1)
             else:
                 self.prepent_annotation(b" { _IF ", if_body.extent.start)
-                self.prepent_annotation(b" } else { _ELSE }", if_body.extent.end, if_semi_off + 1)
+                self.prepent_annotation(b" } else { _ELSE } ", if_body.extent.end, if_semi_off + 1)
 
     def visit_loop(self, node):
         loop_id = bytes(hex(len(self.loops)), "utf-8")
@@ -190,7 +190,7 @@ class Instrumenter:
         self.add_annotation(b" _LOOP_START(" + loop_id + b") ", node.extent.start)
         if body:
             self.prepent_annotation(b" _LOOP_BODY(" + loop_id + b") ", body.extent.start, 1)
-            self.prepent_annotation(b" _LOOP_END(" + loop_id + b")", node.extent.end)
+            self.prepent_annotation(b" _LOOP_END(" + loop_id + b") ", node.extent.end)
         else:
             childs = [c for c in node.get_children()]
             if len(childs) >= 2:
@@ -205,10 +205,10 @@ class Instrumenter:
                     stmt = childs[-1]
                     semi_off = self.find_next_semi(node.extent.end)
                     self.prepent_annotation(b" { _LOOP_BODY(" + loop_id + b") ", stmt.extent.start)
-                    self.prepent_annotation(b" } _LOOP_END(" + loop_id + b")", node.extent.end, semi_off + 1)
+                    self.prepent_annotation(b" } _LOOP_END(" + loop_id + b") ", node.extent.end, semi_off + 1)
             else:
                 semi_off = self.find_next_semi(node.extent.end)
-                self.prepent_annotation(b" { _LOOP_BODY(" + loop_id + b") } _LOOP_END(" + loop_id + b")",
+                self.prepent_annotation(b" { _LOOP_BODY(" + loop_id + b") } _LOOP_END(" + loop_id + b") ",
                                         node.extent.end, semi_off + 1)
 
         # handle returns & gotos
@@ -216,33 +216,33 @@ class Instrumenter:
             if (descendant.kind in (CursorKind.RETURN_STMT, CursorKind.GOTO_STMT)):
                 self.add_annotation(b"_LOOP_END(" + loop_id + b") ", descendant.extent.start)
 
-    def traverse_switch(self, node, switch_id):
-        if node.kind in (CursorKind.CASE_STMT, CursorKind.DEFAULT_STMT):
-            case_id = bytes(hex(self.switch_case_count), "utf-8")
-            if node.kind == CursorKind.CASE_STMT:
-                number_end = [c for c in node.get_children()][0].extent.end
-            else:
-                number_end = node.extent.start
-            try:
-                colon_off = self.find_next_colon(number_end)
-                self.add_annotation(b" _CASE(" + case_id + b", " + switch_id + b") ", number_end, colon_off+1)
-            except IndexError:
-                print(b"Failed to annotate _CASE(" + case_id + b", " + switch_id + b") ")
-            self.switch_case_count += 1
-
-        for child in node.get_children():
-            if (child.kind != CursorKind.SWITCH_STMT):
-                self.traverse_switch(child, switch_id)
+#    def traverse_switch(self, node, switch_id):
+#        if node.kind in (CursorKind.CASE_STMT, CursorKind.DEFAULT_STMT):
+#            case_id = bytes(hex(self.switch_case_count), "utf-8")
+#            if node.kind == CursorKind.CASE_STMT:
+#                number_end = [c for c in node.get_children()][0].extent.end
+#            else:
+#                number_end = node.extent.start
+#            try:
+#                colon_off = self.find_next_colon(number_end)
+#                self.add_annotation(b" _CASE(" + case_id + b", " + switch_id + b") ", number_end, colon_off+1)
+#            except IndexError:
+#                print(b"Failed to annotate _CASE(" + case_id + b", " + switch_id + b") ")
+#            self.switch_case_count += 1
+#
+#        for child in node.get_children():
+#            if (child.kind != CursorKind.SWITCH_STMT):
+#                self.traverse_switch(child, switch_id)
 
     def visit_switch(self, node):
-        switch_id = bytes(hex(len(self.switchis)), "utf-8")
         self.switchis.append(node)
-        if self.check_location(node.extent.start, [b"switch"]) == False:
+        children = [c for c in node.get_children()]
+        if self.check_location(node.extent.start, [b"switch"]) == False or len(children) != 2:
             print("Check location failed for switch")
             return
-        self.add_annotation(b" _SWITCH_START(" + switch_id + b") ", node.extent.start)
-        self.switch_case_count = 0
-        self.traverse_switch(node, switch_id)
+        switch_num = children[0]
+        self.add_annotation(b"_SWITCH(", switch_num.extent.start)
+        self.add_annotation(b")", switch_num.extent.end, 1)
 
     def annotate_all(self, filename):
         if filename in self.annotations:
