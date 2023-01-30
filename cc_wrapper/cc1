@@ -2,16 +2,29 @@
 
 # this is "${SRC_TRACER_DIR}/cc_wrapper/cc1"
 
-#    usage:
+#    usage (production mode):
 # export SRC_TRACER_DIR=.........
-# export CFLAGS="-Wno-error -Wno-implicit-fallthrough -O0 -L${SRC_TRACER_DIR} -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
+# export CFLAGS="-Wno-error -O3 -L${SRC_TRACER_DIR}/inst_fast -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
 #    (you might also add "-save-temps" to CFLAGS)
 # export LIBS="-lcflow_inst"
 # export CFLOW_INSTRUMENT=
 #    and then you can ./configure your project...
 #    before the actual compilation:
-# export CFLOW_INSTRUMENT=1
+# export CFLOW_INSTRUMENT=fast
 #    then you can run make, gcc, whatever
+
+#    usage (retrace mode):
+# export SRC_TRACER_DIR=.........
+# export CFLAGS="-Wno-error -g -O0 -L${SRC_TRACER_DIR}/inst_silent -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
+#    (you might also add "-save-temps" to CFLAGS)
+# export LIBS="-lcflow_inst"
+# export CFLOW_INSTRUMENT=
+#    and then you can ./configure your project...
+#    before the actual compilation:
+# export CFLOW_INSTRUMENT=silent
+#    then you can run make, gcc, whatever
+
+
 
 
 echo_outfile () {
@@ -67,7 +80,7 @@ if [ "$1" = "-E" ]; then
         # echo "${outfile}.tmp.c"
 
         # rerun preprocessor to resolve instrumentation macros
-        cpp "${outfile}" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}"
+        cpp "${outfile}" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/inst_${CFLOW_INSTRUMENT}/"
         mv "${outfile}.tmp.i" "${outfile}"
     fi
 elif [ "$1" = "-fpreprocessed" ]; then

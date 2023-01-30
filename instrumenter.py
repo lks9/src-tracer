@@ -187,7 +187,7 @@ class Instrumenter:
         for child in node.get_children():
             if (child.kind == CursorKind.COMPOUND_STMT):
                 body = child
-        self.add_annotation(b" _LOOP_START(" + loop_id + b") ", node.extent.start)
+#        self.add_annotation(b" _LOOP_START(" + loop_id + b") ", node.extent.start)
         if body:
             self.prepent_annotation(b" _LOOP_BODY(" + loop_id + b") ", body.extent.start, 1)
             self.prepent_annotation(b" _LOOP_END(" + loop_id + b") ", node.extent.end)
@@ -211,10 +211,10 @@ class Instrumenter:
                 self.prepent_annotation(b" { _LOOP_BODY(" + loop_id + b") } _LOOP_END(" + loop_id + b") ",
                                         node.extent.end, semi_off + 1)
 
-        # handle returns & gotos
-        for descendant in node.walk_preorder():
-            if (descendant.kind in (CursorKind.RETURN_STMT, CursorKind.GOTO_STMT)):
-                self.add_annotation(b"_LOOP_END(" + loop_id + b") ", descendant.extent.start)
+#        # handle returns & gotos
+#        for descendant in node.walk_preorder():
+#            if (descendant.kind in (CursorKind.RETURN_STMT, CursorKind.GOTO_STMT)):
+#                self.add_annotation(b"_LOOP_END(" + loop_id + b") ", descendant.extent.start)
 
 #    def traverse_switch(self, node, switch_id):
 #        if node.kind in (CursorKind.CASE_STMT, CursorKind.DEFAULT_STMT):
@@ -289,8 +289,6 @@ class Instrumenter:
                 self.visit_loop(node)
             elif (node.kind == CursorKind.SWITCH_STMT):
                 self.visit_switch(node)
-            elif (node.kind == CursorKind.GOTO_STMT):
-                print("Limited support for goto. Check that the goto target is not inside a block!")
         except:
             print("Failed to annotate a " + str(node.kind))
 
