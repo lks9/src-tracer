@@ -12,7 +12,16 @@ class Instrumenter:
         if functions:
             self.functions = functions
         else:
-            self.functions = {"hex_list": []}
+            # func_num 0 marks the end of a trace
+            # so we shouldn't assign it to any actual function
+            reserved = {"num": hex(0),
+                        "file": None,
+                        "line": 0,
+                        "name": None,
+                        "pre_file": None,
+                        "offset": 0,
+                        }
+            self.functions = {"hex_list": [reserved]}
         self.ifs = []
         self.loops = []
         self.switchis = []

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+
 TEST_IE          = 0b10000000
 PUT_IE           = 0b10000000
 TEST_FUNC        = 0b10001000
@@ -17,17 +18,38 @@ PUT_LEN_PREFIX   = 0b01100000
 PUT_LEN_STRING   = 0b01110000
 TEST_IE_COUNT    = 0b10000111
 
+bit_length = {
+    PUT_LEN_0: 0,
+    PUT_LEN_8: 8,
+    PUT_LEN_16: 16,
+    PUT_LEN_32: 32,
+    PUT_LEN_64: 64,
+}
+byte_length = {
+    PUT_LEN_0: 0,
+    PUT_LEN_8: 1,
+    PUT_LEN_16: 2,
+    PUT_LEN_32: 4,
+    PUT_LEN_64: 8,
+}
+
+
 def to_number(bs):
     res = 0
-    for i,b in enumerate(bs):
+    for i, b in enumerate(bs):
         res |= b << (i*8)
     return res
 
+
 def trace_to_string(trace, sep1='', sep2=''):
+    if trace.isascii() and trace.isprintable():
+        # simply return the trace if trace is not binary, but ascii
+        return trace.decode('ascii')
+
     after_if_count = ["", "", "", "", "", "", "", ""]
     i = 0
     res = ""
-    while (i < len(trace)):
+    while i < len(trace):
         b = trace[i]
         i += 1
         is_ifel = b & TEST_IE == PUT_IE
@@ -38,24 +60,12 @@ def trace_to_string(trace, sep1='', sep2=''):
                 res += after_if_count[count]
                 after_if_count[count] = ""
                 if b & (1 << count):
-                    res += "I"
+                    res += "T"
                 else:
-                    res += "E"
+                    res += "N"
         elif is_func or is_data:
             count = b & TEST_IE_COUNT
-            len_bits = b & TEST_LEN
-            if len_bits == PUT_LEN_0:
-                length = 0
-            elif len_bits == PUT_LEN_8:
-                length = 1
-            elif len_bits == PUT_LEN_16:
-                length = 2
-            elif len_bits == PUT_LEN_32:
-                length = 4
-            elif len_bits == PUT_LEN_64:
-                length = 8
-            else:
-                print("Fehler")
+            length = byte_length[b & TEST_LEN]
             num = to_number(trace[i:i+length])
             i = i+length
             if is_func:
@@ -64,8 +74,9 @@ def trace_to_string(trace, sep1='', sep2=''):
                 elem = f'S{num:x}'
             after_if_count[count] += sep1 + elem + sep2
         else:
-            raise
+            raise ValueError("This is not a trace string!")
     return res
+
 
 if __name__ == '__main__':
     import sys
