@@ -4,24 +4,24 @@
 
 #    usage (production mode):
 # export SRC_TRACER_DIR=.........
-# export CFLAGS="-Wno-error -O3 -L${SRC_TRACER_DIR}/inst_fast -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
+# export CFLAGS="-Wno-error -O3 -L${SRC_TRACER_DIR}/inst_record -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
 #    (you might also add "-save-temps" to CFLAGS)
 # export LIBS="-lcflow_inst"
 # export CFLOW_INSTRUMENT=
 #    and then you can ./configure your project...
 #    before the actual compilation:
-# export CFLOW_INSTRUMENT=fast
+# export CFLOW_INSTRUMENT=record
 #    then you can run make, gcc, whatever
 
 #    usage (retrace mode):
 # export SRC_TRACER_DIR=.........
-# export CFLAGS="-Wno-error -g -O0 -L${SRC_TRACER_DIR}/inst_silent -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
+# export CFLAGS="-Wno-error -g -O0 -L${SRC_TRACER_DIR}/inst_replay -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
 #    (you might also add "-save-temps" to CFLAGS)
 # export LIBS="-lcflow_inst"
 # export CFLOW_INSTRUMENT=
 #    and then you can ./configure your project...
 #    before the actual compilation:
-# export CFLOW_INSTRUMENT=silent
+# export CFLOW_INSTRUMENT=replay
 #    then you can run make, gcc, whatever
 
 
