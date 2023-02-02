@@ -101,13 +101,13 @@ class Instrumenter:
 
         # special treatment for main function
         if node.spelling == "main":
-            # print('Log trace to "' + filename + '.trace.txt"')
+            # print('Log trace to "' + filename + '.trace"')
             token_end = None
             for token in node.get_tokens():
                 if token.spelling == "main":
                     token_end = token.extent.end
             self.add_annotation(b"_original", token_end)
-            new_main = b' _MAIN_FUN("' + bytes(filename, "utf-8") + b'.trace.txt") ';
+            new_main = b' _MAIN_FUN("' + bytes(filename, "utf-8") + b'.trace") ';
             self.add_annotation(new_main, node.extent.end)
 
     def find_next_semi(self, location):
