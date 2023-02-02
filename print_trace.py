@@ -42,7 +42,7 @@ def to_number(bs):
 
 
 def trace_to_string(trace, sep1='', sep2=''):
-    if trace.isascii() and trace.isprintable():
+    if trace.isascii():
         # simply return the trace if trace is not binary, but ascii
         return trace.decode('ascii')
 
