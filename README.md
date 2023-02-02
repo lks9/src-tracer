@@ -164,17 +164,9 @@ Recording:
 Retracing:
   ```sh
   # Copy sources
-  cp -Tr SRCDIR/ SRCDIR_replay/
+  cp -Tr SRCDIR_record/ SRCDIR_replay/
   cp inst_replay/cflow_inst.h SRCDIR_replay/
   cp inst_replay/cflow_inst.c SRCDIR_replay/
-  cp SRCDIR_record/cflow_functions.json SRCDIR_replay/
-  for file in $(find SRCDIR_replay/ -name "*.i")
-    do
-      # Rename *.i into *.c
-      mv "${file}" "${file%.i}.c"
-      # Instrument *.c
-      python instrumenter.py "${file%.i}.c"
-    done
   # Now compile the sources & link them with cflow_inst.c
   MAKE/GCC/etc.
   # Retrace
