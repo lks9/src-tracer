@@ -21,6 +21,8 @@ class SourceTraceReplayer:
         self.if_addr = self.addr("_cflow_if")
         self.else_addr = self.addr("_cflow_else")
         self.writing_addr = self.addr("_cflow_writing")
+        self.wrote_int_addr = self.addr("_cflow_wrote_int")
+        self.int_addr = self.addr("_cflow_int")
 
     def addr(self, sym_name):
         try:
@@ -92,6 +94,8 @@ class SourceTraceReplayer:
                 func_name = functions["hex_list"][func_num]["name"]
                 find = self.addr(func_name)
                 avoid = [self.else_addr, self.if_addr]
+            elif b"D" in elem:
+                find = self.wrote_int_addr
             else:
                 find = lambda s: self.dump(s)[trace_pos:] == elem
                 avoid = lambda s: self.dump(s)[trace_pos:] not in (b'', elem)
@@ -110,6 +114,13 @@ class SourceTraceReplayer:
 
             if len(simgr.found) != 1:
                 l.error("Found %i canditates in simgr %s", len(simgr.found), simgr)
+
+            if b"D" in elem:
+                # add the constrain for the int
+                trace_int = int(elem[1:], 16)
+                state = simgr.found[0]
+                mem_int = state.mem[self.int_addr].int
+                state.solver.add(trace_int == mem_int)
 
             # avoid all states not in found
             simgr.drop()
@@ -148,8 +159,7 @@ if __name__ == "__main__":
         usage = "Usage: python3 -i {} <binary_name> <func_name> <trace_file>".format(sys.argv[0])
         raise Exception(usage)
 
-    with open(trace_file, "rb") as f:
-        trace_str = trace_to_string(f.read())
+    trace_str = trace_to_string(trace_file)
 
     try:
         import json

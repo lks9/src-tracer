@@ -51,7 +51,7 @@ Elements are written sequentially without any separator.
 | `_FUNC(num)`         | `F` + `num` | Function call, use `num` to distinguish functions       |
 | `_IF`                | `T`         | The if-branch of an if-clause is taken                  |
 | `_ELSE`              | `N`         | The else-branch of an if-clause is taken                |
-| `_SWITCH(num)`       | `S` + `num` | Jump to case indicated with `num` in a switch-clause    |
+| `_SWITCH(num)`       | `D` + `num` | Jump to case indicated with `num` in a switch-clause    |
 | `_LOOP_START(id)`    |             | Beginning of a loop (for, while etc.)                   |
 | `_LOOP_BODY(id)`     | `T`         | Loop iteration, nothing is emitted                      |
 | `_LOOP_END(id)`      | `N`         | End of a loop, `num` indicates the number of iterations |

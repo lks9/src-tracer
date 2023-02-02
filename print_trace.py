@@ -41,10 +41,13 @@ def to_number(bs):
     return res
 
 
-def trace_to_string(trace, sep1='', sep2=''):
-    if trace.isascii():
-        # simply return the trace if trace is not binary, but ascii
-        return trace.decode('ascii')
+def trace_to_string(filename, sep1='', sep2=''):
+    with open(filename, "rb") as f:
+        trace = f.read()
+
+    if filename[-4:] == ".txt":
+        # the trace is in text format
+        return trace
 
     after_if_count = ["", "", "", "", "", "", "", ""]
     i = 0
@@ -58,9 +61,6 @@ def trace_to_string(trace, sep1='', sep2=''):
         if is_ifel:
             for count in range(7):
                 res += after_if_count[count]
-                if res[-2:] == "F0":
-                    # F0 marks the end of a trace...
-                    return res
                 after_if_count[count] = ""
                 if b & (1 << count):
                     res += "T"
@@ -74,18 +74,15 @@ def trace_to_string(trace, sep1='', sep2=''):
             if is_func:
                 elem = f'F{num:x}'
             else:
-                elem = f'S{num:x}'
+                elem = f'D{num:x}'
             after_if_count[count] += sep1 + elem + sep2
         else:
             raise ValueError("This is not a trace string!")
-    return res
+    return res + after_if_count[0]
 
 
 if __name__ == '__main__':
     import sys
     filename = sys.argv[1]
 
-    with open(filename, "rb") as f:
-        content = f.read()
-
-    print(trace_to_string(content))
+    print(trace_to_string(filename))
