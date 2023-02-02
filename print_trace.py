@@ -58,6 +58,9 @@ def trace_to_string(trace, sep1='', sep2=''):
         if is_ifel:
             for count in range(7):
                 res += after_if_count[count]
+                if res[-2:] == "F0":
+                    # F0 marks the end of a trace...
+                    return res
                 after_if_count[count] = ""
                 if b & (1 << count):
                     res += "T"
@@ -85,4 +88,4 @@ if __name__ == '__main__':
     with open(filename, "rb") as f:
         content = f.read()
 
-    print(trace_to_string(content, '\n', ' '))
+    print(trace_to_string(content))
