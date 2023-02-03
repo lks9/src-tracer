@@ -13,11 +13,9 @@ l = logging.getLogger(__name__)
 
 class SourceTraceReplayer:
 
-    def __init__(self, binary_name, fd=0, **kwargs):
+    def __init__(self, binary_name, **kwargs):
         self.p = angr.Project(binary_name, **kwargs)
 
-        self.fd = fd
-        self.fd_addr = self.addr("_cflow_fd")
         self.if_addr = self.addr("_cflow_if")
         self.else_addr = self.addr("_cflow_else")
         self.writing_addr = self.addr("_cflow_writing")
@@ -35,18 +33,6 @@ class SourceTraceReplayer:
         if sub == "":
             return 0
         return int(sub)
-
-    # dump the file given for a state s
-    def dump(self, state):
-        if self.fd == 0:
-            # maybe correct fd in memory (results 0 otherwise if still symbolic)
-            self.fd = state.mem[self.fd_addr].int.concrete
-            if self.fd == 0:
-                return b''
-        try:
-            return state.posix.dumps(self.fd)
-        except:
-            return b''
 
     def make_globals_symbolic(self, state):
         for obj in self.p.loader.all_elf_objects:
@@ -97,8 +83,7 @@ class SourceTraceReplayer:
             elif b"D" in elem:
                 find = self.wrote_int_addr
             else:
-                find = lambda s: self.dump(s)[trace_pos:] == elem
-                avoid = lambda s: self.dump(s)[trace_pos:] not in (b'', elem)
+                raise ValueError(f'Trace contains unsupported element "{elem}"')
 
             try:
                 # step once to be sure that we don't stay in the current state
