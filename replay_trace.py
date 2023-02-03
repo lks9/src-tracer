@@ -67,11 +67,11 @@ class SourceTraceReplayer:
         for elem in elems:
             if elem == b"T":
                 find = self.if_addr
-                avoid = self.else_addr
+                avoid = [self.else_addr, self.wrote_int_addr]
             elif elem == b"N":
                 simgr.step()
                 find = self.else_addr
-                avoid = self.if_addr
+                avoid = [self.if_addr, self.wrote_int_addr]
             elif functions and b"F" in elem:
                 func_num = int(elem[1:], 16)
                 if func_num == 0:
@@ -79,9 +79,10 @@ class SourceTraceReplayer:
                     return simgr
                 func_name = functions["hex_list"][func_num]["name"]
                 find = self.addr(func_name)
-                avoid = [self.else_addr, self.if_addr]
+                avoid = [self.else_addr, self.if_addr, self.wrote_int_addr]
             elif b"D" in elem:
                 find = self.wrote_int_addr
+                avoid = [self.else_addr, self.if_addr]
             else:
                 raise ValueError(f'Trace contains unsupported element "{elem}"')
 
@@ -141,7 +142,7 @@ if __name__ == "__main__":
         func_name = sys.argv[2]
         trace_file = sys.argv[3]
     else:
-        usage = "Usage: python3 -i {} <binary_name> <func_name> <trace_file>".format(sys.argv[0])
+        usage = f"Usage: python3 -i {sys.argv[0]} <binary_name> <func_name> <trace_file>"
         raise Exception(usage)
 
     trace_str = trace_to_string(trace_file)
