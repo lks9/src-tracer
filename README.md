@@ -101,7 +101,7 @@ Moreover, a sequence of `T` and `N` can be stored more efficient in the binary t
   have a look at the newly created `cflow_functions.json`.
 * Compile it (you might want different compiler optimizations for recording/replaying)
   ```
-  gcc checksum.c cflow_inst.c -o checksum
+  gcc -O3 checksum.c cflow_inst.c -o checksum
   ```
 * Run it (replace `42` to get another trace) 
   ```
@@ -125,7 +125,7 @@ Moreover, a sequence of `T` and `N` can be stored more efficient in the binary t
   ```
 * Compile it (you might want different compiler optimizations for recording/replaying)
   ```
-  gcc checksum.c cflow_inst.c -o checksum
+  gcc -g checksum.c cflow_inst.c -o checksum
   ```
 * Retrace it (use `python -i` to work with the traced `state` in the interactive shell)
   ```
