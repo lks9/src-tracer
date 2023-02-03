@@ -6,8 +6,7 @@ extern unsigned int _cflow_put_num(unsigned int num);
 #define _FUNC(num)          ;
 #define _IF                 ;_cflow_if();
 #define _ELSE               ;_cflow_else();
-#define _SWITCH(num)        ;_cflow_int = num; \
-                            ;_cflow_wrote_int();
+#define _SWITCH(num)        _cflow_put_num(num)
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      ;_cflow_if();
 #define _LOOP_END(id)       ;_cflow_else();

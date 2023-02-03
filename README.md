@@ -172,3 +172,9 @@ Retracing:
   # Retrace
   python replay_trace.py APP main APP.c.trace
   ```
+
+If you instrument an application and together with dependent libraries, make
+sure they share the same `cflow_functions.json` (e.g. by copying or using a
+file link). It can be a bit tricky to get the binary linking correctly,
+make sure that the record/replay executable includes the record/replay
+version of the app and its libraries.
