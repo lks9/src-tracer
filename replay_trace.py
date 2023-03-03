@@ -69,7 +69,6 @@ class SourceTraceReplayer:
                 find = self.if_addr
                 avoid = [self.else_addr, self.wrote_int_addr]
             elif elem == b"N":
-                simgr.step()
                 find = self.else_addr
                 avoid = [self.if_addr, self.wrote_int_addr]
             elif functions and b"F" in elem:
@@ -105,7 +104,7 @@ class SourceTraceReplayer:
                 # add the constrain for the int
                 trace_int = int(elem[1:], 16)
                 state = simgr.found[0]
-                mem_int = state.mem[self.int_addr].int
+                mem_int = state.mem[self.int_addr].int.resolved
                 state.solver.add(trace_int == mem_int)
 
             # avoid all states not in found
