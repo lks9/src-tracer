@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 
 import sys
 import re
@@ -107,7 +106,8 @@ class Instrumenter:
                 if token.spelling == "main":
                     token_end = token.extent.end
             self.add_annotation(b"_original", token_end)
-            new_main = b' _MAIN_FUN("' + bytes(filename, "utf-8") + b'.trace") ';
+            filename = self.filename(node.extent.end)
+            new_main = b' _MAIN_FUN("' + bytes(filename, "utf-8") + b'.trace") '
             self.add_annotation(new_main, node.extent.end)
 
     def find_next_semi(self, location):
@@ -252,6 +252,14 @@ class Instrumenter:
         switch_num = children[0]
         self.add_annotation(b"_SWITCH(", switch_num.extent.start)
         self.add_annotation(b")", switch_num.extent.end, 1)
+
+    def parse(self, filename):
+        index = Index.create()
+        tu = index.parse(filename)
+
+        root = tu.cursor
+
+        self.traverse(root)
 
     def annotate_all(self, filename):
         if filename in self.annotations:
