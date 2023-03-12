@@ -1,15 +1,12 @@
-#!/usr/bin/env python3
-
-import sys
 import logging
-import re
 
 import claripy
 import angr
 
-from print_trace import trace_to_string
+from .trace import Trace
 
-l = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
+
 
 class SourceTraceReplayer:
 
@@ -54,32 +51,29 @@ class SourceTraceReplayer:
         state.options["COPY_STATES"] = False
         return state
 
-    def follow_trace(self, trace_str: str, func_name: str, functions=None):
+    def follow_trace(self, trace: Trace, func_name: str, functions=None):
         # start_state, simulation manager
         simgr = self.p.factory.simulation_manager(self.start_state(func_name), auto_drop=("avoid",))
 
-        # Split trace_str into elements
-        trace_str = trace_str.encode()
-        elems = re.findall(br"[A-Z][0-9a-z]*", trace_str)
+        debug = log.isEnabledFor(logging.DEBUG)
 
         # do the actual tracing
-        trace_pos = 0
-        for elem in elems:
-            if elem == b"T":
+        for (elem, bs) in trace:
+            if elem == 'T':
                 find = self.if_addr
                 avoid = [self.else_addr, self.wrote_int_addr]
-            elif elem == b"N":
+            elif elem == 'N':
                 find = self.else_addr
                 avoid = [self.if_addr, self.wrote_int_addr]
-            elif functions and b"F" in elem:
-                func_num = int(elem[1:], 16)
-                if func_num == 0:
+            elif functions and elem == 'F':
+                if bs == b'':
                     # There is no func with num 0, that simply marks the end of the trace
                     return simgr
+                func_num = int.from_bytes(bs, "little")
                 func_name = functions["hex_list"][func_num]["name"]
                 find = self.addr(func_name)
                 avoid = [self.else_addr, self.if_addr, self.wrote_int_addr]
-            elif b"D" in elem:
+            elif elem == 'D':
                 find = self.wrote_int_addr
                 avoid = [self.else_addr, self.if_addr]
             else:
@@ -98,61 +92,20 @@ class SourceTraceReplayer:
             simgr.explore(find=find, avoid=avoid, avoid_priority=True)
 
             if len(simgr.found) != 1:
-                l.error("Found %i canditates in simgr %s", len(simgr.found), simgr)
+                log.error("Found %i canditates in simgr %s", len(simgr.found), simgr)
 
-            if b"D" in elem:
+            if elem == 'D':
                 # add the constrain for the int
-                trace_int = int(elem[1:], 16)
+                trace_int = int.from_bytes(bs, "little")
                 state = simgr.found[0]
                 mem_int = state.mem[self.int_addr].int.resolved
-                state.solver.add(trace_int == mem_int)
+                state.solver.add(mem_int == trace_int)
+
+            if debug:
+                num = int.from_bytes(bs, "little")
+                log.debug(f"{elem}{num:x}")
 
             # avoid all states not in found
             simgr.drop()
 
-            trace_pos += len(elem)
-            l.debug("%s", elem.decode())
-
-
         return simgr
-
-
-if __name__ == "__main__":
-    # better hex printing
-    try:
-        import monkeyhex
-    except ModuleNotFoundError:
-        pass
-
-    # silence some loggers for angr's sub-classes:
-    logging.getLogger("cle.loader").setLevel(logging.CRITICAL)
-    logging.getLogger("angr.storage.memory_mixins.default_filler_mixin").setLevel(logging.CRITICAL)
-    logging.getLogger("angr.engines.successors").setLevel(logging.CRITICAL)
-
-    # make the current logger debug
-    l.setLevel(logging.DEBUG)
-
-    if len(sys.argv) == 3:
-        binary_name = sys.argv[1]
-        func_name = "main"
-        trace_file = sys.argv[2]
-    elif len(sys.argv) == 4:
-        binary_name = sys.argv[1]
-        func_name = sys.argv[2]
-        trace_file = sys.argv[3]
-    else:
-        usage = f"Usage: python3 -i {sys.argv[0]} <binary_name> <func_name> <trace_file>"
-        raise Exception(usage)
-
-    trace_str = trace_to_string(trace_file)
-
-    try:
-        import json
-        with open("cflow_functions.json") as f:
-            functions = json.load(f)
-    except FileNotFoundError:
-        functions = None
-
-    source_tracer = SourceTraceReplayer(binary_name)
-    simgr = source_tracer.follow_trace(trace_str, func_name, functions)
-    state = simgr.found[0]
