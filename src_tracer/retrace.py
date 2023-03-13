@@ -102,8 +102,11 @@ class SourceTraceReplayer:
                 state.solver.add(mem_int == trace_int)
 
             if debug:
-                num = int.from_bytes(bs, "little")
-                log.debug(f"{elem}{num:x}")
+                if bs == b'':
+                    log.debug(f"{elem}")
+                else:
+                    num = int.from_bytes(bs, "little")
+                    log.debug(f"{elem}{num:x}")
 
             # avoid all states not in found
             simgr.drop()

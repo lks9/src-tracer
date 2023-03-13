@@ -59,6 +59,9 @@ class Trace:
             ba = bytearray(bs)
             ba.reverse()
             hexstring = ba.hex()
+            if re.match(r"0", hexstring):
+                # remove a leading 0
+                hexstring = hexstring[1:]
             res += elem + hexstring
             if elem == 'F' and bs == b'':
                 return res
@@ -77,9 +80,11 @@ class TraceText(Trace):
             else:
                 hexstring = elemnum[1:]
                 if len(hexstring) % 2 == 1:
-                    hexstring = b'0' + hexstring
+                    hexstring = "0" + hexstring
                 # reverse the byte order to save as little endian
-                bs = bytes(bytearray.fromhex(hexstring).reverse())
+                ba = bytearray.fromhex(hexstring)
+                ba.reverse()
+                bs = bytes(ba)
                 yield (elemnum[0], bs)
 
     # overwrite for complexity reasons
