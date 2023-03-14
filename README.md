@@ -33,7 +33,7 @@ Any software which is written in C, with the source code available.
    #include "cflow_inst.h"
    ```
 2. Add macros to the respective code blocks. A list of all macros is given below.
-3. Add a wrapper for the main function to call `_cflow_open` and `_cflow_close`.
+3. Add a wrapper for the main function to call `_trace_open` and `_trace_close`.
 
 For an example instrumentation, run the `instrumenter.py` on
 the original `checksum.c` (instructions below).
@@ -55,13 +55,13 @@ Elements are written sequentially without any separator.
 | `_LOOP_START(id)`    |             | Beginning of a loop (for, while etc.)                   |
 | `_LOOP_BODY(id)`     | `T`         | Loop iteration, nothing is emitted                      |
 | `_LOOP_END(id)`      | `N`         | End of a loop, `num` indicates the number of iterations |
-| `_cflow_open(fname)` |             | Initialize, write trace to file named `fname`           |
-| `_cflow_close()`     | `F0`        | Close the cflow tracer                                  |
+| `_trace_open(fname)` |             | Initialize, write trace to file named `fname`           |
+| `_trace_close()`     | `F0`        | Close the cflow tracer                                  |
 
 An example trace is `F2NF1TTNT`, which includes sub-traces, for example `F1TTN` or `TTN`.
 
 Note that function number `0` is reserved, and `F0` simply markes the end of a trace
-(as emmitted by `_cflow_close()`).
+(as emmitted by `_trace_close()`).
 
 There was another variant which emitted `I` or `E` for if-clauses, and
 `L` + (inner loop) + `P` + `num` for loops. A `P` + `num` can take logarithmically less

@@ -1,15 +1,15 @@
 #include "cflow_inst.h"
 
-void _cflow_if(void) {}
+void _retrace_if(void) {}
 
-void _cflow_else(void) {}
+void _retrace_else(void) {}
 
-unsigned int _cflow_int;
+unsigned int _retrace_int;
 
-void _cflow_wrote_int(void) {}
+void _retrace_wrote_int(void) {}
 
-unsigned int _cflow_put_num(unsigned int num) {
-    _cflow_int = num;
-    _cflow_wrote_int();
+unsigned int _retrace_num(unsigned int num) {
+    _retrace_int = num;
+    _retrace_wrote_int();
     return num;
 }

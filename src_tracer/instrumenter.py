@@ -297,7 +297,7 @@ class Instrumenter:
         try:
             if (node.kind == CursorKind.FUNCTION_DECL):
                 # no recursive annotation
-                if "_cflow" in node.spelling:
+                if "_trace" in node.spelling or "_retrace" in node.spelling:
                     return
                 self.visit_function(node)
             elif (node.kind == CursorKind.IF_STMT):

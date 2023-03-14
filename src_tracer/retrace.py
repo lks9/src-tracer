@@ -13,11 +13,10 @@ class SourceTraceReplayer:
     def __init__(self, binary_name, **kwargs):
         self.p = angr.Project(binary_name, **kwargs)
 
-        self.if_addr = self.addr("_cflow_if")
-        self.else_addr = self.addr("_cflow_else")
-        self.writing_addr = self.addr("_cflow_writing")
-        self.wrote_int_addr = self.addr("_cflow_wrote_int")
-        self.int_addr = self.addr("_cflow_int")
+        self.if_addr = self.addr("_retrace_if")
+        self.else_addr = self.addr("_retrace_else")
+        self.wrote_int_addr = self.addr("_retrace_wrote_int")
+        self.int_addr = self.addr("_retrace_int")
 
     def addr(self, sym_name):
         try:
@@ -40,8 +39,6 @@ class SourceTraceReplayer:
                 elif section.name == ".bss":
                     bss_bvs = claripy.BVS(".bss", 8*(section.max_addr - section.min_addr))
                     state.memory.store(section.min_addr, bss_bvs)
-        if self.writing_addr:
-            state.mem[self.writing_addr].int = 1
 
     def start_state(self, func_name: str):
         addr = self.p.loader.main_object.get_symbol(func_name).rebased_addr
