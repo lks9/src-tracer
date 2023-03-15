@@ -132,6 +132,7 @@ For a more automatic way that works well with make scripts, make use of `cc_wrap
 As a prerequesite, you also need `libsrc_tracer.a`. Build `libsrc_tracer.a` using `make` in the `instrumentation` folder:
 
 ```
+  cd instrumentation
   make
 ```
 
