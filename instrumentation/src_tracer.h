@@ -58,14 +58,14 @@ extern unsigned char _trace_if_byte;
         buf[0] |= _TRACE_SET_LEN_64; \
         count = 8; \
     } \
-    buf[1] = (n << 0) & 0xff; \
-    buf[2] = (n << 8) & 0xff; \
-    buf[3] = (n << 16) & 0xff; \
-    buf[4] = (n << 24) & 0xff; \
-    buf[5] = (n << 32) & 0xff; \
-    buf[6] = (n << 40) & 0xff; \
-    buf[7] = (n << 48) & 0xff; \
-    buf[8] = (n << 56) & 0xff; \
+    buf[1] = (n >> 0) & 0xff; \
+    buf[2] = (n >> 8) & 0xff; \
+    buf[3] = (n >> 16) & 0xff; \
+    buf[4] = (n >> 24) & 0xff; \
+    buf[5] = (n >> 32) & 0xff; \
+    buf[6] = (n >> 40) & 0xff; \
+    buf[7] = (n >> 48) & 0xff; \
+    buf[8] = (n >> 56) & 0xff; \
     _trace_write(buf, count+1); \
 }
 
