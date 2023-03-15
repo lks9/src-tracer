@@ -137,7 +137,7 @@ As a prerequesite, you also need `libsrc_tracer.a`. Build `libsrc_tracer.a` usin
 
 ### Recording
 * Set some envirenmental variables. There are some variations, for example you might also add `-save-temps` to `CFLAGS`.
-````
+```
   export SRC_TRACER_DIR=.........
   export CC="gcc"
   export CFLAGS="-Wno-error -O0 -L${SRC_TRACER_DIR}/instrumentation -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
