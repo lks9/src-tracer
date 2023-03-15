@@ -109,7 +109,7 @@ int main (int argc, char **argv) { \
 #define _FUNC(num)          /* nothing here */
 #define _IF                 ;_retrace_if();
 #define _ELSE               ;_retrace_else();
-#define _SWITCH(num)        _retrace_put_num(num)
+#define _SWITCH(num)        _retrace_num(num)
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      ;_retrace_if();
 #define _LOOP_END(id)       ;_retrace_else();
