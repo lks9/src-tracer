@@ -75,6 +75,18 @@ extern unsigned char _trace_if_byte;
 extern unsigned int _trace_num(char c, unsigned int num);
 
 
+// for retracing
+extern void _retrace_if(void);
+extern void _retrace_else(void);
+extern unsigned int _retrace_num(unsigned int num);
+
+
+/*
+ * Macros used in the instrumentation.
+ * 2 versions: _TRACE_MODE and _RETRACE_MODE
+ */
+#if defined _TRACE_MODE
+
 #define _IF                 _TRACE_IE(1)
 #define _ELSE               _TRACE_IE(0)
 #define _FUNC(num)          _TRACE_NUM(_TRACE_SET_FUNC, num)
@@ -91,3 +103,37 @@ int main (int argc, char **argv) { \
     _trace_close(); \
     return retval; \
 }
+
+#elif defined _RETRACE_MODE
+
+#define _FUNC(num)          /* nothing here */
+#define _IF                 ;_retrace_if();
+#define _ELSE               ;_retrace_else();
+#define _SWITCH(num)        _retrace_put_num(num)
+#define _LOOP_START(id)     /* nothing here */
+#define _LOOP_BODY(id)      ;_retrace_if();
+#define _LOOP_END(id)       ;_retrace_else();
+
+#define _MAIN_FUN(fname)    \
+int main (int argc, char **argv) { \
+    int retval = main_original(argc, argv); \
+    return retval; \
+}
+
+#else // neither _TRACE_MODE nor _RETRACE_MODE
+
+#define _FUNC(num)          /* nothing here */
+#define _IF                 /* nothing here */
+#define _ELSE               /* nothing here */
+#define _SWITCH(num)        num
+#define _LOOP_START(id)     /* nothing here */
+#define _LOOP_BODY(id)      /* nothing here */
+#define _LOOP_END(id)       /* nothing here */
+
+#define _MAIN_FUN(fname)    \
+int main (int argc, char **argv) { \
+    int retval = main_original(argc, argv); \
+    return retval; \
+}
+
+#endif // _TRACE_MODE or _RETRACE_MODE

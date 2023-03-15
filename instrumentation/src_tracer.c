@@ -1,4 +1,4 @@
-#include "cflow_inst.h"
+#include "src_tracer.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -17,7 +17,11 @@ int _trace_if_count;
 void _trace_write(const void *buf, int count) {
     if (_trace_writing) {
         _trace_writing = false;
-        write(_trace_fd, buf, count);
+        if (write(_trace_fd, buf, count) == -1) {
+            // some write error occured
+            // do not reset _trace_writing, instead abort trace recording
+            return;
+        }
         _trace_writing = true;
     }
 }
@@ -44,4 +48,21 @@ void _trace_close(void) {
     }
     _trace_writing = false;
     close(_trace_fd);
+}
+
+
+// for retracing
+
+void _retrace_if(void) {}
+
+void _retrace_else(void) {}
+
+unsigned int _retrace_int;
+
+void _retrace_wrote_int(void) {}
+
+unsigned int _retrace_num(unsigned int num) {
+    _retrace_int = num;
+    _retrace_wrote_int();
+    return num;
 }

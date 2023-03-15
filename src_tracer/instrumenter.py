@@ -33,7 +33,7 @@ class Instrumenter:
             with open(filename, "rb") as f:
                 content = f.read()
             self.annotations[filename] = {"content": content}
-            self.annotations[filename][0] = b'#include "cflow_inst.h"\n'
+            self.annotations[filename][0] = b'#include "src_tracer.h"\n'
         return filename
 
     def orig_file_and_line(self, location):
@@ -266,7 +266,7 @@ class Instrumenter:
             annotation = self.annotations[filename]
             content = annotation["content"]
             # overwrite
-            if (b'#include "cflow_inst.h"' in content):
+            if (b'#include "src_tracer.h"' in content):
                 # print("Skipping " + filename + " (already annotated)")
                 return False
             # print("Overwriting " + filename + "...")
@@ -311,30 +311,3 @@ class Instrumenter:
 
         for child in node.get_children():
             self.traverse(child)
-
-
-if __name__ == '__main__':
-    import json
-    filename = sys.argv[1]
-
-    index = Index.create()
-    tu = index.parse(filename)
-
-    root = tu.cursor
-
-    try:
-        # We don't want to overwrite existing func_nums...
-        with open("cflow_functions.json") as f:
-            # print("Reading cflow_functions.json")
-            functions = json.load(f)
-    except FileNotFoundError:
-        # print("Creating cflow_functions.json")
-        functions = None
-
-    instrumenter = Instrumenter(functions)
-    instrumenter.traverse(root)
-    annotated = instrumenter.annotate_all(filename)
-    if (annotated):
-        with open("cflow_functions.json", "w") as f:
-            # print("Writing cflow_functions.json")
-            json.dump(instrumenter.functions, f, indent=2)
