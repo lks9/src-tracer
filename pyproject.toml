@@ -1,0 +1,18 @@
+[project]
+name = "src_tracer"
+authors = [
+    {name = "Lukas Gratz", email = "lukas.graetz@tu-darmstadt.de"},
+]
+description = "My package description"
+dynamic = ["version"]
+
+[build-system]
+requires = ["setuptools>=46.4.0", "wheel", "angr", "libclang"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 120
+target-version = ['py38']
+
+[tool.setuptools]
+packages = ["src_tracer"]
