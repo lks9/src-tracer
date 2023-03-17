@@ -15,6 +15,7 @@ class SourceTraceReplayer:
 
         self.if_addr = self.addr("_retrace_if")
         self.else_addr = self.addr("_retrace_else")
+        self.return_addr = self.addr("_retrace_return")
         self.wrote_int_addr = self.addr("_retrace_wrote_int")
         self.int_addr = self.addr("_retrace_int")
 
@@ -58,10 +59,13 @@ class SourceTraceReplayer:
         for (elem, bs) in trace:
             if elem == 'T':
                 find = self.if_addr
-                avoid = [self.else_addr, self.wrote_int_addr]
+                avoid = [self.else_addr, self.wrote_int_addr, self.return_addr]
             elif elem == 'N':
                 find = self.else_addr
-                avoid = [self.if_addr, self.wrote_int_addr]
+                avoid = [self.if_addr, self.wrote_int_addr, self.return_addr]
+            elif elem == 'R':
+                find = self.return_addr
+                avoid = [self.if_addr, self.else_addr, self.wrote_int_addr]
             elif functions and elem == 'F':
                 if bs == b'':
                     # There is no func with num 0, that simply marks the end of the trace
@@ -69,10 +73,10 @@ class SourceTraceReplayer:
                 func_num = int.from_bytes(bs, "little")
                 func_name = functions["hex_list"][func_num]["name"]
                 find = self.addr(func_name)
-                avoid = [self.else_addr, self.if_addr, self.wrote_int_addr]
+                avoid = [self.else_addr, self.if_addr, self.wrote_int_addr, self.return_addr]
             elif elem == 'D':
                 find = self.wrote_int_addr
-                avoid = [self.else_addr, self.if_addr]
+                avoid = [self.else_addr, self.if_addr, self.return_addr]
             else:
                 raise ValueError(f'Trace contains unsupported element "{elem}"')
 

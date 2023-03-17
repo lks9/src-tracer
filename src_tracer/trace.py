@@ -15,6 +15,8 @@ PUT_LEN_64       = 0b01000000
 PUT_LEN_reserved = 0b01010000
 PUT_LEN_PREFIX   = 0b01100000
 PUT_LEN_STRING   = 0b01110000
+TEST_RETURN      = 0b11111000
+PUT_RETURN       = 0b01010000
 TEST_IE_COUNT    = 0b10000111
 
 bit_length = {
@@ -117,7 +119,10 @@ class TraceCompact(Trace):
             elif is_func or is_data:
                 count = b & TEST_IE_COUNT
                 len_bits = b & TEST_LEN
-                if len_bits == PUT_LEN_STRING:
+                is_ret = b & TEST_RETURN == PUT_RETURN
+                if is_ret:
+                    elem = ('R', b'')
+                elif len_bits == PUT_LEN_STRING:
                     m = re.match(rb'[^\0]*\0', b)
                     length = m.end()
                     bs = self._trace[i:i+length]

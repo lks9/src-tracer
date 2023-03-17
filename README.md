@@ -49,6 +49,7 @@ Elements are written sequentially without any separator.
 | Macro                | Emits       | Explanation                                             |
 |----------------------|-------------|---------------------------------------------------------|
 | `_FUNC(num)`         | `F` + `num` | Function call, use `num` to distinguish functions       |
+| `_RETURN`            | `R`         | Function return                                         |
 | `_IF`                | `T`         | The if-branch of an if-clause is taken                  |
 | `_ELSE`              | `N`         | The else-branch of an if-clause is taken                |
 | `_SWITCH(num)`       | `D` + `num` | Jump to case indicated with `num` in a switch-clause    |

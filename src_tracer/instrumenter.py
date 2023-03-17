@@ -1,5 +1,3 @@
-
-import sys
 import re
 
 from clang.cindex import Index, CursorKind
@@ -69,7 +67,6 @@ class Instrumenter:
         self.functions[str(line) + ":" + file] = hex(func_num)
         return func_num
 
-
     def add_annotation(self, annotation, location, add_offset=0):
         offset = location.offset + add_offset
         filename = self.filename(location)
@@ -88,15 +85,21 @@ class Instrumenter:
     def visit_function(self, node):
         body = None
         for child in node.get_children():
-            if (child.kind == CursorKind.COMPOUND_STMT):
+            if child.kind == CursorKind.COMPOUND_STMT:
                 body = child
         if not body:
             return
         func_num = self.func_num(node)
-        if self.check_location(body.extent.start, [b"{"]) == False:
+        if not self.check_location(body.extent.start, [b"{"]):
             print("Check location failed for function " + node.spelling)
             return
         self.add_annotation(b" _FUNC(" + bytes(hex(func_num), "utf-8") + b") ", body.extent.start, 1)
+
+        # handle returns
+        for descendant in node.walk_preorder():
+            if descendant.kind == CursorKind.RETURN_STMT:
+                self.add_annotation(b"_RETURN ", descendant.extent.start)
+        self.add_annotation(b"_RETURN ", node.extent.end, -1)
 
         # special treatment for main function
         if node.spelling == "main":
@@ -146,7 +149,7 @@ class Instrumenter:
 
     def visit_if(self, node):
         self.ifs.append(node)
-        if self.check_location(node.extent.start, [b"if"]) == False:
+        if not self.check_location(node.extent.start, [b"if"]):
             print("Check location failed for if")
             return
         children = [c for c in node.get_children()]
@@ -189,7 +192,7 @@ class Instrumenter:
     def visit_loop(self, node):
         loop_id = bytes(hex(len(self.loops)), "utf-8")
         self.loops.append(node)
-        if self.check_location(node.extent.start, [b"for", b"while", b"do"]) == False:
+        if not self.check_location(node.extent.start, [b"for", b"while", b"do"]):
             print("Check location failed for loop")
             return
         body = None
@@ -246,7 +249,7 @@ class Instrumenter:
     def visit_switch(self, node):
         self.switchis.append(node)
         children = [c for c in node.get_children()]
-        if self.check_location(node.extent.start, [b"switch"]) == False or len(children) != 2:
+        if not self.check_location(node.extent.start, [b"switch"]) or len(children) != 2:
             print("Check location failed for switch")
             return
         switch_num = children[0]
@@ -277,14 +280,14 @@ class Instrumenter:
                     if offset in annotation:
                         ann = annotation[offset]
                         try:
-                          if prevchar in b' \t\n' and ann[0] in b' ':
-                            # skip the first ' ' because there already is a ws
-                            ann = ann[1:]
-                          if char in b' \t\n' and ann[-1] in b' ':
-                            # skip the last ' ' because there already is a ws
-                            ann = ann[:-1]
+                            if prevchar in b' \t\n' and ann[0] in b' ':
+                                # skip the first ' ' because there already is a ws
+                                ann = ann[1:]
+                            if char in b' \t\n' and ann[-1] in b' ':
+                                # skip the last ' ' because there already is a ws
+                                ann = ann[:-1]
                         except TypeError:
-                            print(char,prevchar,ann)
+                            print(char, prevchar, ann)
                         f.write(ann)
                     f.write(char)
                     prevchar = char

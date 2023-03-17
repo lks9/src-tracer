@@ -21,10 +21,17 @@ extern unsigned char _trace_if_byte;
  #define _TRACE_SET_LEN_reserved  0b01010000
  #define _TRACE_SET_LEN_PREFIX    0b01100000
  #define _TRACE_SET_LEN_STRING    0b01110000
+#define _TRACE_TEST_RETURN        0b11111000
+ #define _TRACE_SET_RETURN        0b01010000
 #define _TRACE_TEST_IE_COUNT      0b10000111
 
 #define _TRACE_PUT(c) \
     _trace_write(&c, 1)
+
+#define _TRACE_PUT_(c) ;{ \
+    unsigned char buf[1] = { c }; \
+    _trace_write(buf, 1); \
+}
 
 #define _TRACE_IE(if_true) ;{ \
     _trace_if_byte |= if_true << _trace_if_count; \
@@ -78,6 +85,7 @@ extern unsigned int _trace_num(char c, unsigned int num);
 // for retracing
 extern void _retrace_if(void);
 extern void _retrace_else(void);
+extern void _retrace_return(void);
 extern unsigned int _retrace_num(unsigned int num);
 
 
@@ -90,6 +98,7 @@ extern unsigned int _retrace_num(unsigned int num);
 #define _IF                 _TRACE_IE(1)
 #define _ELSE               _TRACE_IE(0)
 #define _FUNC(num)          _TRACE_NUM(_TRACE_SET_FUNC, num)
+#define _RETURN             _TRACE_NUM(_TRACE_SET_RETURN, 0)
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num(_TRACE_SET_DATA, num)
 #define _LOOP_START(id)     /* nothing here */
@@ -104,11 +113,32 @@ int main (int argc, char **argv) { \
     return retval; \
 }
 
+#elif defined _TEXT_TRACE_MODE /* TODO, use _TRACE_MODE instead */
+
+#define _IF                 ;_TRACE_PUT_('T');
+#define _ELSE               ;_TRACE_PUT_('N');
+#define _FUNC(num)          ;_TRACE_PUT_('F'); /* TODO add num */
+#define _RETURN             ;_TRACE_PUT_('R');
+// non-macro version for switch
+#define _SWITCH(num)        ;_TRACE_PUT_('D'); /* TODO add num */
+#define _LOOP_START(id)     /* nothing here */
+#define _LOOP_BODY(id)      ;_TRACE_PUT_('T');
+#define _LOOP_END(id)       ;_TRACE_PUT_('N');
+
+#define _MAIN_FUN(fname)    \
+int main (int argc, char **argv) { \
+    _trace_open(fname ".txt"); \
+    int retval = main_original(argc, argv); \
+    _trace_close(); \
+    return retval; \
+}
+
 #elif defined _RETRACE_MODE
 
-#define _FUNC(num)          /* nothing here */
 #define _IF                 ;_retrace_if();
 #define _ELSE               ;_retrace_else();
+#define _FUNC(num)          /* nothing here */
+#define _RETURN             ;_retrace_return();
 #define _SWITCH(num)        _retrace_num(num)
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      ;_retrace_if();
@@ -122,9 +152,10 @@ int main (int argc, char **argv) { \
 
 #else // neither _TRACE_MODE nor _RETRACE_MODE
 
-#define _FUNC(num)          /* nothing here */
 #define _IF                 /* nothing here */
 #define _ELSE               /* nothing here */
+#define _FUNC(num)          /* nothing here */
+#define _RETURN             /* nothing here */
 #define _SWITCH(num)        num
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      /* nothing here */

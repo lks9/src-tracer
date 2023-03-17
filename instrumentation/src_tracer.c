@@ -57,6 +57,8 @@ void _retrace_if(void) {}
 
 void _retrace_else(void) {}
 
+void _retrace_return(void) {}
+
 unsigned int _retrace_int;
 
 void _retrace_wrote_int(void) {}
