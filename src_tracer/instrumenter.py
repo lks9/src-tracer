@@ -98,8 +98,8 @@ class Instrumenter:
         # handle returns
         for descendant in node.walk_preorder():
             if descendant.kind == CursorKind.RETURN_STMT:
-                self.add_annotation(b"_RETURN ", descendant.extent.start)
-        self.add_annotation(b"_RETURN ", node.extent.end, -1)
+                self.add_annotation(b"_FUNC_RETURN ", descendant.extent.start)
+        self.add_annotation(b"_FUNC_RETURN ", node.extent.end, -1)
 
         # special treatment for main function
         if node.spelling == "main":

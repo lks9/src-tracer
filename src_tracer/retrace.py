@@ -94,13 +94,15 @@ class SourceTraceReplayer:
 
             if len(simgr.found) != 1:
                 log.error("Found %i canditates in simgr %s", len(simgr.found), simgr)
+                if simgr.found == []:
+                    return simgr
 
             if elem == 'D':
                 # add the constrain for the int
                 trace_int = int.from_bytes(bs, "little")
-                state = simgr.found[0]
-                mem_int = state.mem[self.int_addr].int.resolved
-                state.solver.add(mem_int == trace_int)
+                for state in simgr.found:
+                    mem_int = state.mem[self.int_addr].int.resolved
+                    state.solver.add(mem_int == trace_int)
 
             if debug:
                 if bs == b'':

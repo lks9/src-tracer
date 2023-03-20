@@ -85,6 +85,7 @@ extern unsigned int _trace_num(char c, unsigned int num);
 // for retracing
 extern void _retrace_if(void);
 extern void _retrace_else(void);
+extern void _retrace_fun_call(void);
 extern void _retrace_return(void);
 extern unsigned int _retrace_num(unsigned int num);
 
@@ -98,7 +99,7 @@ extern unsigned int _retrace_num(unsigned int num);
 #define _IF                 _TRACE_IE(1)
 #define _ELSE               _TRACE_IE(0)
 #define _FUNC(num)          _TRACE_NUM(_TRACE_SET_FUNC, num)
-#define _RETURN             _TRACE_NUM(_TRACE_SET_RETURN, 0)
+#define _FUNC_RETURN        _TRACE_NUM(_TRACE_SET_RETURN, 0)
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num(_TRACE_SET_DATA, num)
 #define _LOOP_START(id)     /* nothing here */
@@ -118,7 +119,7 @@ int main (int argc, char **argv) { \
 #define _IF                 ;_TRACE_PUT_('T');
 #define _ELSE               ;_TRACE_PUT_('N');
 #define _FUNC(num)          ;_TRACE_PUT_('F'); /* TODO add num */
-#define _RETURN             ;_TRACE_PUT_('R');
+#define _FUNC_RETURN        ;_TRACE_PUT_('R');
 // non-macro version for switch
 #define _SWITCH(num)        ;_TRACE_PUT_('D'); /* TODO add num */
 #define _LOOP_START(id)     /* nothing here */
@@ -137,8 +138,8 @@ int main (int argc, char **argv) { \
 
 #define _IF                 ;_retrace_if();
 #define _ELSE               ;_retrace_else();
-#define _FUNC(num)          /* nothing here */
-#define _RETURN             ;_retrace_return();
+#define _FUNC(num)          ;_retrace_fun_call();
+#define _FUNC_RETURN        ;_retrace_return();
 #define _SWITCH(num)        _retrace_num(num)
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      ;_retrace_if();
@@ -155,7 +156,7 @@ int main (int argc, char **argv) { \
 #define _IF                 /* nothing here */
 #define _ELSE               /* nothing here */
 #define _FUNC(num)          /* nothing here */
-#define _RETURN             /* nothing here */
+#define _FUNC_RETURN        /* nothing here */
 #define _SWITCH(num)        num
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      /* nothing here */

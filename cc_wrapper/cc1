@@ -15,18 +15,17 @@
 #    then you can run make, gcc, whatever
 
 #    usage (retrace mode):
-# export SRC_TRACER_DIR=.........
-# export CC="gcc"
-# export CFLAGS="-Wno-error -g -O0 -L${SRC_TRACER_DIR}/instrumentation -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
-#    (you might also add "-save-temps" to CFLAGS)
-# export LIBS="-lsrc_tracer"
-# export SRC_TRACER_INSTRUMENT=
-#    and then you can ./configure your project...
+#    don't change the variables
+#    if you reconfigure, use the same configuration as in trace mode
 #    before the actual compilation:
 # export SRC_TRACER_INSTRUMENT=_RETRACE_MODE
 #    then you can run make, gcc, whatever
-
-
+#
+#    Note that the instrumented code will be compiled
+#    in retrace mode with -O0 regardless of CFLAGS.
+#    However, the optimization in the CFLAGS might
+#    affect the pre-processing (so we could have -O3 i
+#    pre-processing and -O0 for compilation).
 
 
 echo_outfile () {
@@ -86,6 +85,9 @@ if [ "$1" = "-E" ]; then
         mv "${outfile}.tmp.i" "${outfile}"
     fi
 elif [ "$1" = "-fpreprocessed" ]; then
+    if [ ${SRC_TRACER_INSTRUMENT} = _RETRACE_MODE ]; then
+        exec $(${COLLECT_GCC} --print-prog-name=cc1) $@ -O1
+    fi
     # just compile it
     exec $(${COLLECT_GCC} --print-prog-name=cc1) $@
 fi
