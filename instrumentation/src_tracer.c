@@ -53,12 +53,11 @@ void _trace_close(void) {
 
 
 // for retracing
-bool _retrace_assert_value;
-bool _retrace_assert_passed;
+bool _retrace_assert_values[256];
 char _retrace_assert_label[256];
 
 // only retrace.py should write in here
-bool _retrace_assert_array[256];
+int _retrace_assert_index;
 
 void _retrace_if(void) {}
 
@@ -67,6 +66,8 @@ void _retrace_else(void) {}
 void _retrace_fun_call(void) {}
 
 void _retrace_return(void) {}
+
+void _retrace_assert_passed(void) {};
 
 unsigned int _retrace_int;
 
@@ -80,6 +81,7 @@ unsigned int _retrace_num(unsigned int num) {
 
 void _retrace_assert(char label[], _Bool a) {
     strcpy(_retrace_assert_label, label);
-    _retrace_assert_value = a;
-    _retrace_assert_passed = true;
+    _retrace_assert_passed();
+    // Save the negation of the result (makes initialization simpler)
+    _retrace_assert_values[_retrace_assert_index] = !a;
 }
