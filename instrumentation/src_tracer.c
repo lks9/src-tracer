@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 
 int _trace_fd;
 bool _trace_writing = false;
@@ -52,6 +53,12 @@ void _trace_close(void) {
 
 
 // for retracing
+bool _retrace_assert_value;
+bool _retrace_assert_passed;
+char _retrace_assert_label[256];
+
+// only retrace.py should write in here
+bool _retrace_assert_array[256];
 
 void _retrace_if(void) {}
 
@@ -69,4 +76,10 @@ unsigned int _retrace_num(unsigned int num) {
     _retrace_int = num;
     _retrace_wrote_int();
     return num;
+}
+
+void _retrace_assert(char label[], _Bool a) {
+    strcpy(_retrace_assert_label, label);
+    _retrace_assert_value = a;
+    _retrace_assert_passed = true;
 }

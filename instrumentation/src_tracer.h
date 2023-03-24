@@ -87,7 +87,10 @@ extern void _retrace_if(void);
 extern void _retrace_else(void);
 extern void _retrace_fun_call(void);
 extern void _retrace_return(void);
+extern void _retrace_assert(char label[], _Bool a);
 extern unsigned int _retrace_num(unsigned int num);
+
+extern char _retrace_assert_label[256];
 
 
 /*
@@ -114,6 +117,8 @@ int main (int argc, char **argv) { \
     return retval; \
 }
 
+#define _RETRACE_ASSERT(l,a)  /* nothing here */
+
 #elif defined _TEXT_TRACE_MODE /* TODO, use _TRACE_MODE instead */
 
 #define _IF                 ;_TRACE_PUT_('T');
@@ -134,6 +139,8 @@ int main (int argc, char **argv) { \
     return retval; \
 }
 
+#define _RETRACE_ASSERT(l,a)  /* nothing here */
+
 #elif defined _RETRACE_MODE
 
 #define _IF                 ;_retrace_if();
@@ -151,6 +158,9 @@ int main (int argc, char **argv) { \
     return retval; \
 }
 
+#define _RETRACE_ASSERT(label, a) \
+                            _retrace_assert(label, a);
+
 #else // neither _TRACE_MODE nor _RETRACE_MODE
 
 #define _IF                 /* nothing here */
@@ -167,5 +177,7 @@ int main (int argc, char **argv) { \
     int retval = main_original(argc, argv); \
     return retval; \
 }
+
+#define _RETRACE_ASSERT(l,a)  /* nothing here */
 
 #endif // _TRACE_MODE or _RETRACE_MODE

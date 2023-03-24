@@ -19,6 +19,10 @@ class SourceTraceReplayer:
         self.fun_call_addr = self.addr("_retrace_fun_call")
         self.wrote_int_addr = self.addr("_retrace_wrote_int")
         self.int_addr = self.addr("_retrace_int")
+        self.assert_val_addr = self.addr("_retrace_assert_value")
+        self.assert_passed_addr = self.addr("_retrace_assert_passed")
+        self.assert_label_addr = self.addr("_retrace_assert_label")
+        self.asserts_list = []
 
     def addr(self, sym_name):
         try:
@@ -41,6 +45,8 @@ class SourceTraceReplayer:
                 elif section.name == ".bss":
                     bss_bvs = claripy.BVS(".bss", 8*(section.max_addr - section.min_addr))
                     state.memory.store(section.min_addr, bss_bvs)
+        if self.assert_passed_addr:
+            state.mem[self.assert_passed_addr].bool = False
 
     def start_state(self, func_name: str):
         addr = self.p.loader.main_object.get_symbol(func_name).rebased_addr
@@ -112,6 +118,14 @@ class SourceTraceReplayer:
                 avoid = [self.else_addr, self.if_addr, self.wrote_int_addr, self.return_addr]
                 # explore once more
                 simgr.explore(find=find, avoid=avoid, avoid_priority=True)
+
+            # handle asserts
+            if self.assert_passed_addr:
+                for state in simgr.found:
+                    assert_passed = state.solver.eval(state.mem[self.assert_passed_addr].bool.resolved)
+                    if assert_passed:
+                        print(state.mem[self.assert_label_addr].string.concrete)
+                        print(state.solver.eval_upto(state.mem[self.assert_val_addr].bool.resolved, 2))
 
             if debug:
                 if bs == b'':
