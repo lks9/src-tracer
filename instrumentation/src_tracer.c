@@ -1,13 +1,7 @@
 #include "src_tracer.h"
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-
-#include <unistd.h>
-#include <stdio.h>
 #include <stdbool.h>
-#include <string.h>
+#include <fcntl.h>
 
 int _trace_fd;
 bool _trace_writing = false;
@@ -15,10 +9,32 @@ bool _trace_writing = false;
 unsigned char _trace_if_byte;
 int _trace_if_count;
 
+// taken from musl (arch/x86_64/syscall_arch.h)
+static __inline long __syscall1(long n, long a1)
+{
+	unsigned long ret;
+	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1) : "rcx", "r11", "memory");
+	return ret;
+}
+static __inline long __syscall3(long n, long a1, long a2, long a3)
+{
+	unsigned long ret;
+	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
+						  "d"(a3) : "rcx", "r11", "memory");
+	return ret;
+}
+#define SYS_read				0
+#define SYS_write				1
+#define SYS_open				2
+#define SYS_close				3
+#define O_LARGEFILE 0100000
+// end musl code
+
+
 void _trace_write(const void *buf, int count) {
     if (_trace_writing) {
         _trace_writing = false;
-        if (write(_trace_fd, buf, count) == -1) {
+        if (__syscall3(SYS_write, (long)_trace_fd, (long)buf, (long)count) == -1) {
             // some write error occured
             // do not reset _trace_writing, instead abort trace recording
             return;
@@ -36,7 +52,7 @@ unsigned int _trace_num(char type, unsigned int num) {
 }
 
 void _trace_open(const char *fname) {
-    _trace_fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    _trace_fd = __syscall3(SYS_open, (long)fname, (long)(O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE), (long)0644);
     _trace_if_count = 0;
     _trace_if_byte = _TRACE_SET_IE;
     _trace_writing = true;
@@ -48,7 +64,7 @@ void _trace_close(void) {
         _TRACE_PUT(_trace_if_byte);
     }
     _trace_writing = false;
-    close(_trace_fd);
+    __syscall1(SYS_close, (long)_trace_fd);
 }
 
 
@@ -81,7 +97,11 @@ unsigned int _retrace_num(unsigned int num) {
 }
 
 void _retrace_assert(char label[], _Bool a) {
-    strcpy(_retrace_assert_label, label);
+    int i;
+    for (i = 0; label[i] != '\0'; i++) {
+        _retrace_assert_label[i] = label[i];
+    }
+    _retrace_assert_label[i] = '\0';
     _retrace_assert_passed();
     // Save the negation of the result (makes initialization simpler)
     _retrace_assert_values[_retrace_assert_index] = !a;
