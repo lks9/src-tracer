@@ -53,6 +53,7 @@ void _trace_close(void) {
 
 
 // for retracing
+int _retrace_fun_num;
 bool _retrace_assert_values[256];
 char _retrace_assert_label[256];
 

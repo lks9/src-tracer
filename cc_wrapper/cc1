@@ -86,7 +86,7 @@ if [ "$1" = "-E" ]; then
     fi
 elif [ "$1" = "-fpreprocessed" ]; then
     if [ ${SRC_TRACER_INSTRUMENT} = _RETRACE_MODE ]; then
-        exec $(${COLLECT_GCC} --print-prog-name=cc1) $@ -O1
+        exec $(${COLLECT_GCC} --print-prog-name=cc1) $@
     fi
     # just compile it
     exec $(${COLLECT_GCC} --print-prog-name=cc1) $@

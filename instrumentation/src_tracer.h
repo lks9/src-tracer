@@ -76,6 +76,7 @@ extern unsigned char _trace_if_byte;
     _trace_write(buf, count+1); \
 }
 
+
 // same as the macro version
 // but returns num
 // can be used inside switch conditions
@@ -90,7 +91,13 @@ extern void _retrace_return(void);
 extern void _retrace_assert(char label[], _Bool a);
 extern unsigned int _retrace_num(unsigned int num);
 
+extern int _retrace_fun_num;
 extern char _retrace_assert_label[256];
+
+#define _RETRACE_FUN_CALL(num) ;{ \
+    _retrace_fun_num = num; \
+    _retrace_fun_call(); \
+}
 
 
 /*
@@ -145,7 +152,7 @@ int main (int argc, char **argv) { \
 
 #define _IF                 ;_retrace_if();
 #define _ELSE               ;_retrace_else();
-#define _FUNC(num)          ;_retrace_fun_call();
+#define _FUNC(num)          _RETRACE_FUN_CALL(num)
 #define _FUNC_RETURN        ;_retrace_return();
 #define _SWITCH(num)        _retrace_num(num)
 #define _LOOP_START(id)     /* nothing here */
