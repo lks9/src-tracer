@@ -35,6 +35,7 @@ class SourceTraceReplayer:
         self.assert_index_addr = self.addr("_retrace_assert_index")
         self.assert_label_addr = self.addr("_retrace_assert_label")
         self.asserts_list = []
+        self.is_retrace_addr = self.addr("_is_retrace_mode")
 
     def addr(self, sym_name):
         try:
@@ -72,6 +73,8 @@ class SourceTraceReplayer:
                 elif section.name == ".bss":
                     bss_bvs = claripy.BVS(".bss", 8*(section.max_addr - section.min_addr))
                     state.memory.store(section.min_addr, bss_bvs)
+        if self.is_retrace_addr:
+            state.mem[self.is_retrace_addr].bool = True
 
     def start_state(self, func_name: str):
         addr = self.p.loader.main_object.get_symbol(func_name).rebased_addr
@@ -79,6 +82,8 @@ class SourceTraceReplayer:
         self.make_globals_symbolic(state)
         # optimize a bit
         state.options["COPY_STATES"] = False
+        state.options["LAZY_SOLVES"] = True
+        state.options["CONSERVATIVE_READ_STRATEGY"] = True
         return state
 
     def follow_trace(self, trace: Trace, func_name: str, functions=None):
@@ -120,16 +125,19 @@ class SourceTraceReplayer:
                 # no stash 'found'...
                 pass
 
+            state = simgr.active[0]
+
             # find also asserts
             find += [self.assert_passed_addr]
 
-            simgr.explore(find=find, avoid=avoid, avoid_priority=True)
+            while len(simgr.active) != 0:
+                simgr.explore(find=find, avoid=avoid, avoid_priority=True)
 
             if len(simgr.found) != 1:
                 log.error("Found %i canditates in simgr %s", len(simgr.found), simgr)
                 if simgr.found == []:
                     log.error("Could not find %s at all", elem)
-                    return simgr
+                    return (simgr, state)
 
             # handle asserts
             while True:
@@ -177,4 +185,4 @@ class SourceTraceReplayer:
             # avoid all states not in found
             simgr.drop()
 
-        return simgr
+        return (simgr, simgr.found[0])

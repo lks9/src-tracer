@@ -4,7 +4,6 @@
 #include <fcntl.h>
 
 int _trace_fd;
-bool _trace_writing = false;
 
 unsigned char _trace_if_byte;
 int _trace_if_count;
@@ -32,14 +31,18 @@ static __inline long __syscall3(long n, long a1, long a2, long a3)
 
 
 void _trace_write(const void *buf, int count) {
-    if (_trace_writing) {
-        _trace_writing = false;
-        if (__syscall3(SYS_write, (long)_trace_fd, (long)buf, (long)count) == -1) {
+    const char *ptr = buf;
+    while (_trace_fd != 0) {
+        long written = __syscall3(SYS_write, (long)_trace_fd, (long)ptr, (long)count);
+        if (written == -1) {
             // some write error occured
             // do not reset _trace_writing, instead abort trace recording
             return;
+        } else if (written == count) {
+            return;
         }
-        _trace_writing = true;
+        ptr = &ptr[written];
+        count -= written;
     }
 }
 
@@ -55,18 +58,29 @@ void _trace_open(const char *fname) {
     _trace_fd = __syscall3(SYS_open, (long)fname, (long)(O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE), (long)0644);
     _trace_if_count = 0;
     _trace_if_byte = _TRACE_SET_IE;
-    _trace_writing = true;
 }
 
 void _trace_close(void) {
+    if (_trace_fd == 0) {
+        return;
+    }
     if (_trace_if_count != 0) {
         _TRACE_NUM(_TRACE_SET_FUNC, 0);
         _TRACE_PUT(_trace_if_byte);
     }
-    _trace_writing = false;
     __syscall1(SYS_close, (long)_trace_fd);
+    _trace_fd = 0;
 }
 
+
+// text trace
+int _text_trace_switch(int num, char *num_str) {
+    _TRACE_PUT_('D');
+    for (char *ptr = &num_str[2]; *ptr != '\0'; ptr = &ptr[1]) {
+        _TRACE_PUT(*ptr);
+    }
+    return num;
+}
 
 // for retracing
 int _retrace_fun_num;
@@ -105,4 +119,20 @@ void _retrace_assert(char label[], _Bool a) {
     _retrace_assert_passed();
     // Save the negation of the result (makes initialization simpler)
     _retrace_assert_values[_retrace_assert_index] = !a;
+}
+
+// for both
+_Bool _is_retrace_mode;
+
+/* This can be used for switch:
+ *    switch(        num ) { ... }
+ * Annotated:
+ *    switch(_SWITCH(num)) { ... }
+ * The makro _SWITCH might translate to _is_retrace_switch.
+ */
+unsigned int _is_retrace_switch(unsigned int num) {
+    _IS_RETRACE(_RETRACE_NUM(num),
+                _TRACE_NUM(_TRACE_SET_DATA, num)
+    )
+    return num;
 }

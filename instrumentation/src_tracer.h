@@ -76,6 +76,9 @@ extern unsigned char _trace_if_byte;
     _trace_write(buf, count+1); \
 }
 
+#define _TRACE_RETURN() \
+    _TRACE_PUT_(_TRACE_SET_RETURN | _trace_if_count)
+
 
 // same as the macro version
 // but returns num
@@ -99,17 +102,53 @@ extern char _retrace_assert_label[256];
     _retrace_fun_call(); \
 }
 
+#define _RETRACE_NUM(num) ;{ \
+    _retrace_int = num; \
+    _retrace_wrote_int(); \
+}
+
+#define _IS_RETRACE(a,b)    ; \
+    if (_is_retrace_mode) { \
+        a; \
+    } else { \
+        b; \
+    }
 
 /*
  * Macros used in the instrumentation.
  * 2 versions: _TRACE_MODE and _RETRACE_MODE
  */
-#if defined _TRACE_MODE
+
+#if defined _TRACE_MODE && defined _RETRACE_MODE
+/* both */
+
+extern _Bool _is_retrace_mode;
+extern unsigned int _is_retrace_switch(unsigned int num);
+
+#define _IF                 _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
+#define _ELSE               _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
+#define _FUNC(num)          _IS_RETRACE(_RETRACE_FUN_CALL(num), _TRACE_NUM(_TRACE_SET_FUNC, num))
+#define _FUNC_RETURN        _IS_RETRACE(_retrace_return(), _TRACE_RETURN())
+// non-macro version for switch
+#define _SWITCH(num)        _is_retrace_switch(num)
+#define _LOOP_START(id)     /* nothing here */
+#define _LOOP_BODY(id)      _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
+#define _LOOP_END(id)       _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
+
+#define _MAIN_FUN(fname)    \
+int main (int argc, char **argv) { \
+    _trace_open(fname); \
+    int retval = main_original(argc, argv); \
+    _trace_close(); \
+    return retval; \
+}
+
+#elif defined _TRACE_MODE
 
 #define _IF                 _TRACE_IE(1)
 #define _ELSE               _TRACE_IE(0)
 #define _FUNC(num)          _TRACE_NUM(_TRACE_SET_FUNC, num)
-#define _FUNC_RETURN        _TRACE_NUM(_TRACE_SET_RETURN, 0)
+#define _FUNC_RETURN        _TRACE_RETURN()
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num(_TRACE_SET_DATA, num)
 #define _LOOP_START(id)     /* nothing here */
@@ -128,12 +167,25 @@ int main (int argc, char **argv) { \
 
 #elif defined _TEXT_TRACE_MODE /* TODO, use _TRACE_MODE instead */
 
+#define _TEXT_TRACE_FUNC(num) ;{ \
+    char num_str[] = #num; \
+    _TRACE_PUT_('F'); \
+    for (char *ptr = &num_str[2]; *ptr != '\0'; ptr = &ptr[1]) { \
+        _TRACE_PUT(*ptr); \
+    } \
+}
+
+int _text_trace_switch(int num, char *num_str);
+
+#define _TEXT_TRACE_SWITCH(num) \
+    _text_trace_switch(num, #num)
+
 #define _IF                 ;_TRACE_PUT_('T');
 #define _ELSE               ;_TRACE_PUT_('N');
-#define _FUNC(num)          ;_TRACE_PUT_('F'); /* TODO add num */
+#define _FUNC(num)          _TEXT_TRACE_FUNC(num)
 #define _FUNC_RETURN        ;_TRACE_PUT_('R');
 // non-macro version for switch
-#define _SWITCH(num)        ;_TRACE_PUT_('D'); /* TODO add num */
+#define _SWITCH(num)        _TEXT_TRACE_SWITCH(num)
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      ;_TRACE_PUT_('T');
 #define _LOOP_END(id)       ;_TRACE_PUT_('N');
