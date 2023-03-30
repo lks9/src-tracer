@@ -76,15 +76,28 @@ extern unsigned char _trace_if_byte;
     _trace_write(buf, count+1); \
 }
 
+#define NIBBLE_TO_HEX_(n)   (((n) >= 0xa) ? (n) - 0xa + 'a' : (n) + '0')
+#define NIBBLE_TO_HEX(n,i)  NIBBLE_TO_HEX_(((n) >> ((i)*4)) & 0xf)
+#define NIBBLE_COUNT(n,c)   ((n) >= (1 << ((c)*4)))
+
+#define _TRACE_NUM_TEXT(type, num) ;{ \
+    unsigned char buf[18]; \
+    int i; \
+    buf[0] = type; \
+    for (i = 0; NIBBLE_COUNT(num, i); i++) { \
+        buf[1+i] = NIBBLE_TO_HEX(num, i); \
+    } \
+    _trace_write(buf, 1+i); \
+}
+
 #define _TRACE_RETURN() \
     _TRACE_PUT_(_TRACE_SET_RETURN | _trace_if_count)
-
 
 // same as the macro version
 // but returns num
 // can be used inside switch conditions
 extern unsigned int _trace_num(char c, unsigned int num);
-
+extern unsigned int _trace_num_text(char c, unsigned int num);
 
 // for retracing
 extern void _retrace_if(void);
@@ -167,25 +180,12 @@ int main (int argc, char **argv) { \
 
 #elif defined _TEXT_TRACE_MODE /* TODO, use _TRACE_MODE instead */
 
-#define _TEXT_TRACE_FUNC(num) ;{ \
-    char num_str[] = #num; \
-    _TRACE_PUT_('F'); \
-    for (char *ptr = &num_str[2]; *ptr != '\0'; ptr = &ptr[1]) { \
-        _TRACE_PUT(*ptr); \
-    } \
-}
-
-int _text_trace_switch(int num, char *num_str);
-
-#define _TEXT_TRACE_SWITCH(num) \
-    _text_trace_switch(num, #num)
-
 #define _IF                 ;_TRACE_PUT_('T');
 #define _ELSE               ;_TRACE_PUT_('N');
-#define _FUNC(num)          _TEXT_TRACE_FUNC(num)
+#define _FUNC(num)          ;_TRACE_NUM_TEXT('F', num);
 #define _FUNC_RETURN        ;_TRACE_PUT_('R');
 // non-macro version for switch
-#define _SWITCH(num)        _TEXT_TRACE_SWITCH(num)
+#define _SWITCH(num)        _trace_num_text('D', num)
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      ;_TRACE_PUT_('T');
 #define _LOOP_END(id)       ;_TRACE_PUT_('N');

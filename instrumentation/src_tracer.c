@@ -50,7 +50,12 @@ void _trace_write(const void *buf, int count) {
 // but returns num
 // can be used inside switch conditions
 unsigned int _trace_num(char type, unsigned int num) {
-    _TRACE_NUM(type, num)
+    _TRACE_NUM(type, num);
+    return num;
+}
+
+unsigned int _trace_num_text(char type, unsigned int num) {
+    _TRACE_NUM_TEXT(type, num);
     return num;
 }
 
@@ -74,9 +79,9 @@ void _trace_close(void) {
 
 
 // text trace
-int _text_trace_switch(int num, char *num_str) {
+int _text_trace_switch(int num, const char *num_str) {
     _TRACE_PUT_('D');
-    for (char *ptr = &num_str[2]; *ptr != '\0'; ptr = &ptr[1]) {
+    for (const char *ptr = &num_str[2]; *ptr != '\0'; ptr = &ptr[1]) {
         _TRACE_PUT(*ptr);
     }
     return num;

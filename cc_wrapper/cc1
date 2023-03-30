@@ -5,28 +5,31 @@
 #    usage (production mode):
 # export SRC_TRACER_DIR=.........
 # export CC="gcc"
-# export CFLAGS="-Wno-error -O3 -L${SRC_TRACER_DIR}/instrumentation -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
-#    (you might also add "-save-temps" to CFLAGS)
+# export CFLAGS="-Wno-error -L${SRC_TRACER_DIR}/instrumentation -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
+#    (you might also add "-O3" and "-save-temps" to CFLAGS)
 # export LIBS="-lsrc_tracer"
-# export SRC_TRACER_INSTRUMENT=
+# export SRC_TRACER=
 #    and then you can ./configure your project...
 #    before the actual compilation:
-# export SRC_TRACER_INSTRUMENT=_TRACE_MODE
+# export SRC_TRACER="-D_TRACE_MODE"
 #    then you can run make, gcc, whatever
 
 #    usage (retrace mode):
-#    don't change the variables
-#    if you reconfigure, use the same configuration as in trace mode
-#    before the actual compilation:
-# export SRC_TRACER_INSTRUMENT=_RETRACE_MODE
+#    Don't change the variables except $SRC_TRACER.
+#    If you reconfigure, use the same configuration as in trace mode!
+#    Before the actual compilation:
+# export SRC_TRACER="-D_RETRACE_MODE"
 #    then you can run make, gcc, whatever
-#
-#    Note that the instrumented code will be compiled
-#    in retrace mode with -O0 regardless of CFLAGS.
-#    However, the optimization in the CFLAGS might
-#    affect the pre-processing (so we could have -O3 i
-#    pre-processing and -O0 for compilation).
 
+#    usage (combined mode)
+# export SRC_TRACER="-D_TRACE_MODE -D_RETRACE_MODE"
+#    This way, the compiled binaries can be used for both recording and replaying.
+#    The code is expected to be slower, therefore not for production mode.
+#    You might want to compile it with debugging info "gcc -g".
+
+#    usage (text trace mode)
+# export SRC_TRACER="-D_TEXT_TRACE_MODE"
+#    The code is expected to be slower, therefore not for production mode.
 
 echo_outfile () {
     while [ ! -z "$1" ]; do
@@ -55,7 +58,7 @@ echo_infile () {
     done
 }
 
-if [ ! ${SRC_TRACER_INSTRUMENT} ]; then
+if [ -z "${SRC_TRACER}" ]; then
     # just compile it
     exec $(${COLLECT_GCC} --print-prog-name=cc1) $@
 fi
@@ -81,7 +84,7 @@ if [ "$1" = "-E" ]; then
         # echo "${outfile}.tmp.c"
 
         # rerun preprocessor to resolve instrumentation macros
-        cpp -D${SRC_TRACER_INSTRUMENT} "${outfile}" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/instrumentation/"
+        cpp ${SRC_TRACER} "${outfile}" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/instrumentation/"
         mv "${outfile}.tmp.i" "${outfile}"
     fi
 elif [ "$1" = "-fpreprocessed" ]; then
