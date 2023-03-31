@@ -82,12 +82,13 @@ extern unsigned char _trace_if_byte;
 
 #define _TRACE_NUM_TEXT(type, num) ;{ \
     unsigned char buf[18]; \
-    int i; \
+    int count; \
     buf[0] = type; \
-    for (i = 0; NIBBLE_COUNT(num, i); i++) { \
-        buf[1+i] = NIBBLE_TO_HEX(num, i); \
+    for (count = 0; NIBBLE_COUNT(num, count); count++) {}  \
+    for (int i = 0; i < count; i++) { \
+        buf[count-i] = NIBBLE_TO_HEX(num, i); \
     } \
-    _trace_write(buf, 1+i); \
+    _trace_write(buf, 1+count); \
 }
 
 #define _TRACE_RETURN() \
