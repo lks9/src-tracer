@@ -125,6 +125,91 @@ Moreover, a sequence of `T` and `N` can be stored more efficient in the binary t
   ```
   The last one just retraces function `checksum`.
 
+## Busybox with musl-libc
+
+Tested: busybox ... and musl v1.2.3
+
+* Set flags and configure musl:
+
+```bash
+  export SRC_TRACER_DIR=<path-to>/src-tracer/
+  export CFLAGS="-Wno-error -L${SRC_TRACER_DIR}/instrumentation -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
+  export SRC_TRACER=""
+
+  ./configure
+```
+
+* Patch musl: In `config.mak` add `-lsrc_tracer` to `LIBCC`.
+In `src/string/strlen.c` replace `#ifdef __GNUC__` by `#if false`.
+The latter is a workaround for angr to ignore address alignments (see angr/angr#3883).
+
+* Make (text trace mode) and install:
+```bash
+  export SRC_TRACER="-D_TEXT_TRACE_MODE"
+  make
+  sudo make install
+```
+
+* Copy the generated `cflow_file.json` to the busybox dirctory:
+
+```bash
+cd ..
+  cp musl/cflow_file.json busybox/cflow_file.json
+  cd busybox
+```
+
+* Follow step 2 from https://www.openwall.com/lists/musl/2014/08/08/13
+to configure busybox to compile statically linked against musl.
+
+* Before you run `make`, add `src_tracer` to the `CONFIG_EXTRA_LDLIBS`
+in `.config`:
+
+```
+CONFIG_EXTRA_LDLIBS="src_tracer"
+```
+
+* Run:
+
+```bash
+  make
+```
+
+When you get a lot of
+
+```
+warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+```
+then the instrumatation is working as it should!
+
+* Once we compiled it successfully, you don't need the stripped version.
+So just rename:
+
+```bash
+  mv busybox_unstripped busybox
+```
+
+* Et voila!
+
+* To record some trace:
+
+```bash
+  ./busybox echo hello
+```
+
+The trace will be somewhere, in my case `/tmp/ccQacmv1.i.trace.txt`.
+
+* Print the trace into a file:
+
+```bash
+  ${SRC_TRACER_DIR}/print_trace.py /tmp/ccQacmv1.i.trace.txt > echo.trace.txt
+```
+
+* Replay trace:
+
+```bash
+  ${SRC_TRACER_DIR}/replay_text_trace.py busybox main echo.trace.txt
+```
+
 ## Other Software
 
 You can do it manually as for the `checksum.c` example.

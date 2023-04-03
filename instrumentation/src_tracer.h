@@ -78,7 +78,9 @@ extern unsigned char _trace_if_byte;
 
 #define NIBBLE_TO_HEX_(n)   (((n) >= 0xa) ? (n) - 0xa + 'a' : (n) + '0')
 #define NIBBLE_TO_HEX(n,i)  NIBBLE_TO_HEX_(((n) >> ((i)*4)) & 0xf)
-#define NIBBLE_COUNT(n,c)   ((n) >= (1 << ((c)*4)))
+
+// Shift twice, otherwise we might run into undefined behavior!
+#define NIBBLE_COUNT(n,c)   (((n) >> (c)*3 >> (c)) != 0)
 
 #define _TRACE_NUM_TEXT(type, num) ;{ \
     unsigned char buf[18]; \
@@ -183,10 +185,10 @@ int main (int argc, char **argv) { \
 
 #define _IF                 ;_TRACE_PUT_('T');
 #define _ELSE               ;_TRACE_PUT_('N');
-#define _FUNC(num)          ;_TRACE_NUM_TEXT('F', num);
+#define _FUNC(num)          ;_TRACE_NUM_TEXT('F', ((unsigned int)num));
 #define _FUNC_RETURN        ;_TRACE_PUT_('R');
 // non-macro version for switch
-#define _SWITCH(num)        _trace_num_text('D', num)
+#define _SWITCH(num)        _trace_num_text('D', ((unsigned int)num))
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      ;_TRACE_PUT_('T');
 #define _LOOP_END(id)       ;_TRACE_PUT_('N');
