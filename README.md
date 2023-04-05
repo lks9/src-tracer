@@ -140,7 +140,8 @@ Tested: busybox ... and musl v1.2.3
 ```
 
 * Patch musl: In `config.mak` add `-lsrc_tracer` to `LIBCC`.
-In `src/string/strlen.c` replace `#ifdef __GNUC__` by `#if false`.
+In `src/string/strlen.c`, `src/string/strchrnul.c` and
+`src/string/stpcpy.c` replace `#ifdef __GNUC__` by `#if false`.
 The latter is a workaround for angr to ignore address alignments (see angr/angr#3883).
 
 * Make (text trace mode) and install:
@@ -209,6 +210,8 @@ The trace will be somewhere, in my case `/tmp/ccQacmv1.i.trace.txt`.
 ```bash
   ${SRC_TRACER_DIR}/replay_text_trace.py busybox main echo.trace.txt
 ```
+
+Retracing took 42 min on my computer.
 
 ## Other Software
 

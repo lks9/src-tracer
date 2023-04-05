@@ -54,11 +54,12 @@ class SourceTraceReplayer:
         self.make_globals_symbolic(state)
         # optimize a bit
         state.options["COPY_STATES"] = False
+        #state.options["ALL_FILES_EXIST"] = False
         return state
 
     def follow_trace(self, trace_str: str, func_name: str):
         # start_state, simulation manager
-        simgr = self.p.factory.simulation_manager(self.start_state(func_name), auto_drop=("avoid",))
+        simgr = self.p.factory.simulation_manager(self.start_state(func_name))
 
         # Split trace_str into elements
         trace_str = trace_str.encode()
@@ -74,14 +75,15 @@ class SourceTraceReplayer:
                 simgr.explore(find=find, avoid=avoid, avoid_priority=True)
 
             if len(simgr.found) != 1:
-                l.error("Found %i canditates in simgr %s", len(simgr.found), simgr)
+                l.error("Found %i canditates in %s", len(simgr.found), simgr)
                 if simgr.found == []:
                     l.error("Couldn't find %s at all", elem.decode())
                     return simgr, state
 
-            state = simgr.found[0]
+            while simgr.active != []:
+                state = simgr.found[0]
             # avoid all states not in found
-            simgr.drop()
+            simgr.drop(stash='avoid')
             # start over with active
             simgr.move(from_stash='found', to_stash='active')
 
@@ -102,6 +104,9 @@ if __name__ == "__main__":
     logging.getLogger("cle.loader").setLevel(logging.CRITICAL)
     logging.getLogger("angr.storage.memory_mixins.default_filler_mixin").setLevel(logging.CRITICAL)
     logging.getLogger("angr.engines.successors").setLevel(logging.CRITICAL)
+
+    # debug some loggers:
+    logging.getLogger("angr.procedures.posix.mmap").setLevel(logging.DEBUG)
 
     # make the current logger debug
     l.setLevel(logging.DEBUG)

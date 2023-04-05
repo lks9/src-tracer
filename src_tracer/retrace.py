@@ -82,13 +82,14 @@ class SourceTraceReplayer:
         self.make_globals_symbolic(state)
         # optimize a bit
         state.options["COPY_STATES"] = False
-        state.options["LAZY_SOLVES"] = True
-        state.options["CONSERVATIVE_READ_STRATEGY"] = True
+        #state.options["ALL_FILES_EXIST"] = False
+        #state.options["LAZY_SOLVES"] = True
+        #state.options["CONSERVATIVE_READ_STRATEGY"] = True
         return state
 
     def follow_trace(self, trace: Trace, func_name: str, functions=None):
         # start_state, simulation manager
-        simgr = self.p.factory.simulation_manager(self.start_state(func_name), auto_drop=("avoid",))
+        simgr = self.p.factory.simulation_manager(self.start_state(func_name))
 
         debug = log.isEnabledFor(logging.DEBUG)
 
@@ -125,7 +126,8 @@ class SourceTraceReplayer:
                 # no stash 'found'...
                 pass
 
-            state = simgr.active[0]
+            if simgr.active:
+                state = simgr.active[0]
 
             # find also asserts
             find += [self.assert_passed_addr]
@@ -183,6 +185,6 @@ class SourceTraceReplayer:
                     log.debug(f"{elem}{num:x}")
 
             # avoid all states not in found
-            simgr.drop()
+            simgr.drop(stash="avoid")
 
         return (simgr, simgr.found[0])
