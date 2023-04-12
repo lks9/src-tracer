@@ -107,7 +107,7 @@ class SourceTraceReplayer:
             elif elem == 'F':
                 if bs == b'':
                     # There is no func with num 0, that simply marks the end of the trace
-                    return simgr
+                    return (simgr, simgr.found[0])
                 find = [self.fun_call_addr]
                 avoid = [self.if_addr, self.else_addr, self.wrote_int_addr, self.return_addr]
             elif elem == 'D':
