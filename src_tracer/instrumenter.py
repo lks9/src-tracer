@@ -189,6 +189,14 @@ class Instrumenter:
                 self.prepent_annotation(b" { _IF ", if_body.extent.start)
                 self.prepent_annotation(b" } else { _ELSE } ", if_body.extent.end, if_semi_off + 1)
 
+    # the ?: ternary operator
+    def visit_conditional_op(self, node):
+        self.ifs.append(node)
+        children = [c for c in node.get_children()]
+        condition = children[0]
+        self.prepent_annotation(b" _CONDITION(", condition.extent.start)
+        self.prepent_annotation(b") ", condition.extent.end)
+
     def visit_loop(self, node):
         loop_id = bytes(hex(len(self.loops)), "utf-8")
         self.loops.append(node)
@@ -305,6 +313,8 @@ class Instrumenter:
                 self.visit_function(node)
             elif (node.kind == CursorKind.IF_STMT):
                 self.visit_if(node)
+            elif (node.kind == CursorKind.CONDITIONAL_OPERATOR):
+                self.visit_conditional_op(node)
             elif (node.kind in (CursorKind.WHILE_STMT, CursorKind.FOR_STMT, CursorKind.DO_STMT)):
                 self.visit_loop(node)
             elif (node.kind == CursorKind.SWITCH_STMT):

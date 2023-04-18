@@ -25,4 +25,5 @@ int main(int argc, char **argv) {
         printf("strange 17\n");
     }
     _RETRACE_ASSERT("s", argv[0][0] == 's');
+    int x = argc < 3 ? 0 : 1;
 }

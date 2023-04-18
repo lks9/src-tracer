@@ -59,6 +59,11 @@ unsigned int _trace_num_text(char type, unsigned int num) {
     return num;
 }
 
+_Bool _trace_condition(_Bool cond) {
+    _TRACE_IE(cond);
+    return cond;
+}
+
 void _trace_open(const char *fname) {
     _trace_fd = __syscall3(SYS_open, (long)fname, (long)(O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE), (long)0644);
     _trace_if_count = 0;
@@ -79,6 +84,15 @@ void _trace_close(void) {
 
 
 // text trace
+_Bool _text_trace_condition(_Bool cond) {
+    if (cond) {
+        _TRACE_PUT_('T');
+    } else {
+        _TRACE_PUT_('N');
+    }
+    return cond;
+}
+
 int _text_trace_switch(int num, const char *num_str) {
     _TRACE_PUT_('D');
     for (const char *ptr = &num_str[2]; *ptr != '\0'; ptr = &ptr[1]) {
@@ -98,6 +112,15 @@ int _retrace_assert_index;
 void _retrace_if(void) {}
 
 void _retrace_else(void) {}
+
+_Bool _retrace_condition(_Bool cond) {
+    if (cond) {
+        _retrace_if();
+    } else {
+        _retrace_else();
+    }
+    return cond;
+}
 
 void _retrace_fun_call(void) {}
 
@@ -128,6 +151,16 @@ void _retrace_assert(char label[], _Bool a) {
 
 // for both
 _Bool _is_retrace_mode;
+
+_Bool _is_retrace_condition(_Bool cond) {
+    if (cond) {
+        _IS_RETRACE(_retrace_if(), _TRACE_IE(1));
+    } else {
+        _IS_RETRACE(_retrace_else(), _TRACE_IE(0));
+    }
+    return cond;
+}
+
 
 /* This can be used for switch:
  *    switch(        num ) { ... }

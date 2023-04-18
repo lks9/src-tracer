@@ -101,10 +101,12 @@ extern unsigned char _trace_if_byte;
 // can be used inside switch conditions
 extern unsigned int _trace_num(char c, unsigned int num);
 extern unsigned int _trace_num_text(char c, unsigned int num);
+extern _Bool _trace_condition(_Bool cond);
 
 // for retracing
 extern void _retrace_if(void);
 extern void _retrace_else(void);
+extern _Bool _retrace_condition(_Bool cond);
 extern void _retrace_fun_call(void);
 extern void _retrace_return(void);
 extern void _retrace_assert(char label[], _Bool a);
@@ -143,6 +145,7 @@ extern unsigned int _is_retrace_switch(unsigned int num);
 
 #define _IF                 _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
 #define _ELSE               _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
+#define _CONDITION(cond)    _is_retrace_condition(cond)
 #define _FUNC(num)          _IS_RETRACE(_RETRACE_FUN_CALL(num), _TRACE_NUM(_TRACE_SET_FUNC, num))
 #define _FUNC_RETURN        _IS_RETRACE(_retrace_return(), _TRACE_RETURN())
 // non-macro version for switch
@@ -163,6 +166,7 @@ int main (int argc, char **argv) { \
 
 #define _IF                 _TRACE_IE(1)
 #define _ELSE               _TRACE_IE(0)
+#define _CONDITION(cond)    _trace_condition(cond)
 #define _FUNC(num)          _TRACE_NUM(_TRACE_SET_FUNC, num)
 #define _FUNC_RETURN        _TRACE_RETURN()
 // non-macro version for switch
@@ -185,6 +189,7 @@ int main (int argc, char **argv) { \
 
 #define _IF                 ;_TRACE_PUT_('T');
 #define _ELSE               ;_TRACE_PUT_('N');
+#define _CONDITION(cond)    _text_trace_condition(cond)
 #define _FUNC(num)          ;_TRACE_NUM_TEXT('F', ((unsigned int)num));
 #define _FUNC_RETURN        ;_TRACE_PUT_('R');
 // non-macro version for switch
@@ -207,6 +212,7 @@ int main (int argc, char **argv) { \
 
 #define _IF                 ;_retrace_if();
 #define _ELSE               ;_retrace_else();
+#define _CONDITION(cond)    _retrace_condition(cond)
 #define _FUNC(num)          _RETRACE_FUN_CALL(num)
 #define _FUNC_RETURN        ;_retrace_return();
 #define _SWITCH(num)        _retrace_num(num)
@@ -227,6 +233,7 @@ int main (int argc, char **argv) { \
 
 #define _IF                 /* nothing here */
 #define _ELSE               /* nothing here */
+#define _CONDITION(cond)    /* nothing here */
 #define _FUNC(num)          /* nothing here */
 #define _FUNC_RETURN        /* nothing here */
 #define _SWITCH(num)        num
