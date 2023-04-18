@@ -147,6 +147,12 @@ extern unsigned int _is_retrace_switch(unsigned int num);
 #define _FUNC_RETURN        _IS_RETRACE(_retrace_return(), _TRACE_RETURN())
 // non-macro version for switch
 #define _SWITCH(num)        _is_retrace_switch(num)
+// experimental version for switch
+#define _SWITCH_START(id)   ;_Bool _cflow_switch_##id = 1;
+#define _CASE(num, id)      ;if (_cflow_switch_##id) { \
+                                _IS_RETRACE(_RETRACE_NUM(num), _TRACE_NUM(_TRACE_SET_DATA, num)) \
+                                _cflow_switch_##id = 0; \
+                            };
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
 #define _LOOP_END(id)       _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
@@ -167,6 +173,12 @@ int main (int argc, char **argv) { \
 #define _FUNC_RETURN        _TRACE_RETURN()
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num(_TRACE_SET_DATA, num)
+// experimental version for switch
+#define _SWITCH_START(id)   ;_Bool _cflow_switch_##id = 1;
+#define _CASE(num, id)      ;if (_cflow_switch_##id) { \
+                                _TRACE_NUM(_TRACE_SET_DATA, num) \
+                                _cflow_switch_##id = 0; \
+                            };
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      _TRACE_IE(1)
 #define _LOOP_END(id)       _TRACE_IE(0)
@@ -189,6 +201,12 @@ int main (int argc, char **argv) { \
 #define _FUNC_RETURN        ;_TRACE_PUT_('R');
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num_text('D', ((unsigned int)num))
+// experimental version for switch
+#define _SWITCH_START(id)   ;_Bool _cflow_switch_##id = 1;
+#define _CASE(num, id)      ;if (_cflow_switch_##id) { \
+                                _TRACE_NUM_TEXT('D', ((unsigned int)num)); \
+                                _cflow_switch_##id = 0; \
+                            };
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      ;_TRACE_PUT_('T');
 #define _LOOP_END(id)       ;_TRACE_PUT_('N');
@@ -209,7 +227,14 @@ int main (int argc, char **argv) { \
 #define _ELSE               ;_retrace_else();
 #define _FUNC(num)          _RETRACE_FUN_CALL(num)
 #define _FUNC_RETURN        ;_retrace_return();
+// non-macro version for switch
 #define _SWITCH(num)        _retrace_num(num)
+// experimental version for switch
+#define _SWITCH_START(id)   ;_Bool _cflow_switch_##id = 1;
+#define _CASE(num, id)      ;if (_cflow_switch_##id) { \
+                                _RETRACE_NUM(num) \
+                                _cflow_switch_##id = 0; \
+                            };
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      ;_retrace_if();
 #define _LOOP_END(id)       ;_retrace_else();
@@ -230,6 +255,8 @@ int main (int argc, char **argv) { \
 #define _FUNC(num)          /* nothing here */
 #define _FUNC_RETURN        /* nothing here */
 #define _SWITCH(num)        num
+#define _SWITCH_START(id)   /* nothing here */
+#define _CASE(num, id)      /* nothing here */
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      /* nothing here */
 #define _LOOP_END(id)       /* nothing here */
