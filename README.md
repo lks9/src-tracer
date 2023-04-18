@@ -120,13 +120,13 @@ Tested: busybox ... and musl v1.2.3
 
 * Set flags and configure musl:
 
-```bash
+  ```bash
   export SRC_TRACER_DIR=<path-to>/src-tracer/
   export CFLAGS="-Wno-error -L${SRC_TRACER_DIR}/instrumentation -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
   export SRC_TRACER=""
 
   ./configure
-```
+  ```
 
 * Patch musl: In `config.mak` add `-lsrc_tracer` to `LIBCC`.
 In `src/string/strlen.c`, `src/string/strchrnul.c` and
@@ -134,19 +134,19 @@ In `src/string/strlen.c`, `src/string/strchrnul.c` and
 The latter is a workaround for angr to ignore address alignments (see angr/angr#3883).
 
 * Make (text trace mode) and install:
-```bash
+  ```bash
   export SRC_TRACER="-D_TEXT_TRACE_MODE"
   make
   sudo make install
-```
+  ```
 
 * Copy the generated `cflow_file.json` to the busybox dirctory:
 
-```bash
-cd ..
+  ```bash
+  cd ..
   cp musl/cflow_file.json busybox/cflow_file.json
   cd busybox
-```
+  ```
 
 * Follow step 2 from https://www.openwall.com/lists/musl/2014/08/08/13
 to configure busybox to compile statically linked against musl.
@@ -154,53 +154,53 @@ to configure busybox to compile statically linked against musl.
 * Before you run `make`, add `src_tracer` to the `CONFIG_EXTRA_LDLIBS`
 in `.config`:
 
-```
-CONFIG_EXTRA_LDLIBS="src_tracer"
-```
+  ```
+  CONFIG_EXTRA_LDLIBS="src_tracer"
+  ```
 
 * Run:
 
-```bash
+  ```bash
   make
-```
+  ```
 
-When you get a lot of
+  When you get a lot of
 
-```
-warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
-```
-then the instrumatation is working as it should!
+  ```
+  warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+  ```
+  then the instrumatation is working as it should!
 
 * Once we compiled it successfully, you don't need the stripped version.
-So just rename:
+  So just rename:
 
-```bash
+  ```bash
   mv busybox_unstripped busybox
-```
+  ```
 
 * Et voila!
 
 * To record some trace:
 
-```bash
+  ```bash
   ./busybox echo hello
-```
+  ```
 
-The trace will be somewhere, in my case `/tmp/ccQacmv1.i.trace.txt`.
+  The trace will be somewhere, in my case `/tmp/ccQacmv1.i.trace.txt`.
 
 * Print the trace into a file:
 
-```bash
+  ```bash
   ${SRC_TRACER_DIR}/print_trace.py /tmp/ccQacmv1.i.trace.txt > echo.trace.txt
-```
+  ```
 
 * Replay trace:
 
-```bash
+  ```bash
   ${SRC_TRACER_DIR}/replay_text_trace.py busybox main echo.trace.txt
-```
+  ```
 
-Retracing took 42 min on my computer.
+  Retracing took 42 min on my computer.
 
 ## Other Software
 
