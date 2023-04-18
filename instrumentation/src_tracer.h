@@ -234,7 +234,7 @@ int main (int argc, char **argv) { \
 
 #define _IF                 /* nothing here */
 #define _ELSE               /* nothing here */
-#define _CONDITION(cond)    /* nothing here */
+#define _CONDITION(cond)    cond
 #define _FUNC(num)          /* nothing here */
 #define _FUNC_RETURN        /* nothing here */
 #define _SWITCH(num)        num
