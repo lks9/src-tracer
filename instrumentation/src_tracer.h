@@ -142,6 +142,7 @@ extern char _retrace_assert_label[256];
 
 extern _Bool _is_retrace_mode;
 extern unsigned int _is_retrace_switch(unsigned int num);
+extern _Bool _is_retrace_condition(_Bool cond);
 
 #define _IF                 _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
 #define _ELSE               _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
