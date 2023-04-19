@@ -82,7 +82,8 @@ class SourceTraceReplayer:
         self.make_globals_symbolic(state)
         # optimize a bit
         state.options["COPY_STATES"] = False
-        #state.options["ALL_FILES_EXIST"] = False
+        state.options["ALL_FILES_EXIST"] = False
+        state.options["ANY_FILE_MIGHT_EXIST"] = True
         #state.options["LAZY_SOLVES"] = True
         #state.options["CONSERVATIVE_READ_STRATEGY"] = True
         return state
@@ -134,12 +135,21 @@ class SourceTraceReplayer:
 
             while len(simgr.active) != 0:
                 simgr.explore(find=find, avoid=avoid, avoid_priority=True)
+                if simgr.found == []:
+                    if simgr.unconstrained != [] and elem == 'F' and functions:
+                        fun_num = int.from_bytes(bs, "little")
+                        fun_name = functions["hex_list"][fun_num]["name"]
+                        fun_addr = self.addr(fun_name)
+                        for ustate in simgr.unconstrained:
+                            ustate.ip = fun_addr
+                        log.warning('Unconstrained: Looked up address of the next function "%s".', fun_name)
+                        simgr.move(from_stash='unconstrained', to_stash='active')
+                    else:
+                        log.error("Could not find %s at all", elem)
+                        return (simgr, state)
 
             if len(simgr.found) != 1:
-                log.error("Found %i canditates in simgr %s", len(simgr.found), simgr)
-                if simgr.found == []:
-                    log.error("Could not find %s at all", elem)
-                    return (simgr, state)
+                log.warning("Found %i canditates in simgr %s", len(simgr.found), simgr)
 
             # handle asserts
             while True:
@@ -186,5 +196,6 @@ class SourceTraceReplayer:
 
             # avoid all states not in found
             simgr.drop(stash="avoid")
+            simgr.drop(stash="unsat")
 
         return (simgr, simgr.found[0])
