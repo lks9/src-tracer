@@ -40,6 +40,18 @@ the original `checksum.c` (instructions below).
 The `instrumenter.py` also creates a list of all functions together with their
 `num` as `cflow_functions.json`.
 
+### Assertion Checking
+
+You can add assertions anywhere to the sources, either to the original files
+or after the instrumentation process. Assertions have the form:
+
+```
+_RETRACE_ASSERT("some name", bool_expr);
+```
+
+Assertions are checked when retracing and are ignored otherwise.
+
+
 ### Trace Format
 
 The instrumentation consists of macros added to the source code.

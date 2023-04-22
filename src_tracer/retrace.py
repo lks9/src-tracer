@@ -11,12 +11,54 @@ from enum import Enum, auto
 
 
 class AssertResult(Enum):
+    """
+    Basically a lattice with three elements VIOLATED (= False), UNSURE and PASSED (= True).
+    Extra element NEVER_PASSED is neutral to all operations.
+    """
+
     NEVER_PASSED = auto()
     PASSED = auto()
     VIOLATED = auto()
     UNSURE = auto()
-    UNSAT = auto()
 
+    def And(a1, a2):
+        """
+        Logical And
+        """
+        if AssertResult.VIOLATED in (a1, a2):
+            return AssertResult.VIOLATED
+        elif AssertResult.UNSURE in (a1, a2):
+            return AssertResult.UNSURE
+        elif AssertResult.PASSED in (a1, a2):
+            return AssertResult.PASSED
+        else:
+            return AssertResult.NEVER_PASSED
+
+    def Or(a1, a2):
+        """
+        Logical Or
+        """
+        if AssertResult.PASSED in (a1, a2):
+            return AssertResult.PASSED
+        elif AssertResult.UNSURE in (a1, a2):
+            return AssertResult.UNSURE
+        elif AssertResult.VIOLATED in (a1, a2):
+            return AssertResult.VIOLATED
+        else:
+            return AssertResult.NEVER_PASSED
+
+    def Not(a):
+        """
+        Logical Not
+        """
+        if a == AssertResult.PASSED:
+            return AssertResult.VIOLATED
+        elif a == AssertResult.UNSURE:
+            return AssertResult.UNSURE
+        elif a == AssertResult.VIOLATED:
+            return AssertResult.PASSED
+        else:
+            return AssertResult.NEVER_PASSED
 
 class SourceTraceReplayer:
 
@@ -43,20 +85,34 @@ class SourceTraceReplayer:
         except AttributeError:
             return None
 
+    def check_assertion(self, state, index):
+        val = state.mem[self.assert_values_addr + index].bool.resolved
+        solver_res = state.solver.eval_upto(val, 2)
+        if (False in solver_res) and (True in solver_res):
+            return AssertResult.UNSURE
+        elif False in solver_res:
+            return AssertResult.PASSED
+        elif True in solver_res:
+            return AssertResult.VIOLATED
+        else:
+            # state is already UNSAT!
+            raise Exception
+
     def assert_result(self, state, label: str):
-        if label in self.asserts_list:
-            index = self.asserts_list.index(label)
-            val = state.mem[self.assert_values_addr + index].bool.resolved
-            solver_res = state.solver.eval_upto(val, 2)
-            if (False in solver_res) and (True in solver_res):
-                return AssertResult.UNSURE
-            elif False in solver_res:
-                return AssertResult.PASSED
-            elif True in solver_res:
-                return AssertResult.VIOLATED
-            else:
-                return AssertResult.UNSAT
-        return AssertResult.NEVER_PASSED
+        res = AssertResult.NEVER_PASSED
+        for index, cur_label in enumerate(self.asserts_list):
+            if cur_label == label:
+                cur_res = self.check_assertion(state, index)
+                res = AssertResult.And(res, cur_res)
+        return res
+
+    def check_all_assertions(self, state):
+        res = AssertResult.NEVER_PASSED
+        for index, label in enumerate(self.asserts_list):
+            cur_res = self.check_assertion(state, index)
+            res = AssertResult.And(res, cur_res)
+            log.debug(f'Assertion "{label}": {cur_res.name}')
+        return res
 
     def int_of_elem(self, elem: str):
         sub = elem[1:]

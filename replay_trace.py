@@ -43,3 +43,9 @@ except FileNotFoundError:
 
 source_tracer = SourceTraceReplayer(binary_name, auto_load_libs=False, use_sim_procedures=False)
 (simgr, state) = source_tracer.follow_trace(trace, func_name, functions)
+
+res = source_tracer.check_all_assertions(state)
+
+print()
+print(f"Final assertion check result: {res.name}")
+print()
