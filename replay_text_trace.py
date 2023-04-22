@@ -54,7 +54,8 @@ class SourceTraceReplayer:
         self.make_globals_symbolic(state)
         # optimize a bit
         state.options["COPY_STATES"] = False
-        #state.options["ALL_FILES_EXIST"] = False
+        state.options["ALL_FILES_EXIST"] = False
+        state.options["ANY_FILE_MIGHT_EXIST"] = True
         return state
 
     def follow_trace(self, trace_str: str, func_name: str):

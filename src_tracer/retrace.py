@@ -90,6 +90,14 @@ class SourceTraceReplayer:
 
     def follow_trace(self, trace: Trace, func_name: str, functions=None):
         # start_state, simulation manager
+        if not func_name:
+            (elem, bs) = next(iter(trace))
+            if elem != 'F':
+                raise ValueError(f'Trace contains first element "{elem}"')
+            func_num = int.from_bytes(bs, "little")
+            func_name = functions["hex_list"][func_num]["name"]
+            log.debug('Starting with function "%s"', func_name)
+
         simgr = self.p.factory.simulation_manager(self.start_state(func_name))
 
         debug = log.isEnabledFor(logging.DEBUG)
@@ -141,8 +149,8 @@ class SourceTraceReplayer:
                         fun_name = functions["hex_list"][fun_num]["name"]
                         fun_addr = self.addr(fun_name)
                         for ustate in simgr.unconstrained:
-                            ustate.ip = fun_addr
-                        log.warning('Unconstrained: Looked up address of the next function "%s".', fun_name)
+                            ustate.solver.add(ustate.ip == fun_addr)
+                        log.debug("State was unconstrained, so constrained to the address of the next function.")
                         simgr.move(from_stash='unconstrained', to_stash='active')
                     else:
                         log.error("Could not find %s at all", elem)
@@ -192,7 +200,11 @@ class SourceTraceReplayer:
                     log.debug(f"{elem}")
                 else:
                     num = int.from_bytes(bs, "little")
-                    log.debug(f"{elem}{num:x}")
+                    if elem == 'F' and functions:
+                        name = functions["hex_list"][num]["name"]
+                        log.debug(f"{elem}{num:x} {name}")
+                    else:
+                        log.debug(f"{elem}{num:x}")
 
             # avoid all states not in found
             simgr.drop(stash="avoid")

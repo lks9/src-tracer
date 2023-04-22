@@ -22,7 +22,7 @@ logging.getLogger("src_tracer.retrace").setLevel(logging.DEBUG)
 
 if len(sys.argv) == 3:
     binary_name = sys.argv[1]
-    func_name = "main"
+    func_name = None
     trace_file = sys.argv[2]
 elif len(sys.argv) == 4:
     binary_name = sys.argv[1]
