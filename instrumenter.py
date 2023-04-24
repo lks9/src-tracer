@@ -2,24 +2,20 @@
 
 import sys
 import json
+import sqlite3
 
 from src_tracer.instrumenter import Instrumenter
 
 filename = sys.argv[1]
 
-try:
-    # We don't want to overwrite existing func_nums...
-    with open("cflow_functions.json") as f:
-        # print("Reading cflow_functions.json")
-        functions = json.load(f)
-except FileNotFoundError:
-    # print("Creating cflow_functions.json")
-    functions = None
+# load function from database
+connection = sqlite3.connect('cflow_functions.db')
+cursor = connection.cursor()
 
-instrumenter = Instrumenter(functions)
+instrumenter = Instrumenter(cursor)
 instrumenter.parse(filename)
 annotated = instrumenter.annotate_all(filename)
-if (annotated):
-    with open("cflow_functions.json", "w") as f:
-        # print("Writing cflow_functions.json")
-        json.dump(instrumenter.functions, f, indent=2)
+if annotated:
+    connection.commit()
+cursor.close()
+connection.close()

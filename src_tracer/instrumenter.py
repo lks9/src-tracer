@@ -5,25 +5,44 @@ from clang.cindex import Index, CursorKind
 
 class Instrumenter:
 
-    def __init__(self, functions=None):
-        if functions:
-            self.functions = functions
+    def __init__(self, cursor):
+        self.cursor = cursor
+        self._init_db()
+        # initialise the next func_num by taking the max func_num in db + 1
+        func_num, = self.cursor.execute("SELECT MAX(num) FROM automatic_lookup").fetchone()
+        if func_num is None:
+            # add the reserve func num 0 to the db
+            self.cursor.execute("INSERT INTO automatic_lookup VALUES (0, null, 0, null)")
+            self.cursor.execute("INSERT INTO manual_lookup VALUES (0, null, 0)")
+            self.func_num = 1
         else:
-            # func_num 0 marks the end of a trace
-            # so we shouldn't assign it to any actual function
-            reserved = {"num": hex(0),
-                        "file": None,
-                        "line": 0,
-                        "name": None,
-                        "pre_file": None,
-                        "offset": 0,
-                        }
-            self.functions = {"hex_list": [reserved]}
+            self.func_num = func_num + 1
+
         self.ifs = []
         self.loops = []
         self.switchis = []
 
         self.annotations = {}
+
+    def _init_db(self):
+        self.cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS automatic_lookup
+                        (
+                            num     INT     PRIMARY KEY,
+                            file    TEXT,
+                            line    INT,
+                            name    TEXT
+                        )
+                            ''')
+        self.cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS manual_lookup
+                        (
+                            num      INT,
+                            pre_file TEXT,
+                            offset   INT,
+                            PRIMARY KEY (pre_file, offset)
+                        )
+                            ''')
 
     def filename(self, location):
         filename = location.file.name
@@ -49,22 +68,22 @@ class Instrumenter:
                 filename = (m.group(2)).decode("utf-8")
         return (filename, line_no)
 
-    def func_num(self, node):
+    #TODO: change name
+    def func_num_app(self, node):
         pre_filename = self.filename(node.extent.start)
         (file, line) = self.orig_file_and_line(node.extent.start)
-        if str(line) + ":" + file in self.functions:
-            func_num = int(self.functions[str(line) + ":" + file], 0)
-            # print("Re-using saved func num " + hex(func_num) + ' for ' + str(line) + ':"' + file + '"')
-            return func_num
-        func_num = len(self.functions["hex_list"])
-        self.functions["hex_list"].append({"num": hex(func_num),
-                                           "file": file,
-                                           "line": line,
-                                           "name": node.spelling,
-                                           "pre_file": pre_filename,
-                                           "offset": node.extent.start.offset,
-                                           })
-        self.functions[str(line) + ":" + file] = hex(func_num)
+        offset = node.extent.start.offset
+        func_num_auto = self.cursor.execute("SELECT num FROM automatic_lookup WHERE line=? and file=?", (line, file)).fetchone()
+        func_num_manu = self.cursor.execute("SELECT num FROM manual_lookup WHERE pre_file=? and offset=?", (pre_filename, offset)).fetchone()
+        if func_num_manu is None:
+            data = (func_num_auto[0] if func_num_auto is not None else self.func_num, pre_filename, offset)
+            self.cursor.execute("INSERT INTO manual_lookup VALUES(?,?,?)", data)
+        if func_num_auto is not None:
+            return func_num_auto[0]
+        data = (self.func_num, file, line, node.spelling)
+        self.cursor.execute("INSERT INTO automatic_lookup VALUES(?,?,?,?)", data)
+        func_num = self.func_num
+        self.func_num = self.func_num + 1
         return func_num
 
     def add_annotation(self, annotation, location, add_offset=0):
@@ -89,7 +108,7 @@ class Instrumenter:
                 body = child
         if not body:
             return
-        func_num = self.func_num(node)
+        func_num = self.func_num_app(node)
         if not self.check_location(body.extent.start, [b"{"]):
             print("Check location failed for function " + node.spelling)
             return
