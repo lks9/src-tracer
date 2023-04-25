@@ -29,6 +29,8 @@ static __inline long __syscall3(long n, long a1, long a2, long a3)
 #define O_LARGEFILE 0100000
 // end musl code
 
+unsigned char _trace_buf[_TRACE_BUF_SIZE];
+int _trace_buf_pos;
 
 void _trace_write(const void *buf, int count) {
     const char *ptr = buf;
@@ -77,6 +79,9 @@ void _trace_close(void) {
     if (_trace_if_count != 0) {
         _TRACE_NUM(_TRACE_SET_FUNC, 0);
         _TRACE_PUT(_trace_if_byte);
+    }
+    if (_trace_buf_pos != 0) {
+        _trace_write(_trace_buf, _trace_buf_pos);
     }
     __syscall1(SYS_close, (long)_trace_fd);
     _trace_fd = 0;

@@ -3,8 +3,12 @@ extern void _trace_write(const void* buf, int count);
 extern void _trace_open(const char *fname);
 extern void _trace_close(void);
 
-extern int _trace_if_count;
 extern unsigned char _trace_if_byte;
+extern int _trace_if_count;
+
+#define _TRACE_BUF_SIZE     4096
+extern unsigned char _trace_buf[_TRACE_BUF_SIZE];
+extern int _trace_buf_pos;
 
 #define _TRACE_TEST_IE            0b10000000
  #define _TRACE_SET_IE            0b10000000
@@ -26,7 +30,12 @@ extern unsigned char _trace_if_byte;
 #define _TRACE_TEST_IE_COUNT      0b10000111
 
 #define _TRACE_PUT(c) \
-    _trace_write(&c, 1)
+    _trace_buf[_trace_buf_pos] = c; \
+    _trace_buf_pos += 1; \
+    if (_trace_buf_pos == _TRACE_BUF_SIZE) { \
+        _trace_write(_trace_buf, _TRACE_BUF_SIZE); \
+        _trace_buf_pos = 0; \
+    }
 
 #define _TRACE_PUT_(c) ;{ \
     unsigned char buf[1] = { c }; \
@@ -45,35 +54,32 @@ extern unsigned char _trace_if_byte;
 
 #define _TRACE_NUM(type, num) ;{ \
     unsigned long long n = num; \
-    int count; \
-    unsigned char buf[9]; \
-    buf[0] = type; \
-    buf[0] |= _trace_if_count; \
     if (n == 0) { \
-        buf[0] |= _TRACE_SET_LEN_0; \
-        count = 0; \
+        _TRACE_PUT((type) | _trace_if_count | _TRACE_SET_LEN_0); \
     } else if (n == (n & 0xff)) { \
-        buf[0] |= _TRACE_SET_LEN_8; \
-        count = 1; \
+        _TRACE_PUT((type) | _trace_if_count | _TRACE_SET_LEN_8); \
+        _TRACE_PUT((n >> 0) & 0xff); \
     } else if (n == (n & 0xffff)) { \
-        buf[0] |= _TRACE_SET_LEN_16; \
-        count = 2; \
+        _TRACE_PUT((type) | _trace_if_count | _TRACE_SET_LEN_16); \
+        _TRACE_PUT((n >> 0) & 0xff); \
+        _TRACE_PUT((n >> 8) & 0xff); \
     } else if (n == (n & 0xffffffff)) { \
-        buf[0] |= _TRACE_SET_LEN_32; \
-        count = 4; \
+        _TRACE_PUT((type) | _trace_if_count | _TRACE_SET_LEN_32); \
+        _TRACE_PUT((n >> 0) & 0xff); \
+        _TRACE_PUT((n >> 8) & 0xff); \
+        _TRACE_PUT((n >> 16) & 0xff); \
+        _TRACE_PUT((n >> 24) & 0xff); \
     } else { \
-        buf[0] |= _TRACE_SET_LEN_64; \
-        count = 8; \
+        _TRACE_PUT((type) | _trace_if_count | _TRACE_SET_LEN_64); \
+        _TRACE_PUT((n >> 0) & 0xff); \
+        _TRACE_PUT((n >> 8) & 0xff); \
+        _TRACE_PUT((n >> 16) & 0xff); \
+        _TRACE_PUT((n >> 24) & 0xff); \
+        _TRACE_PUT((n >> 32) & 0xff); \
+        _TRACE_PUT((n >> 40) & 0xff); \
+        _TRACE_PUT((n >> 48) & 0xff); \
+        _TRACE_PUT((n >> 56) & 0xff); \
     } \
-    buf[1] = (n >> 0) & 0xff; \
-    buf[2] = (n >> 8) & 0xff; \
-    buf[3] = (n >> 16) & 0xff; \
-    buf[4] = (n >> 24) & 0xff; \
-    buf[5] = (n >> 32) & 0xff; \
-    buf[6] = (n >> 40) & 0xff; \
-    buf[7] = (n >> 48) & 0xff; \
-    buf[8] = (n >> 56) & 0xff; \
-    _trace_write(buf, count+1); \
 }
 
 #define NIBBLE_TO_HEX_(n)   (((n) >= 0xa) ? (n) - 0xa + 'a' : (n) + '0')
@@ -94,7 +100,7 @@ extern unsigned char _trace_if_byte;
 }
 
 #define _TRACE_RETURN() \
-    _TRACE_PUT_(_TRACE_SET_RETURN | _trace_if_count)
+    _TRACE_PUT(_TRACE_SET_RETURN | _trace_if_count)
 
 // same as the macro version
 // but returns num
