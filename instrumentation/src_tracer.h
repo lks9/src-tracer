@@ -275,6 +275,6 @@ int main (int argc, char **argv) { \
 
 #endif // _TRACE_MODE or _RETRACE_MODE
 
-#ifdef __cplusplus // end extern "C"
-}
+#ifdef __cplusplus
+} // end extern "C"
 #endif

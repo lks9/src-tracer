@@ -351,7 +351,7 @@ class Instrumenter:
 
     def traverse(self, node, file_scope=True):
         try:
-            if node.kind in (CursorKind.FUNCTION_DECL, node.kind == CursorKind.FUNCTION_TEMPLATE):
+            if node.kind in (CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE):
                 # no recursive annotation
                 if "_trace" in node.spelling or "_retrace" in node.spelling:
                     return
