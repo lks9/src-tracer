@@ -1,3 +1,20 @@
+// src_tracer.h
+
+// This file comes without any include.
+// Reason: It works on pre-processed files and for example "#include <stdbool.h>"
+// results in double included files!
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// _Bool is not available in C++ and bool is not available in C without include stdbool
+#ifdef __cplusplus
+#define mybool bool
+#else
+#define mybool _Bool
+#endif
+
 extern void _trace_write(const void* buf, int count);
 
 extern void _trace_open(const char *fname);
@@ -107,15 +124,15 @@ extern int _trace_buf_pos;
 // can be used inside switch conditions
 extern unsigned int _trace_num(char c, unsigned int num);
 extern unsigned int _trace_num_text(char c, unsigned int num);
-extern _Bool _trace_condition(_Bool cond);
+extern mybool _trace_condition(mybool cond);
 
 // for retracing
 extern void _retrace_if(void);
 extern void _retrace_else(void);
-extern _Bool _retrace_condition(_Bool cond);
+extern mybool _retrace_condition(mybool cond);
 extern void _retrace_fun_call(void);
 extern void _retrace_return(void);
-extern void _retrace_assert(char label[], _Bool a);
+extern void _retrace_assert(char label[], mybool a);
 extern unsigned int _retrace_num(unsigned int num);
 
 extern int _retrace_fun_num;
@@ -146,9 +163,9 @@ extern char _retrace_assert_label[256];
 #if defined _TRACE_MODE && defined _RETRACE_MODE
 /* both */
 
-extern _Bool _is_retrace_mode;
+extern mybool _is_retrace_mode;
 extern unsigned int _is_retrace_switch(unsigned int num);
-extern _Bool _is_retrace_condition(_Bool cond);
+extern mybool _is_retrace_condition(mybool cond);
 
 #define _IF                 _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
 #define _ELSE               _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
@@ -257,3 +274,7 @@ int main (int argc, char **argv) { \
 #define _RETRACE_ASSERT(l,a)  /* nothing here */
 
 #endif // _TRACE_MODE or _RETRACE_MODE
+
+#ifdef __cplusplus // end extern "C"
+}
+#endif

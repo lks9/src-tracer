@@ -1,0 +1,63 @@
+#!/bin/sh
+
+# "cc1plus", basically the same as "${SRC_TRACER_DIR}/cc_wrapper/cc1"
+
+echo_outfile () {
+    while [ ! -z "$1" ]; do
+        case "$1" in
+            -o)
+                shift
+                echo "$1"
+                ;;
+            *)
+                ;;
+        esac
+        shift
+    done
+}
+
+echo_infile () {
+    while [ ! -z "$1" ]; do
+        case "$1" in
+            *.cpp)
+                echo "$1"
+                ;;
+            *)
+                ;;
+        esac
+        shift
+    done
+}
+
+if [ -z "${SRC_TRACER}" ]; then
+    # just compile it
+    exec $(${COLLECT_GCC} --print-prog-name=cc1plus) $@
+fi
+
+if [ "$1" = "-E" ]; then
+    outfile=$( echo_outfile $@ )
+    infile=$( echo_infile $@ )
+
+    # annotate if needed
+    if [ -z "${infile}" -o $(grep -c "src_tracer" "${infile}") -gt 0 ]; then
+        # echo "skipping ${infile} (already annotated)"
+        # just call gcc (or the preprocessor)
+        exec $(${COLLECT_GCC} --print-prog-name=cc1plus) $@
+    else
+        # call gcc (or the preprocessor)
+        $(${COLLECT_GCC} --print-prog-name=cc1plus) $@
+
+        # save the pre-pocessed output
+        cp "${outfile}" "${outfile}.tmp.cpp"
+
+        # do the instrumentation
+        python3 "${SRC_TRACER_DIR}/instrumenter.py" "${outfile}.tmp.cpp"
+
+        # rerun preprocessor to resolve instrumentation macros
+        cpp ${SRC_TRACER} "${outfile}.tmp.cpp" -o "${outfile}.tmp.ii" -I "${SRC_TRACER_DIR}/instrumentation/"
+        mv "${outfile}.tmp.ii" "${outfile}"
+    fi
+elif [ "$1" = "-fpreprocessed" ]; then
+    # just compile it
+    exec $(${COLLECT_GCC} --print-prog-name=cc1plus) $@
+fi
