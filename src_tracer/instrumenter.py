@@ -14,9 +14,9 @@ class Instrumenter:
             # add the reserve func num 0 to the db
             self.cursor.execute("INSERT INTO automatic_lookup VALUES (0, null, 0, null)")
             self.cursor.execute("INSERT INTO manual_lookup VALUES (0, null, 0)")
-            self.func_num = 1
+            self.next_func_num = 1
         else:
-            self.func_num = func_num + 1
+            self.next_func_num = func_num + 1
 
         self.ifs = []
         self.loops = []
@@ -69,22 +69,21 @@ class Instrumenter:
                 filename = (m.group(2)).decode("utf-8")
         return (filename, line_no)
 
-    #TODO: change name
-    def func_num_app(self, node):
+    def func_num(self, node):
         pre_filename = self.filename(node.extent.start)
         (file, line) = self.orig_file_and_line(node.extent.start)
         offset = node.extent.start.offset
         func_num_auto = self.cursor.execute("SELECT num FROM automatic_lookup WHERE line=? and file=?", (line, file)).fetchone()
         func_num_manu = self.cursor.execute("SELECT num FROM manual_lookup WHERE pre_file=? and offset=?", (pre_filename, offset)).fetchone()
         if func_num_manu is None:
-            data = (func_num_auto[0] if func_num_auto is not None else self.func_num, pre_filename, offset)
+            data = (func_num_auto[0] if func_num_auto is not None else self.next_func_num, pre_filename, offset)
             self.cursor.execute("INSERT INTO manual_lookup VALUES(?,?,?)", data)
         if func_num_auto is not None:
             return func_num_auto[0]
-        data = (self.func_num, file, line, node.spelling)
+        data = (self.next_func_num, file, line, node.spelling)
         self.cursor.execute("INSERT INTO automatic_lookup VALUES(?,?,?,?)", data)
-        func_num = self.func_num
-        self.func_num = self.func_num + 1
+        func_num = self.next_func_num
+        self.next_func_num = self.next_func_num + 1
         return func_num
 
     def add_annotation(self, annotation, location, add_offset=0):
@@ -109,7 +108,7 @@ class Instrumenter:
                 body = child
         if not body:
             return
-        func_num = self.func_num_app(node)
+        func_num = self.func_num(node)
         if not self.check_location(body.extent.start, [b"{"]):
             print("Check location failed for function " + node.spelling)
             return
