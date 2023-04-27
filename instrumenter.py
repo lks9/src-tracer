@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
 
 import os
-import sys
 import json
 import sqlite3
 
 from src_tracer.instrumenter import Instrumenter
 
-filename = sys.argv[1]
-database_path = sys.argv[2]
+if len(sys.argv) == 3:
+    filename = sys.argv[1]
+    database_path = sys.argv[2]
+else:
+    usage = f"Usage: python3 {sys.argv[0]} <filename> <func_database_dir_path>"
+    raise Exception(usage)
 
-# load function from database
+# create connection to database
 try:
-    path = os.path.join(database_path, 'cflow_function.db')
     connection = sqlite3.connect(os.path.join(database_path, 'cflow_functions.db'))
 except sqlite3.OperationalError:
-    sys.exit("the given path is not correct, make sure the dir exists beforehand")
+    error = "the given path is not correct, make sure the dir exists beforehand"
+    raise Exception(error)
+
 cursor = connection.cursor()
 
 instrumenter = Instrumenter(cursor)

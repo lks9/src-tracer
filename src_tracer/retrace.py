@@ -4,6 +4,7 @@ import claripy
 import angr
 
 from .trace import Trace
+from .util import Util
 
 log = logging.getLogger(__name__)
 
@@ -144,14 +145,14 @@ class SourceTraceReplayer:
         #state.options["CONSERVATIVE_READ_STRATEGY"] = True
         return state
 
-    def follow_trace(self, trace: Trace, func_name: str, functions=None):
+    def follow_trace(self, trace: Trace, func_name: str, cursor=None):
         # start_state, simulation manager
         if not func_name:
             (elem, bs) = next(iter(trace))
             if elem != 'F':
                 raise ValueError(f'Trace contains first element "{elem}"')
             func_num = int.from_bytes(bs, "little")
-            func_name = functions["hex_list"][func_num]["name"]
+            func_name = Util.get_name(cursor, func_num)
             log.debug('Starting with function "%s"', func_name)
 
         simgr = self.p.factory.simulation_manager(self.start_state(func_name))
@@ -200,9 +201,9 @@ class SourceTraceReplayer:
             while len(simgr.active) != 0:
                 simgr.explore(find=find, avoid=avoid, avoid_priority=True)
                 if simgr.found == []:
-                    if simgr.unconstrained != [] and elem == 'F' and functions:
+                    if simgr.unconstrained != [] and elem == 'F' and cursor:
                         fun_num = int.from_bytes(bs, "little")
-                        fun_name = functions["hex_list"][fun_num]["name"]
+                        fun_name = Util.get_name(cursor, fun_num)
                         fun_addr = self.addr(fun_name)
                         for ustate in simgr.unconstrained:
                             ustate.solver.add(ustate.ip == fun_addr)
@@ -256,8 +257,8 @@ class SourceTraceReplayer:
                     log.debug(f"{elem}")
                 else:
                     num = int.from_bytes(bs, "little")
-                    if elem == 'F' and functions:
-                        name = functions["hex_list"][num]["name"]
+                    if elem == 'F' and cursor:
+                        name = Util.get_name(cursor, num)
                         log.debug(f"{elem}{num:x} {name}")
                     else:
                         log.debug(f"{elem}{num:x}")
