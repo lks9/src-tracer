@@ -10,7 +10,11 @@ import sqlite3
 from src_tracer.trace import Trace
 from src_tracer.util import Util
 
-if len(sys.argv) == 3:
+
+if len(sys.argv) == 2:
+    filename = sys.argv[1]
+    database_path = ""
+elif len(sys.argv) == 3:
     filename = sys.argv[1]
     database_path = sys.argv[2]
 else:

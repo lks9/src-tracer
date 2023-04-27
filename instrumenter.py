@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 
+import sys
 import os
 import json
 import sqlite3
 
 from src_tracer.instrumenter import Instrumenter
 
-if len(sys.argv) == 3:
+if len(sys.argv) == 2:
+    filename = sys.argv[1]
+    database_path = ""
+elif len(sys.argv) == 3:
     filename = sys.argv[1]
     database_path = sys.argv[2]
 else:

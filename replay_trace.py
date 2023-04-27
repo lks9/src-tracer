@@ -22,7 +22,12 @@ logging.getLogger("angr.engines.successors").setLevel(logging.CRITICAL)
 # set debug level for retracing
 logging.getLogger("src_tracer.retrace").setLevel(logging.DEBUG)
 
-if len(sys.argv) == 4:
+if len(sys.argv) == 3:
+    binary_name = sys.argv[1]
+    func_name = None
+    trace_file = sys.argv[2]
+    database_path = ""
+elif len(sys.argv) == 4:
     binary_name = sys.argv[1]
     func_name = None
     trace_file = sys.argv[2]
