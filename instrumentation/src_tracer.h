@@ -1,10 +1,31 @@
+// src_tracer.h
+
+// This file comes without any include.
+// Reason: It works on pre-processed files and for example "#include <stdbool.h>"
+// results in double included files!
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// _Bool is not available in C++ and bool is not available in C without include stdbool
+#ifdef __cplusplus
+#define mybool bool
+#else
+#define mybool _Bool
+#endif
+
 extern void _trace_write(const void* buf, int count);
 
 extern void _trace_open(const char *fname);
 extern void _trace_close(void);
 
-extern int _trace_if_count;
 extern unsigned char _trace_if_byte;
+extern int _trace_if_count;
+
+#define _TRACE_BUF_SIZE     4096
+extern unsigned char _trace_buf[_TRACE_BUF_SIZE];
+extern int _trace_buf_pos;
 
 #define _TRACE_TEST_IE            0b10000000
  #define _TRACE_SET_IE            0b10000000
@@ -26,7 +47,12 @@ extern unsigned char _trace_if_byte;
 #define _TRACE_TEST_IE_COUNT      0b10000111
 
 #define _TRACE_PUT(c) \
-    _trace_write(&c, 1)
+    _trace_buf[_trace_buf_pos] = c; \
+    _trace_buf_pos += 1; \
+    if (_trace_buf_pos == _TRACE_BUF_SIZE) { \
+        _trace_write(_trace_buf, _TRACE_BUF_SIZE); \
+        _trace_buf_pos = 0; \
+    }
 
 #define _TRACE_PUT_(c) ;{ \
     unsigned char buf[1] = { c }; \
@@ -45,35 +71,32 @@ extern unsigned char _trace_if_byte;
 
 #define _TRACE_NUM(type, num) ;{ \
     unsigned long long n = num; \
-    int count; \
-    unsigned char buf[9]; \
-    buf[0] = type; \
-    buf[0] |= _trace_if_count; \
     if (n == 0) { \
-        buf[0] |= _TRACE_SET_LEN_0; \
-        count = 0; \
+        _TRACE_PUT((type) | _trace_if_count | _TRACE_SET_LEN_0); \
     } else if (n == (n & 0xff)) { \
-        buf[0] |= _TRACE_SET_LEN_8; \
-        count = 1; \
+        _TRACE_PUT((type) | _trace_if_count | _TRACE_SET_LEN_8); \
+        _TRACE_PUT((n >> 0) & 0xff); \
     } else if (n == (n & 0xffff)) { \
-        buf[0] |= _TRACE_SET_LEN_16; \
-        count = 2; \
+        _TRACE_PUT((type) | _trace_if_count | _TRACE_SET_LEN_16); \
+        _TRACE_PUT((n >> 0) & 0xff); \
+        _TRACE_PUT((n >> 8) & 0xff); \
     } else if (n == (n & 0xffffffff)) { \
-        buf[0] |= _TRACE_SET_LEN_32; \
-        count = 4; \
+        _TRACE_PUT((type) | _trace_if_count | _TRACE_SET_LEN_32); \
+        _TRACE_PUT((n >> 0) & 0xff); \
+        _TRACE_PUT((n >> 8) & 0xff); \
+        _TRACE_PUT((n >> 16) & 0xff); \
+        _TRACE_PUT((n >> 24) & 0xff); \
     } else { \
-        buf[0] |= _TRACE_SET_LEN_64; \
-        count = 8; \
+        _TRACE_PUT((type) | _trace_if_count | _TRACE_SET_LEN_64); \
+        _TRACE_PUT((n >> 0) & 0xff); \
+        _TRACE_PUT((n >> 8) & 0xff); \
+        _TRACE_PUT((n >> 16) & 0xff); \
+        _TRACE_PUT((n >> 24) & 0xff); \
+        _TRACE_PUT((n >> 32) & 0xff); \
+        _TRACE_PUT((n >> 40) & 0xff); \
+        _TRACE_PUT((n >> 48) & 0xff); \
+        _TRACE_PUT((n >> 56) & 0xff); \
     } \
-    buf[1] = (n >> 0) & 0xff; \
-    buf[2] = (n >> 8) & 0xff; \
-    buf[3] = (n >> 16) & 0xff; \
-    buf[4] = (n >> 24) & 0xff; \
-    buf[5] = (n >> 32) & 0xff; \
-    buf[6] = (n >> 40) & 0xff; \
-    buf[7] = (n >> 48) & 0xff; \
-    buf[8] = (n >> 56) & 0xff; \
-    _trace_write(buf, count+1); \
 }
 
 #define NIBBLE_TO_HEX_(n)   (((n) >= 0xa) ? (n) - 0xa + 'a' : (n) + '0')
@@ -94,22 +117,22 @@ extern unsigned char _trace_if_byte;
 }
 
 #define _TRACE_RETURN() \
-    _TRACE_PUT_(_TRACE_SET_RETURN | _trace_if_count)
+    _TRACE_PUT(_TRACE_SET_RETURN | _trace_if_count)
 
 // same as the macro version
 // but returns num
 // can be used inside switch conditions
 extern unsigned int _trace_num(char c, unsigned int num);
 extern unsigned int _trace_num_text(char c, unsigned int num);
-extern _Bool _trace_condition(_Bool cond);
+extern mybool _trace_condition(mybool cond);
 
 // for retracing
 extern void _retrace_if(void);
 extern void _retrace_else(void);
-extern _Bool _retrace_condition(_Bool cond);
+extern mybool _retrace_condition(mybool cond);
 extern void _retrace_fun_call(void);
 extern void _retrace_return(void);
-extern void _retrace_assert(char label[], _Bool a);
+extern void _retrace_assert(char label[], mybool a);
 extern unsigned int _retrace_num(unsigned int num);
 
 extern int _retrace_fun_num;
@@ -140,9 +163,9 @@ extern char _retrace_assert_label[256];
 #if defined _TRACE_MODE && defined _RETRACE_MODE
 /* both */
 
-extern _Bool _is_retrace_mode;
+extern mybool _is_retrace_mode;
 extern unsigned int _is_retrace_switch(unsigned int num);
-extern _Bool _is_retrace_condition(_Bool cond);
+extern mybool _is_retrace_condition(mybool cond);
 
 #define _IF                 _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
 #define _ELSE               _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
@@ -251,3 +274,7 @@ int main (int argc, char **argv) { \
 #define _RETRACE_ASSERT(l,a)  /* nothing here */
 
 #endif // _TRACE_MODE or _RETRACE_MODE
+
+#ifdef __cplusplus
+} // end extern "C"
+#endif

@@ -68,7 +68,7 @@ if [ "$1" = "-E" ]; then
     infile=$( echo_infile $@ )
 
     # annotate if needed
-    if [ $(grep -c "src_tracer" "${infile}") -gt 0 ]; then
+    if [ -z "${infile}" -o $(grep -c "src_tracer" "${infile}") -gt 0 ]; then
         # echo "skipping ${infile} (already annotated)"
         # just call gcc (or the preprocessor)
         exec $(${COLLECT_GCC} --print-prog-name=cc1) $@
@@ -76,15 +76,14 @@ if [ "$1" = "-E" ]; then
         # call gcc (or the preprocessor)
         $(${COLLECT_GCC} --print-prog-name=cc1) $@
 
-        # do the instrumentation
-        python3 "${SRC_TRACER_DIR}/instrumenter.py" "${outfile}"
-
-        # save the instrumentation output
+        # save the pre-pocessed output
         cp "${outfile}" "${outfile}.tmp.c"
-        # echo "${outfile}.tmp.c"
+
+        # do the instrumentation
+        python3 "${SRC_TRACER_DIR}/instrumenter.py" "${outfile}.tmp.c"
 
         # rerun preprocessor to resolve instrumentation macros
-        cpp ${SRC_TRACER} "${outfile}" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/instrumentation/"
+        cpp ${SRC_TRACER} "${outfile}.tmp.c" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/instrumentation/"
         mv "${outfile}.tmp.i" "${outfile}"
     fi
 elif [ "$1" = "-fpreprocessed" ]; then

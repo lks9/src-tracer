@@ -21,6 +21,7 @@ class Instrumenter:
         self.ifs = []
         self.loops = []
         self.switchis = []
+        self.check_locations = []
 
         self.annotations = {}
 
@@ -132,26 +133,40 @@ class Instrumenter:
             new_main = b' _MAIN_FUN("' + bytes(filename, "utf-8") + b'.trace") '
             self.add_annotation(new_main, node.extent.end)
 
+    def get_content(self, start, end):
+        filename = self.filename(start)
+        content = self.annotations[filename]["content"]
+        return content[start.offset: end.offset]
+
     def find_next_semi(self, location):
         filename = self.filename(location)
         content = self.annotations[filename]["content"]
-        i = 0
-        while (content[location.offset + i] in b' \n\t#'):
-            if content[location.offset + i] in b'#':
-                while content[location.offset + i] not in b'\n':
-                    i += 1
+        # either there was a '}' and no ';'
+        if content[location.offset-1] in b'}':
+            return -1
+        # or we have to find the next ';'
+        i = -1
+        while content[location.offset + i] not in b';':
             i += 1
-        if content[location.offset + i] in b';':
-            return i
-        else:
-            return i-1
+        return i
 
     def find_next_colon(self, location):
         filename = self.filename(location)
         content = self.annotations[filename]["content"]
         i = 0
-        while (content[location.offset + i] not in b':'):
+        while content[location.offset + i] not in b':':
             i += 1
+        return i
+
+    def find_last_else(self, location):
+        """
+        Better than find_next_semi if we have the else keyword.
+        """
+        filename = self.filename(location)
+        content = self.annotations[filename]["content"]
+        i = -1
+        while b"else" not in content[location.offset+i:location.offset]:
+            i -= 1
         return i
 
     def check_location(self, location, strlist):
@@ -159,6 +174,11 @@ class Instrumenter:
         try:
             content = self.annotations[filename]["content"]
             offset = location.offset
+            if (offset, strlist) in self.check_locations:
+                # already checked, prevent double annotations!
+                return False
+            else:
+                self.check_locations.append((offset, strlist))
             for s in strlist:
                 if s == content[offset:offset+len(s)]:
                     return True
@@ -166,12 +186,36 @@ class Instrumenter:
         except:
             return False
 
+    def check_const_method(self, node):
+        # for some reason, this does not give all const methods
+        if node.is_const_method():
+            return True
+        try:
+            children = [c for c in node.get_children()]
+            body = children[-1]
+            low = node.extent.start
+            high = body.extent.start
+            if b"constexpr" in self.get_content(low, high):
+                return True
+        except:
+            pass
+        return False
+
     def visit_if(self, node):
         self.ifs.append(node)
         if not self.check_location(node.extent.start, [b"if"]):
             print("Check location failed for if")
             return
         children = [c for c in node.get_children()]
+
+        # hack for C++
+        if children[1].extent.start.offset < children[0].extent.end.offset:
+            children.pop(1)
+
+        if len(children) < 2 or len(children) > 3:
+            print(self.get_content(node.extent.start, node.extent.end))
+            raise Exception
+
         if_body = children[1]
         if len(children) == 3:
             else_body = children[2]
@@ -192,19 +236,20 @@ class Instrumenter:
                 self.prepent_annotation(b" _IF ", if_body.extent.start, 1)
                 self.prepent_annotation(b" else { _ELSE } ", node.extent.end)
         else:
-            if_semi_off = self.find_next_semi(if_body.extent.end)
             if else_body:
+                else_minus_off = self.find_last_else(else_body.extent.start)
                 if else_body.kind == CursorKind.COMPOUND_STMT:
                     self.prepent_annotation(b" { _IF ", if_body.extent.start)
-                    self.prepent_annotation(b" }", if_body.extent.end, if_semi_off + 1)
+                    self.prepent_annotation(b" } ", else_body.extent.start, else_minus_off)
                     self.prepent_annotation(b" _ELSE ", else_body.extent.start, 1)
                 else:
                     else_semi_off = self.find_next_semi(else_body.extent.end)
                     self.prepent_annotation(b" { _IF ", if_body.extent.start)
-                    self.prepent_annotation(b" } ", if_body.extent.end, if_semi_off + 1)
+                    self.prepent_annotation(b" } ", else_body.extent.start, else_minus_off)
                     self.prepent_annotation(b" { _ELSE ", else_body.extent.start)
                     self.prepent_annotation(b" } ", else_body.extent.end, else_semi_off + 1)
             else:
+                if_semi_off = self.find_next_semi(if_body.extent.end)
                 self.prepent_annotation(b" { _IF ", if_body.extent.start)
                 self.prepent_annotation(b" } else { _ELSE } ", if_body.extent.end, if_semi_off + 1)
 
@@ -325,9 +370,12 @@ class Instrumenter:
 
     def traverse(self, node, file_scope=True):
         try:
-            if (node.kind == CursorKind.FUNCTION_DECL):
+            if node.kind in (CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE):
                 # no recursive annotation
                 if "_trace" in node.spelling or "_retrace" in node.spelling:
+                    return
+                # no instrumentation of C++ constant functions
+                if self.check_const_method(node):
                     return
                 file_scope = False
                 self.visit_function(node)
@@ -335,7 +383,8 @@ class Instrumenter:
                 self.visit_if(node)
             elif (node.kind == CursorKind.CONDITIONAL_OPERATOR):
                 # ?: operator
-                if not file_scope:
+                # if not file_scope:
+                if False:
                     self.visit_conditional_op(node)
             elif (node.kind in (CursorKind.WHILE_STMT, CursorKind.FOR_STMT, CursorKind.DO_STMT)):
                 self.visit_loop(node)
