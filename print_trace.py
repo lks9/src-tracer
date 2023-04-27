@@ -88,3 +88,6 @@ for (elem, bs) in trace:
 
 if not previous_newline:
     print_newline()
+
+cursor.close()
+connection.close()
