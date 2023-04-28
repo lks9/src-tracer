@@ -1,0 +1,2 @@
+libclang
+angr >= 9.2.48
