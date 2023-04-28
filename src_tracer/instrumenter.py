@@ -140,9 +140,18 @@ class Instrumenter:
     def find_next_semi(self, location):
         filename = self.filename(location)
         content = self.annotations[filename]["content"]
-        # either there was a '}' and no ';'
+        # either '}' or '};'
         if content[location.offset-1] in b'}':
-            return -1
+            i = 0
+            while (content[location.offset + i] in b' \n\t#'):
+                if content[location.offset + i] in b'#':
+                    while content[location.offset + i] not in b'\n':
+                        i += 1
+                i += 1
+            if content[location.offset + i] in b';':
+                return i
+            else:
+                return -1
         # or we have to find the next ';'
         i = -1
         while content[location.offset + i] not in b';':
