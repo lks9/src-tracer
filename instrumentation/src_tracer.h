@@ -8,11 +8,9 @@
 extern "C" {
 #endif
 
-// _Bool is not available in C++ and bool is not available in C without include stdbool
-#ifdef __cplusplus
-#define mybool bool
-#else
-#define mybool _Bool
+// bool is available in C++ but not in C without include stdbool
+#ifndef __cplusplus
+#define bool _Bool
 #endif
 
 extern void _trace_write(const void* buf, int count);
@@ -124,15 +122,15 @@ extern int _trace_buf_pos;
 // can be used inside switch conditions
 extern unsigned int _trace_num(char c, unsigned int num);
 extern unsigned int _trace_num_text(char c, unsigned int num);
-extern mybool _trace_condition(mybool cond);
+extern bool _trace_condition(bool cond);
 
 // for retracing
 extern void _retrace_if(void);
 extern void _retrace_else(void);
-extern mybool _retrace_condition(mybool cond);
+extern bool _retrace_condition(bool cond);
 extern void _retrace_fun_call(void);
 extern void _retrace_return(void);
-extern void _retrace_assert(char label[], mybool a);
+extern void _retrace_assert(char label[], bool a);
 extern unsigned int _retrace_num(unsigned int num);
 
 extern int _retrace_fun_num;
@@ -163,9 +161,9 @@ extern char _retrace_assert_label[256];
 #if defined _TRACE_MODE && defined _RETRACE_MODE
 /* both */
 
-extern mybool _is_retrace_mode;
+extern bool _is_retrace_mode;
 extern unsigned int _is_retrace_switch(unsigned int num);
-extern mybool _is_retrace_condition(mybool cond);
+extern bool _is_retrace_condition(bool cond);
 
 #define _IF                 _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
 #define _ELSE               _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
