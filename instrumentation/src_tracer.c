@@ -4,10 +4,10 @@
 #include <fcntl.h>
 #include <stdlib.h>
 
-int _trace_fd;
+int _trace_fd = 0;
 
-unsigned char _trace_if_byte;
-int _trace_if_count;
+unsigned char _trace_if_byte = _TRACE_SET_IE;
+int _trace_if_count = 0;
 
 // taken from musl (arch/x86_64/syscall_arch.h)
 static __inline long __syscall1(long n, long a1)
@@ -31,7 +31,7 @@ static __inline long __syscall3(long n, long a1, long a2, long a3)
 // end musl code
 
 unsigned char _trace_buf[_TRACE_BUF_SIZE];
-int _trace_buf_pos;
+int _trace_buf_pos = 0;
 
 void _trace_write(const void *buf, int count) {
     const char *ptr = buf;
@@ -158,7 +158,7 @@ void _retrace_assert(char label[], _Bool a) {
 }
 
 // for both
-_Bool _is_retrace_mode;
+_Bool _is_retrace_mode = false;
 
 _Bool _is_retrace_condition(_Bool cond) {
     if (cond) {
