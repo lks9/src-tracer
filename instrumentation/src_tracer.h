@@ -54,7 +54,7 @@ extern int _trace_buf_pos;
         _trace_buf_pos = 0; \
     }
 
-#define _TRACE_PUT_(c) ;{ \
+#define _TRACE_PUT_TEXT(c) ;{ \
     unsigned char buf[1] = { c }; \
     _trace_write(buf, 1); \
 }
@@ -211,16 +211,16 @@ int main (int argc, char **argv) { \
 
 #elif defined _TEXT_TRACE_MODE /* TODO, use _TRACE_MODE instead */
 
-#define _IF                 ;_TRACE_PUT_('T');
-#define _ELSE               ;_TRACE_PUT_('N');
+#define _IF                 ;_TRACE_PUT_TEXT('T');
+#define _ELSE               ;_TRACE_PUT_TEXT('N');
 #define _CONDITION(cond)    _text_trace_condition(cond)
 #define _FUNC(num)          ;_TRACE_NUM_TEXT('F', ((unsigned int)num));
-#define _FUNC_RETURN        ;_TRACE_PUT_('R');
+#define _FUNC_RETURN        ;_TRACE_PUT_TEXT('R');
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num_text('D', ((unsigned int)num))
 #define _LOOP_START(id)     /* nothing here */
-#define _LOOP_BODY(id)      ;_TRACE_PUT_('T');
-#define _LOOP_END(id)       ;_TRACE_PUT_('N');
+#define _LOOP_BODY(id)      ;_TRACE_PUT_TEXT('T');
+#define _LOOP_END(id)       ;_TRACE_PUT_TEXT('N');
 
 #define _MAIN_FUN(fname)    \
 int main (int argc, char **argv) { \

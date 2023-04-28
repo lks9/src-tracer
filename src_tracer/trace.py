@@ -123,7 +123,7 @@ class TraceCompact(Trace):
                 if is_ret:
                     elem = ('R', b'')
                 elif len_bits == PUT_LEN_STRING:
-                    m = re.match(rb'[^\0]*\0', b)
+                    m = re.match(rb'[^\0]*\0', self._trace[i:])
                     length = m.end()
                     bs = self._trace[i:i+length]
                     i += length

@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <fcntl.h>
+#include <stdlib.h>
 
 int _trace_fd;
 
@@ -68,8 +69,10 @@ _Bool _trace_condition(_Bool cond) {
 
 void _trace_open(const char *fname) {
     _trace_fd = __syscall3(SYS_open, (long)fname, (long)(O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE), (long)0644);
+    _trace_buf_pos = 0;
     _trace_if_count = 0;
     _trace_if_byte = _TRACE_SET_IE;
+    atexit(_trace_close);
 }
 
 void _trace_close(void) {
@@ -91,17 +94,17 @@ void _trace_close(void) {
 // text trace
 _Bool _text_trace_condition(_Bool cond) {
     if (cond) {
-        _TRACE_PUT_('T');
+        _TRACE_PUT_TEXT('T');
     } else {
-        _TRACE_PUT_('N');
+        _TRACE_PUT_TEXT('N');
     }
     return cond;
 }
 
 int _text_trace_switch(int num, const char *num_str) {
-    _TRACE_PUT_('D');
+    _TRACE_PUT_TEXT('D');
     for (const char *ptr = &num_str[2]; *ptr != '\0'; ptr = &ptr[1]) {
-        _TRACE_PUT(*ptr);
+        _TRACE_PUT_TEXT(*ptr);
     }
     return num;
 }
