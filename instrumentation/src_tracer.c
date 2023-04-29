@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <time.h>
+#include <unistd.h>
 
 int _trace_fd = 0;
 
@@ -10,12 +12,6 @@ unsigned char _trace_if_byte = _TRACE_SET_IE;
 int _trace_if_count = 0;
 
 // taken from musl (arch/x86_64/syscall_arch.h)
-static __inline long __syscall1(long n, long a1)
-{
-	unsigned long ret;
-	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1) : "rcx", "r11", "memory");
-	return ret;
-}
 static __inline long __syscall3(long n, long a1, long a2, long a3)
 {
 	unsigned long ret;
@@ -35,11 +31,13 @@ int _trace_buf_pos = 0;
 
 void _trace_write(const void *buf, int count) {
     const char *ptr = buf;
-    while (_trace_fd != 0) {
+    while (_trace_fd > 0) {
+        // Use __syscall3 for efficiency and to avoid recursive calls
         long written = __syscall3(SYS_write, (long)_trace_fd, (long)ptr, (long)count);
         if (written == -1) {
             // some write error occured
-            // do not reset _trace_writing, instead abort trace recording
+            // abort trace recording
+            _trace_close();
             return;
         } else if (written == count) {
             return;
@@ -62,21 +60,34 @@ unsigned int _trace_num_text(char type, unsigned int num) {
     return num;
 }
 
-_Bool _trace_condition(_Bool cond) {
+bool _trace_condition(bool cond) {
     _TRACE_IE(cond);
     return cond;
 }
 
 void _trace_open(const char *fname) {
-    _trace_fd = __syscall3(SYS_open, (long)fname, (long)(O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE), (long)0644);
+    if (_trace_fd > 0) {
+        // already opened
+        return;
+    }
+    // Make the file name time dependent
+    char timed_fname[200];
+    time_t now = time(NULL);
+    strftime(timed_fname, 200, fname, localtime(&now));
+
+    int fd = open(timed_fname, O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    atexit(_trace_close);
+
+    // now the tracing can start (guarded by _trace_fd > 0)
+    _trace_fd = fd;
     _trace_buf_pos = 0;
     _trace_if_count = 0;
     _trace_if_byte = _TRACE_SET_IE;
-    atexit(_trace_close);
 }
 
 void _trace_close(void) {
-    if (_trace_fd == 0) {
+    if (_trace_fd <= 0) {
+        // already closed or never successfully opened
         return;
     }
     if (_trace_if_count != 0) {
@@ -86,13 +97,16 @@ void _trace_close(void) {
     if (_trace_buf_pos != 0) {
         _trace_write(_trace_buf, _trace_buf_pos);
     }
-    __syscall1(SYS_close, (long)_trace_fd);
+    // stop tracing
+    int fd = _trace_fd;
     _trace_fd = 0;
+    // now we call a library function without being traced
+    close(fd);
 }
 
 
 // text trace
-_Bool _text_trace_condition(_Bool cond) {
+bool _text_trace_condition(bool cond) {
     if (cond) {
         _TRACE_PUT_TEXT('T');
     } else {
@@ -121,7 +135,7 @@ void _retrace_if(void) {}
 
 void _retrace_else(void) {}
 
-_Bool _retrace_condition(_Bool cond) {
+bool _retrace_condition(bool cond) {
     if (cond) {
         _retrace_if();
     } else {
@@ -146,7 +160,7 @@ unsigned int _retrace_num(unsigned int num) {
     return num;
 }
 
-void _retrace_assert(char label[], _Bool a) {
+void _retrace_assert(char label[], bool a) {
     int i;
     for (i = 0; label[i] != '\0'; i++) {
         _retrace_assert_label[i] = label[i];
@@ -158,9 +172,9 @@ void _retrace_assert(char label[], _Bool a) {
 }
 
 // for both
-_Bool _is_retrace_mode = false;
+bool _is_retrace_mode = false;
 
-_Bool _is_retrace_condition(_Bool cond) {
+bool _is_retrace_condition(bool cond) {
     if (cond) {
         _IS_RETRACE(_retrace_if(), _TRACE_IE(1));
     } else {

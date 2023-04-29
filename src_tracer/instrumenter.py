@@ -1,13 +1,15 @@
 import re
+import os
 
 from clang.cindex import Index, CursorKind
 
 
 class Instrumenter:
 
-    def __init__(self, cursor):
+    def __init__(self, cursor, trace_store_dir):
         self.cursor = cursor
         self._init_db()
+        self.trace_store_dir = trace_store_dir
 
         self.ifs = []
         self.loops = []
@@ -25,10 +27,6 @@ class Instrumenter:
                             name    TEXT
                         )
                             ''')
-        row = self.cursor.execute("SELECT * FROM function_list").fetchone()
-        if row is None:
-            # add the reserve func num 0 to the db
-            self.cursor.execute("INSERT INTO function_list VALUES (null, 0, null)")
         self.cursor.execute('''
                     CREATE TABLE IF NOT EXISTS manual_lookup
                         (
@@ -128,15 +126,14 @@ class Instrumenter:
 
         # special treatment for main function
         if node.spelling == "main":
-            # print('Log trace to "' + filename + '.trace"')
-            token_end = None
-            for token in node.get_tokens():
-                if token.spelling == "main":
-                    token_end = token.extent.end
-            self.add_annotation(b"_original", token_end)
-            filename = self.filename(node.extent.end)
-            new_main = b' _MAIN_FUN("' + bytes(filename, "utf-8") + b'.trace") '
-            self.add_annotation(new_main, node.extent.end)
+            # print('Log trace to ' + self.trace_store_dir)
+            try:
+                (orig_fname, _) = self.orig_file_and_line(node.extent.start)
+            except:
+                orig_fname = ""
+            trace_fname = "%F-%H%M%S-" + os.path.basename(orig_fname) + ".trace"
+            trace_path = os.path.join(os.path.abspath(self.trace_store_dir), trace_fname)
+            self.prepent_annotation(b' _TRACE_OPEN("' + bytes(trace_path, "utf8") + b'") ', body.extent.start, 1)
 
     def get_content(self, start, end):
         filename = self.filename(start)

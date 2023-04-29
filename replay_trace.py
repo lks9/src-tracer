@@ -26,19 +26,14 @@ if len(sys.argv) == 3:
     binary_name = sys.argv[1]
     func_name = None
     trace_file = sys.argv[2]
-    database_path = ""
-elif len(sys.argv) == 4:
-    binary_name = sys.argv[1]
-    func_name = None
-    trace_file = sys.argv[2]
-    database_path = sys.argv[3]
+    database_path = os.path.dirname(trace_file)
 elif len(sys.argv) == 5:
     binary_name = sys.argv[1]
     func_name = sys.argv[2]
     trace_file = sys.argv[3]
     database_path = sys.argv[4]
 else:
-    usage = f"Usage: python3 -i {sys.argv[0]} <binary_name> <func_name> <trace_file> <func_database_dir_path>"
+    usage = f"Usage: python3 -i {sys.argv[0]} <binary_name> <trace_file>"
     raise Exception(usage)
 
 trace = Trace.from_file(trace_file)

@@ -11,14 +11,11 @@ from src_tracer.trace import Trace
 from src_tracer.util import Util
 
 
-if len(sys.argv) == 2:
-    filename = sys.argv[1]
-    database_path = ""
-elif len(sys.argv) == 3:
-    filename = sys.argv[1]
-    database_path = sys.argv[2]
+if len(sys.argv) >= 2:
+    trace_file = sys.argv[1]
+    database_path = os.path.dirname(trace_file)
 else:
-    usage = f"Usage: python3 {sys.argv[0]} <tracefile> <func_database_dir_path>"
+    usage = f"Usage: python3 {sys.argv[0]} <trace_file>"
     raise Exception(usage)
 
 # create connection to database
@@ -28,7 +25,7 @@ except sqlite3.OperationalError:
     error = "the given path is not correct, make sure the dir exists beforehand"
     raise Exception(error)
 
-trace = Trace.from_file(filename)
+trace = Trace.from_file(trace_file)
 
 cursor = connection.cursor()
 

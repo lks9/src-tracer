@@ -176,13 +176,8 @@ extern bool _is_retrace_condition(bool cond);
 #define _LOOP_BODY(id)      _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
 #define _LOOP_END(id)       _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
 
-#define _MAIN_FUN(fname)    \
-int main (int argc, char **argv) { \
-    _trace_open(fname); \
-    int retval = main_original(argc, argv); \
-    _trace_close(); \
-    return retval; \
-}
+#define _TRACE_OPEN(fname)  ;_trace_open(fname);
+#define _TRACE_CLOSE        ;_trace_close();
 
 #elif defined _TRACE_MODE
 
@@ -197,13 +192,8 @@ int main (int argc, char **argv) { \
 #define _LOOP_BODY(id)      _TRACE_IE(1)
 #define _LOOP_END(id)       _TRACE_IE(0)
 
-#define _MAIN_FUN(fname)    \
-int main (int argc, char **argv) { \
-    _trace_open(fname); \
-    int retval = main_original(argc, argv); \
-    _trace_close(); \
-    return retval; \
-}
+#define _TRACE_OPEN(fname)  ;_trace_open(fname);
+#define _TRACE_CLOSE        ;_trace_close();
 
 #define _RETRACE_ASSERT(l,a)  /* nothing here */
 
@@ -220,13 +210,8 @@ int main (int argc, char **argv) { \
 #define _LOOP_BODY(id)      ;_TRACE_PUT_TEXT('T');
 #define _LOOP_END(id)       ;_TRACE_PUT_TEXT('N');
 
-#define _MAIN_FUN(fname)    \
-int main (int argc, char **argv) { \
-    _trace_open(fname ".txt"); \
-    int retval = main_original(argc, argv); \
-    _trace_close(); \
-    return retval; \
-}
+#define _TRACE_OPEN(fname)  ;_trace_open(fname ".txt");
+#define _TRACE_CLOSE        ;_trace_close();
 
 #define _RETRACE_ASSERT(l,a)  /* nothing here */
 
@@ -242,11 +227,8 @@ int main (int argc, char **argv) { \
 #define _LOOP_BODY(id)      ;_retrace_if();
 #define _LOOP_END(id)       ;_retrace_else();
 
-#define _MAIN_FUN(fname)    \
-int main (int argc, char **argv) { \
-    int retval = main_original(argc, argv); \
-    return retval; \
-}
+#define _TRACE_OPEN(fname)  /* nothing here */
+#define _TRACE_CLOSE        /* nothing here */
 
 #define _RETRACE_ASSERT(label, a) \
                             _retrace_assert(label, a);
@@ -263,11 +245,8 @@ int main (int argc, char **argv) { \
 #define _LOOP_BODY(id)      /* nothing here */
 #define _LOOP_END(id)       /* nothing here */
 
-#define _MAIN_FUN(fname)    \
-int main (int argc, char **argv) { \
-    int retval = main_original(argc, argv); \
-    return retval; \
-}
+#define _TRACE_OPEN(fname)  /* nothing here */
+#define _TRACE_CLOSE        /* nothing here */
 
 #define _RETRACE_ASSERT(l,a)  /* nothing here */
 

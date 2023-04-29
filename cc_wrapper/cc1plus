@@ -34,6 +34,12 @@ if [ -z "${SRC_TRACER}" ]; then
     exec $(${COLLECT_GCC} --print-prog-name=cc1plus) $@
 fi
 
+if [ -z "${SRC_TRACER_STORE_DIR}" ]; then
+    # store the traces and the function database here
+    mkdir -p ~/.src_tracer/
+    export SRC_TRACER_STORE_DIR=~/.src_tracer/
+fi
+
 if [ "$1" = "-E" ]; then
     outfile=$( echo_outfile $@ )
     infile=$( echo_infile $@ )
