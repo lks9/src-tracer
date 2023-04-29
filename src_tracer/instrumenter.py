@@ -8,15 +8,6 @@ class Instrumenter:
     def __init__(self, cursor):
         self.cursor = cursor
         self._init_db()
-        # initialise the next func_num by taking the max func_num in db + 1
-        func_num, = self.cursor.execute("SELECT MAX(num) FROM automatic_lookup").fetchone()
-        if func_num is None:
-            # add the reserve func num 0 to the db
-            self.cursor.execute("INSERT INTO automatic_lookup VALUES (0, null, 0, null)")
-            self.cursor.execute("INSERT INTO manual_lookup VALUES (0, null, 0)")
-            self.next_func_num = 1
-        else:
-            self.next_func_num = func_num + 1
 
         self.ifs = []
         self.loops = []
@@ -27,14 +18,17 @@ class Instrumenter:
 
     def _init_db(self):
         self.cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS automatic_lookup
+                    CREATE TABLE IF NOT EXISTS function_list
                         (
-                            num     INT     PRIMARY KEY,
                             file    TEXT,
                             line    INT,
                             name    TEXT
                         )
                             ''')
+        row = self.cursor.execute("SELECT * FROM function_list").fetchone()
+        if row is None:
+            # add the reserve func num 0 to the db
+            self.cursor.execute("INSERT INTO function_list VALUES (null, 0, null)")
         self.cursor.execute('''
                     CREATE TABLE IF NOT EXISTS manual_lookup
                         (
@@ -70,21 +64,33 @@ class Instrumenter:
         return (filename, line_no)
 
     def func_num(self, node):
-        pre_filename = self.filename(node.extent.start)
         (file, line) = self.orig_file_and_line(node.extent.start)
+        name = node.spelling
+        pre_file = self.filename(node.extent.start)
         offset = node.extent.start.offset
-        func_num_auto = self.cursor.execute("SELECT num FROM automatic_lookup WHERE line=? and file=?", (line, file)).fetchone()
-        func_num_manu = self.cursor.execute("SELECT num FROM manual_lookup WHERE pre_file=? and offset=?", (pre_filename, offset)).fetchone()
+        func_num_auto = self.cursor.execute('''
+                SELECT rowid
+                FROM function_list
+                WHERE line=? and file=? and name=?
+                ''', (line, file, name)).fetchone()
+        func_num_manu = self.cursor.execute('''
+                SELECT num
+                FROM manual_lookup
+                WHERE pre_file=? and offset=?
+                ''', (pre_file, offset)).fetchone()
+        if func_num_auto is None:
+            self.cursor.execute("INSERT INTO function_list VALUES(?,?,?)",
+                                (file, line, name))
+            func_num_auto = self.cursor.execute('''
+                SELECT rowid
+                FROM function_list
+                WHERE line=? and file=? and name=?
+                ''', (line, file, name)).fetchone()
+        num = func_num_auto[0]
         if func_num_manu is None:
-            data = (func_num_auto[0] if func_num_auto is not None else self.next_func_num, pre_filename, offset)
-            self.cursor.execute("INSERT INTO manual_lookup VALUES(?,?,?)", data)
-        if func_num_auto is not None:
-            return func_num_auto[0]
-        data = (self.next_func_num, file, line, node.spelling)
-        self.cursor.execute("INSERT INTO automatic_lookup VALUES(?,?,?,?)", data)
-        func_num = self.next_func_num
-        self.next_func_num = self.next_func_num + 1
-        return func_num
+            self.cursor.execute("INSERT INTO manual_lookup VALUES(?,?,?)",
+                                (num, pre_file, offset))
+        return num
 
     def add_annotation(self, annotation, location, add_offset=0):
         offset = location.offset + add_offset
