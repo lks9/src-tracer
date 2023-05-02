@@ -210,7 +210,7 @@ class SourceTraceReplayer:
                         log.debug("State was unconstrained, so constrained to the address of the next function.")
                         simgr.move(from_stash='unconstrained', to_stash='active')
                     else:
-                        log.error("Could not find %s at all", elem)
+                        log.error("Could not find %s at all in simgr %s", elem, simgr)
                         return (simgr, state)
 
             if len(simgr.found) != 1:

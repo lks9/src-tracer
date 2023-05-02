@@ -1,13 +1,14 @@
 import re
 import os
+import sqlite3
 
 from clang.cindex import Index, CursorKind
 
 
 class Instrumenter:
 
-    def __init__(self, cursor, trace_store_dir):
-        self.cursor = cursor
+    def __init__(self, connection, trace_store_dir):
+        self.connection = connection
         self._init_db()
         self.trace_store_dir = trace_store_dir
 
@@ -19,15 +20,19 @@ class Instrumenter:
         self.annotations = {}
 
     def _init_db(self):
-        self.cursor.execute('''
+        cursor = self.connection.cursor()
+        cursor.execute('''
                     CREATE TABLE IF NOT EXISTS function_list
                         (
                             file    TEXT,
                             line    INT,
-                            name    TEXT
+                            name    TEXT,
+                            PRIMARY KEY (file, line, name)
                         )
                             ''')
-        self.cursor.execute('''
+        cursor.close()
+        cursor = self.connection.cursor()
+        cursor.execute('''
                     CREATE TABLE IF NOT EXISTS manual_lookup
                         (
                             num      INT,
@@ -36,6 +41,7 @@ class Instrumenter:
                             PRIMARY KEY (pre_file, offset)
                         )
                             ''')
+        cursor.close()
 
     def filename(self, location):
         filename = location.file.name
@@ -66,28 +72,44 @@ class Instrumenter:
         name = node.spelling
         pre_file = self.filename(node.extent.start)
         offset = node.extent.start.offset
-        func_num_auto = self.cursor.execute('''
-                SELECT rowid
-                FROM function_list
-                WHERE line=? and file=? and name=?
-                ''', (line, file, name)).fetchone()
-        func_num_manu = self.cursor.execute('''
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO function_list
+                VALUES(?,?,?)
+                ON CONFLICT DO NOTHING
+                ''', (file, line, name))
+        except sqlite3.OperationalError:
+            # perhaps the insert was successful from another process?
+            pass
+        cursor.close()
+        cursor = self.connection.cursor()
+        func_num_manu = cursor.execute('''
                 SELECT num
                 FROM manual_lookup
                 WHERE pre_file=? and offset=?
                 ''', (pre_file, offset)).fetchone()
-        if func_num_auto is None:
-            self.cursor.execute("INSERT INTO function_list VALUES(?,?,?)",
-                                (file, line, name))
-            func_num_auto = self.cursor.execute('''
+        cursor.close()
+        cursor = self.connection.cursor()
+        func_num_auto = cursor.execute('''
                 SELECT rowid
                 FROM function_list
                 WHERE line=? and file=? and name=?
                 ''', (line, file, name)).fetchone()
+        cursor.close()
         num = func_num_auto[0]
         if func_num_manu is None:
-            self.cursor.execute("INSERT INTO manual_lookup VALUES(?,?,?)",
-                                (num, pre_file, offset))
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute('''
+                    INSERT INTO manual_lookup
+                    VALUES(?,?,?)
+                    ON CONFLICT DO NOTHING
+                    ''', (num, pre_file, offset))
+            except sqlite3.OperationalError:
+                # don't care
+                pass
+            cursor.close()
         return num
 
     def add_annotation(self, annotation, location, add_offset=0):

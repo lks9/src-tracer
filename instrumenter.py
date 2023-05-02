@@ -24,12 +24,9 @@ except sqlite3.OperationalError:
     error = "the given path is not correct, make sure the dir exists beforehand"
     raise Exception(error)
 
-cursor = connection.cursor()
-
-instrumenter = Instrumenter(cursor, trace_store_dir)
+instrumenter = Instrumenter(connection, trace_store_dir)
 instrumenter.parse(filename)
 annotated = instrumenter.annotate_all(filename)
 if annotated:
     connection.commit()
-cursor.close()
 connection.close()

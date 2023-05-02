@@ -36,8 +36,8 @@ fi
 
 if [ -z "${SRC_TRACER_STORE_DIR}" ]; then
     # store the traces and the function database here
-    mkdir -p ~/.src_tracer/
-    export SRC_TRACER_STORE_DIR=~/.src_tracer/
+    mkdir -p "$HOME/.src_tracer/"
+    export SRC_TRACER_STORE_DIR="$HOME/.src_tracer/"
 fi
 
 if [ "$1" = "-E" ]; then
