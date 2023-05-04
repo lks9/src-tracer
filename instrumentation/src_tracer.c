@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <stdio.h>
 
 int _trace_fd = 0;
 
@@ -74,10 +75,15 @@ void _trace_open(const char *fname) {
     }
     // Make the file name time dependent
     char timed_fname[200];
-    time_t now = time(NULL);
-    strftime(timed_fname, 200, fname, localtime(&now));
+    char nano_fname[200];
+    struct timespec now;
+    if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
+        return;
+    }
+    strftime(timed_fname, 200, fname, localtime(&now.tv_sec));
+    snprintf(nano_fname, 200, timed_fname, now.tv_nsec);
 
-    int lowfd = open(timed_fname, O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    int lowfd = open(nano_fname, O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE, S_IRUSR | S_IWUSR);
 
     // The posix standard specifies that open always returns the lowest-numbered unused fd.
     // It is possbile that the traced software relies on that behavior and expects a particalur fd number

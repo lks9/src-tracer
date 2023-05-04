@@ -153,7 +153,7 @@ class Instrumenter:
                 (orig_fname, _) = self.orig_file_and_line(node.extent.start)
             except:
                 orig_fname = ""
-            trace_fname = "%F-%H%M%S-" + os.path.basename(orig_fname) + ".trace"
+            trace_fname = "%F-%H%M%S-%%lx-" + os.path.basename(orig_fname) + ".trace"
             trace_path = os.path.join(os.path.abspath(self.trace_store_dir), trace_fname)
             self.prepent_annotation(b' _TRACE_OPEN("' + bytes(trace_path, "utf8") + b'") ', body.extent.start, 1)
 
