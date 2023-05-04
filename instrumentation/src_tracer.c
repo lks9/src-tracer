@@ -80,7 +80,7 @@ void _trace_open(const char *fname) {
     if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
         return;
     }
-    strftime(timed_fname, 200, fname, localtime(&now.tv_sec));
+    strftime(timed_fname, 200, fname, gmtime(&now.tv_sec));
     snprintf(nano_fname, 200, timed_fname, now.tv_nsec);
 
     int lowfd = open(nano_fname, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
