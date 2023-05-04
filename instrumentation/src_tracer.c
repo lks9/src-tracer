@@ -77,7 +77,15 @@ void _trace_open(const char *fname) {
     time_t now = time(NULL);
     strftime(timed_fname, 200, fname, localtime(&now));
 
-    int fd = open(timed_fname, O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    int lowfd = open(timed_fname, O_WRONLY | O_CREAT | O_TRUNC | O_LARGEFILE, S_IRUSR | S_IWUSR);
+
+    // The posix standard specifies that open always returns the lowest-numbered unused fd.
+    // It is possbile that the traced software relies on that behavior and expects a particalur fd number
+    // for a subsequent open call, how ugly this might be (busybox unzip expects fd number 3).
+    // The workaround is to increase the trace fd number by 42.
+    int fd = dup2(lowfd, lowfd + 42);
+    close(lowfd);
+
     atexit(_trace_close);
 
     // now the tracing can start (guarded by _trace_fd > 0)
