@@ -61,11 +61,11 @@ if [ "$1" = "-E" ]; then
         cp "${outfile}" "${outfile}.tmp.cpp"
 
         # do the instrumentation
-        python3 "${SRC_TRACER_DIR}/instrumenter.py" "${outfile}.tmp.cpp" "${SRC_TRACER_STORE_DIR}"
+        python3 "${SRC_TRACER_DIR}/instrumenter.py" "${outfile}.tmp.cpp" "${SRC_TRACER_STORE_DIR}" || exit $?
 
         # rerun preprocessor to resolve instrumentation macros
         cpp ${SRC_TRACER} "${outfile}.tmp.cpp" -o "${outfile}.tmp.ii" -I "${SRC_TRACER_DIR}/instrumentation/"
-        mv "${outfile}.tmp.ii" "${outfile}"
+        cp "${outfile}.tmp.ii" "${outfile}"
     fi
 elif [ "$1" = "-fpreprocessed" ]; then
     # just compile it

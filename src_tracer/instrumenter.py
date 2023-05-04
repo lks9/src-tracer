@@ -424,7 +424,8 @@ class Instrumenter:
             elif (node.kind == CursorKind.SWITCH_STMT):
                 self.visit_switch(node)
         except:
-            print("Failed to annotate a " + str(node.kind))
+            message = "Failed to annotate a " + str(node.kind)
+            raise Exception(message)
 
         for child in node.get_children():
             self.traverse(child, file_scope=file_scope)

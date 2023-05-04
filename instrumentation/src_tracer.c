@@ -34,10 +34,12 @@ void _trace_write(const void *buf, int count) {
     while (_trace_fd > 0) {
         // Use __syscall3 for efficiency and to avoid recursive calls
         long written = __syscall3(SYS_write, (long)_trace_fd, (long)ptr, (long)count);
-        if (written == -1) {
+        if (written < 0) {
             // some write error occured
             // abort trace recording
-            _trace_close();
+            int fd = _trace_fd;
+            _trace_fd = 0;
+            close(fd);
             return;
         } else if (written == count) {
             return;

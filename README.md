@@ -129,7 +129,7 @@ Moreover, a sequence of `T` and `N` can be stored more efficient in the binary t
 
 ## Busybox with musl-libc
 
-Tested: busybox ... and musl v1.2.3
+Tested: busybox v1.34 and musl v1.2.3
 
 * Set flags and configure musl:
 
@@ -153,7 +153,7 @@ The latter is a workaround for angr to ignore address alignments (see angr/angr#
   sudo make install
   ```
 
-* Follow step 2 from https://www.openwall.com/lists/musl/2014/08/08/13
+* Follow steps 2 and 3 from https://www.openwall.com/lists/musl/2014/08/08/13
 to configure busybox to compile statically linked against musl.
 
 * Before you run `make`, add `src_tracer` to the `CONFIG_EXTRA_LDLIBS`
@@ -174,7 +174,14 @@ in `.config`:
   ```
   warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
   ```
-  then the instrumatation is working as it should!
+  then the instrumatation is working as it should! You could silent these by
+  commenting out the following line in `Makefile.flags`:
+  ```
+  CFLAGS += $(call cc-option,-Wdeclaration-after-statement,)
+  ```
+  Note that the instrumentation might fail at any point. This is
+  a known issue #30, as workaround simply start `make` again until
+  it succeeds.
 
 * Once we compiled it successfully, you don't need the stripped version.
   So just rename:
@@ -199,8 +206,15 @@ in `.config`:
   ${SRC_TRACER_DIR}/print_trace.py ~/.src_tracer/2023-04-28-153959-appletlib.c.trace > ~/.src_tracer/echo.trace.txt
   ```
 
-* Now we are back to compile musl in retrace mode:
+* Now we are back to compile musl in retrace mode (same `CFLAGS` but with `-O1`):
 
+  ```bash
+  export SRC_TRACER_DIR=<path-to>/src-tracer/
+  export CFLAGS="-Wno-error -O1 -L${SRC_TRACER_DIR}/instrumentation -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
+  export SRC_TRACER=""
+  ./configure
+  ```
+  Then in `config.mak` add `-lsrc_tracer` to `LIBCC`.
   ```bash
   export SRC_TRACER="-D_RETRACE_MODE"
   make clean
