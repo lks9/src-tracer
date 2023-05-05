@@ -135,7 +135,7 @@ class SourceTraceReplayer:
 
     def start_state(self, func_name: str):
         addr = self.p.loader.main_object.get_symbol(func_name).rebased_addr
-        state = self.p.factory.blank_state(addr=addr)
+        state = self.p.factory.call_state(addr=addr)
         self.make_globals_symbolic(state)
         # optimize a bit
         state.options["COPY_STATES"] = False
