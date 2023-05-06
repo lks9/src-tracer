@@ -7,7 +7,7 @@ from clang.cindex import Index, CursorKind
 
 class Instrumenter:
 
-    def __init__(self, connection, trace_store_dir, case_instrument=False):
+    def __init__(self, connection, trace_store_dir, case_instrument=False, boolop_instrument=False):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
@@ -17,6 +17,7 @@ class Instrumenter:
         self.trace_store_dir = trace_store_dir
 
         self.case_instrument = case_instrument
+        self.boolop_instrument = boolop_instrument
 
         self.ifs = []
         self.loops = []
@@ -427,16 +428,15 @@ class Instrumenter:
                     return
                 file_scope = False
                 self.visit_function(node)
-            elif (node.kind == CursorKind.IF_STMT):
+            elif node.kind == CursorKind.IF_STMT:
                 self.visit_if(node)
-            elif (node.kind == CursorKind.CONDITIONAL_OPERATOR):
+            elif node.kind == CursorKind.CONDITIONAL_OPERATOR:
                 # ?: operator
-                # if not file_scope:
-                if False:
+                if self.boolop_instrument and not file_scope:
                     self.visit_conditional_op(node)
-            elif (node.kind in (CursorKind.WHILE_STMT, CursorKind.FOR_STMT, CursorKind.DO_STMT)):
+            elif node.kind in (CursorKind.WHILE_STMT, CursorKind.FOR_STMT, CursorKind.DO_STMT):
                 self.visit_loop(node)
-            elif (node.kind == CursorKind.SWITCH_STMT):
+            elif node.kind == CursorKind.SWITCH_STMT:
                 self.visit_switch(node)
         except:
             message = "Failed to annotate a " + str(node.kind)
