@@ -49,11 +49,10 @@ if args.fname is None:
         database = os.path.join(database_path, 'cflow_functions.db')
     else:
         database = args.database
-    try:
-        connection = sqlite3.connect(database)
-    except:
-        error = f"Could not open database from {database}, use --fname or --database"
+    if not os.path.exists(database):
+        error = f"Could not open database from {database}, try --fname or --database"
         raise Exception(error)
+    connection = sqlite3.connect(database)
     cursor = connection.cursor()
 else:
     cursor = None
