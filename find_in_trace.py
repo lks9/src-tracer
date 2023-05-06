@@ -22,11 +22,11 @@ else:
     raise Exception(usage)
 
 # create connection to database
-try:
-    connection = sqlite3.connect(os.path.join(database_path, 'cflow_functions.db'))
-except sqlite3.OperationalError:
-    error = "the given path is not correct, make sure the dir exists beforehand"
+database = os.path.join(database_path, 'cflow_functions.db')
+if not os.path.exists(database):
+    error = f"Database {database} does not exist"
     raise Exception(error)
+connection = sqlite3.connect(database)
 
 trace = Trace.from_file(trace_file)
 
