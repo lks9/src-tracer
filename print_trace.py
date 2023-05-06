@@ -49,6 +49,7 @@ count = 0
 def print_indent():
     global previous_newline, indent, count, INDENT_WITH, COUNT_MAX
     if args.pretty == 1 and count < COUNT_MAX:
+        previous_newline = False
         return
     if not previous_newline:
         print_newline()

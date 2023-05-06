@@ -7,7 +7,8 @@ from clang.cindex import Index, CursorKind
 
 class Instrumenter:
 
-    def __init__(self, connection, trace_store_dir, case_instrument=False, boolop_instrument=False):
+    def __init__(self, connection, trace_store_dir, case_instrument=False, boolop_instrument=False,
+                 return_instrument=True):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
@@ -18,6 +19,7 @@ class Instrumenter:
 
         self.case_instrument = case_instrument
         self.boolop_instrument = boolop_instrument
+        self.return_instrument = return_instrument
 
         self.ifs = []
         self.loops = []
@@ -90,6 +92,7 @@ class Instrumenter:
             # perhaps the insert was successful from another process?
             pass
         cursor.close()
+        self.connection.commit()
         cursor = self.connection.cursor()
         func_num_manu = cursor.execute('''
                 SELECT num
@@ -97,6 +100,7 @@ class Instrumenter:
                 WHERE pre_file=? and offset=?
                 ''', (pre_file, offset)).fetchone()
         cursor.close()
+        self.connection.commit()
         cursor = self.connection.cursor()
         func_num_auto = cursor.execute('''
                 SELECT rowid
@@ -104,6 +108,7 @@ class Instrumenter:
                 WHERE line=? and file=? and name=?
                 ''', (line, file, name)).fetchone()
         cursor.close()
+        self.connection.commit()
         num = func_num_auto[0]
         if func_num_manu is None:
             cursor = self.connection.cursor()
@@ -117,6 +122,7 @@ class Instrumenter:
                 # don't care
                 pass
             cursor.close()
+            self.connection.commit()
         return num
 
     def add_annotation(self, annotation, location, add_offset=0):
@@ -148,10 +154,11 @@ class Instrumenter:
         self.add_annotation(b" _FUNC(" + bytes(hex(func_num), "utf-8") + b") ", body.extent.start, 1)
 
         # handle returns
-        for descendant in node.walk_preorder():
-            if descendant.kind == CursorKind.RETURN_STMT:
-                self.add_annotation(b"_FUNC_RETURN ", descendant.extent.start)
-        self.add_annotation(b"_FUNC_RETURN ", node.extent.end, -1)
+        if self.return_instrument:
+            for descendant in node.walk_preorder():
+                if descendant.kind == CursorKind.RETURN_STMT:
+                    self.add_annotation(b"_FUNC_RETURN ", descendant.extent.start)
+            self.add_annotation(b"_FUNC_RETURN ", node.extent.end, -1)
 
         # special treatment for main function
         if node.spelling == "main":
