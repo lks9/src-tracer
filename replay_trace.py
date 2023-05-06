@@ -51,8 +51,8 @@ if args.fname is None:
         database = args.database
     try:
         connection = sqlite3.connect(database)
-    except sqlite3.OperationalError:
-        error = f"Could not open database from {database}"
+    except:
+        error = f"Could not open database from {database}, use --fname or --database"
         raise Exception(error)
     cursor = connection.cursor()
 else:

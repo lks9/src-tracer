@@ -19,21 +19,28 @@ ap.add_argument("--seek", type=int, default=0,
                 help="skip bytes in the beginning of the tracefile")
 ap.add_argument("--count", type=int, default=-1,
                 help="stop after reading count bytes from the trace")
-ap.add_argument("--database",
-                help="path to the function database")
+arggroup = ap.add_mutually_exclusive_group()
+arggroup.add_argument("--database",
+                      help="path to the function database")
+arggroup.add_argument("--no-database", action='store_true',
+                      help="don't print function names, don't use the database")
 args = ap.parse_args()
 
 # create connection to database
-if args.database is None:
-    database_path = os.path.dirname(args.trace_file)
-    database = os.path.join(database_path, 'cflow_functions.db')
-else:
-    database = args.database
-if os.path.exists(database):
-    connection = sqlite3.connect(database)
-    cursor = connection.cursor()
-else:
+if args.no_database:
     cursor = None
+else:
+    if args.database is None:
+        database_path = os.path.dirname(args.trace_file)
+        database = os.path.join(database_path, 'cflow_functions.db')
+    else:
+        database = args.database
+    try:
+        connection = sqlite3.connect(database)
+    except:
+        error = f"Could not open database from {database}, use --no-database or --database"
+        raise Exception(error)
+    cursor = connection.cursor()
 
 trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count)
 
