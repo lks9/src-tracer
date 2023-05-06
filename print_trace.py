@@ -19,17 +19,14 @@ ap.add_argument("--seek", type=int, default=0,
                 help="skip bytes in the beginning of the tracefile")
 ap.add_argument("--count", type=int, default=-1,
                 help="stop after reading count bytes from the trace")
-arggroup = ap.add_mutually_exclusive_group()
-arggroup.add_argument("--database",
-                      help="path to the function database")
-arggroup.add_argument("--no-database", action='store_true',
-                      help="don't print function names, don't use the database")
+ap.add_argument("--database",
+                help="path to the function database")
+ap.add_argument("--pretty", type=int, default=5,
+                help="5: pretty (default), 5+4: indent, 5+3: function names, 1 compact, 0: no newline")
 args = ap.parse_args()
 
 # create connection to database
-if args.no_database:
-    cursor = None
-else:
+if args.pretty in (5,3):
     if args.database is None:
         database_path = os.path.dirname(args.trace_file)
         database = os.path.join(database_path, 'cflow_functions.db')
@@ -38,9 +35,11 @@ else:
     try:
         connection = sqlite3.connect(database)
     except:
-        error = f"Could not open database from {database}, use --no-database or --database"
+        error = f"Could not open database from {database}, try --pretty 4 or --database"
         raise Exception(error)
     cursor = connection.cursor()
+else:
+    cursor = None
 
 trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count)
 
@@ -50,16 +49,21 @@ count = 0
 
 def print_indent():
     global previous_newline, indent, count, INDENT_WITH, COUNT_MAX
+    if args.pretty == 1 and count < COUNT_MAX:
+        return
     if not previous_newline:
         print_newline()
+    previous_newline = False
+    if args.pretty < 4:
+        return
     for i in range(indent):
         print(INDENT_WITH, end='')
     count = len(INDENT_WITH)*indent
-    previous_newline = False
 
 def print_newline():
     global previous_newline, indent, count, INDENT_WITH, COUNT_MAX
-    print(end='\n')
+    if args.pretty > 0:
+        print(end='\n')
     count = 0
     previous_newline = True
 
@@ -72,11 +76,11 @@ def print_with_count(s):
 
 def print_extra(s):
     global previous_newline, indent, count, INDENT_WITH, COUNT_MAX
-    if not previous_newline:
-        print_newline()
     print_indent()
     print(s, end='')
-    print_newline()
+    count += len(s)
+    if args.pretty > 1:
+        print_newline()
 
 for elem in trace:
     if elem.letter == 'R':
@@ -87,8 +91,8 @@ for elem in trace:
     else:
         num = int.from_bytes(elem.bs, "little")
         if elem.letter == 'F':
-            name = Util.get_name(cursor, num)
-            if name is not None:
+            if args.pretty in (5,3):
+                name = Util.get_name(cursor, num)
                 # All upper case letters in the trace are treated as elem,
                 # so we have to print name.lower() instead of name
                 print_extra(f"{elem.letter}{num:x} {name.lower()}")
