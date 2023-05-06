@@ -7,10 +7,16 @@ from clang.cindex import Index, CursorKind
 
 class Instrumenter:
 
-    def __init__(self, connection, trace_store_dir):
+    def __init__(self, connection, trace_store_dir, case_instrument=False):
+        """
+        Instrument a C compilation unit (pre-processed C source code).
+        :param case_instrument: instrument each switch case, not the switch (experimental)
+        """
         self.connection = connection
         self._init_db()
         self.trace_store_dir = trace_store_dir
+
+        self.case_instrument = case_instrument
 
         self.ifs = []
         self.loops = []
@@ -333,23 +339,23 @@ class Instrumenter:
 #            if (descendant.kind in (CursorKind.RETURN_STMT, CursorKind.GOTO_STMT)):
 #                self.add_annotation(b"_LOOP_END(" + loop_id + b") ", descendant.extent.start)
 
-#    def traverse_switch(self, node, switch_id):
-#        if node.kind in (CursorKind.CASE_STMT, CursorKind.DEFAULT_STMT):
-#            case_id = bytes(hex(self.switch_case_count), "utf-8")
-#            if node.kind == CursorKind.CASE_STMT:
-#                number_end = [c for c in node.get_children()][0].extent.end
-#            else:
-#                number_end = node.extent.start
-#            try:
-#                colon_off = self.find_next_colon(number_end)
-#                self.add_annotation(b" _CASE(" + case_id + b", " + switch_id + b") ", number_end, colon_off+1)
-#            except IndexError:
-#                print(b"Failed to annotate _CASE(" + case_id + b", " + switch_id + b") ")
-#            self.switch_case_count += 1
-#
-#        for child in node.get_children():
-#            if (child.kind != CursorKind.SWITCH_STMT):
-#                self.traverse_switch(child, switch_id)
+    def traverse_switch(self, node, switch_id):
+        if node.kind in (CursorKind.CASE_STMT, CursorKind.DEFAULT_STMT):
+            case_id = bytes(hex(self.switch_case_count), "utf-8")
+            if node.kind == CursorKind.CASE_STMT:
+                number_end = [c for c in node.get_children()][0].extent.end
+            else:
+                number_end = node.extent.start
+            try:
+                colon_off = self.find_next_colon(number_end)
+                self.add_annotation(b" _CASE(" + case_id + b", " + switch_id + b") ", number_end, colon_off+1)
+            except IndexError:
+                print(b"Failed to annotate _CASE(" + case_id + b", " + switch_id + b") ")
+            self.switch_case_count += 1
+
+        for child in node.get_children():
+            if (child.kind != CursorKind.SWITCH_STMT):
+                self.traverse_switch(child, switch_id)
 
     def visit_switch(self, node):
         self.switchis.append(node)
@@ -357,9 +363,18 @@ class Instrumenter:
         if not self.check_location(node.extent.start, [b"switch"]) or len(children) != 2:
             print("Check location failed for switch")
             return
-        switch_num = children[0]
-        self.add_annotation(b"_SWITCH(", switch_num.extent.start)
-        self.add_annotation(b")", switch_num.extent.end, 1)
+
+        if self.case_instrument:
+            # experimental
+            switch_id = bytes(hex(len(self.switchis) - 1), "utf-8")
+            self.add_annotation(b" _SWITCH_START(" + switch_id + b") ", node.extent.start)
+            self.switch_case_count = 0
+            self.traverse_switch(node, switch_id)
+        else:
+            # simpler, default
+            switch_num = children[0]
+            self.add_annotation(b"_SWITCH(", switch_num.extent.start)
+            self.add_annotation(b")", switch_num.extent.end, 1)
 
     def parse(self, filename):
         index = Index.create()
