@@ -6,28 +6,36 @@ COUNT_MAX = 75
 import sys
 import os
 import sqlite3
+import argparse
 
 from src_tracer.trace import Trace
 from src_tracer.util import Util
 
-
-if len(sys.argv) >= 2:
-    trace_file = sys.argv[1]
-    database_path = os.path.dirname(trace_file)
-else:
-    usage = f"Usage: python3 {sys.argv[0]} <trace_file>"
-    raise Exception(usage)
+# arguments
+ap = argparse.ArgumentParser()
+ap.add_argument("trace_file",
+                help="file containing the trace")
+ap.add_argument("--seek", type=int, default=0,
+                help="skip bytes in the beginning of the tracefile")
+ap.add_argument("--count", type=int, default=-1,
+                help="stop after reading count bytes from the trace")
+ap.add_argument("--database",
+                help="path to the function database")
+args = ap.parse_args()
 
 # create connection to database
-try:
-    connection = sqlite3.connect(os.path.join(database_path, 'cflow_functions.db'))
-except sqlite3.OperationalError:
-    error = "the given path is not correct, make sure the dir exists beforehand"
-    raise Exception(error)
+if args.database is None:
+    database_path = os.path.dirname(args.trace_file)
+    database = os.path.join(database_path, 'cflow_functions.db')
+else:
+    database = args.database
+if os.path.exists(database):
+    connection = sqlite3.connect(database)
+    cursor = connection.cursor()
+else:
+    cursor = None
 
-trace = Trace.from_file(trace_file)
-
-cursor = connection.cursor()
+trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count)
 
 previous_newline = True
 indent = 0
@@ -63,28 +71,25 @@ def print_extra(s):
     print(s, end='')
     print_newline()
 
-for (elem, bs) in trace:
-    if elem == 'R':
+for elem in trace:
+    if elem.letter == 'R':
         indent -= 1
         print_extra('R')
-    elif bs == b'':
-        print_with_count(f"{elem}")
+    elif elem.bs == b'':
+        print_with_count(f"{elem.letter}")
     else:
-        num = int.from_bytes(bs, "little")
-        if elem == 'F':
+        num = int.from_bytes(elem.bs, "little")
+        if elem.letter == 'F':
             name = Util.get_name(cursor, num)
             if name is not None:
                 # All upper case letters in the trace are treated as elem,
                 # so we have to print name.lower() instead of name
-                print_extra(f"{elem}{num:x} {name.lower()}")
+                print_extra(f"{elem.letter}{num:x} {name.lower()}")
             else:
-                print_extra(f"{elem}{num:x}")
+                print_extra(f"{elem.letter}{num:x}")
             indent += 1
         else:
-            print_extra(f"{elem}{num:x}")
+            print_extra(f"{elem.letter}{num:x}")
 
 if not previous_newline:
     print_newline()
-
-cursor.close()
-connection.close()

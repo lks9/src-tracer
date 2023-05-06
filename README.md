@@ -206,11 +206,12 @@ in `.config`:
   ${SRC_TRACER_DIR}/print_trace.py ~/.src_tracer/2023-04-28-153959-appletlib.c.trace > ~/.src_tracer/echo.trace.txt
   ```
 
-* Now we are back to compile musl in retrace mode (same `CFLAGS` but with `-O1`):
+* Now we are back to compile musl in retrace mode (same `CFLAGS` but with `-mbranch-cost=5` to the maximum
+  because state splitting _really_ slows down retracing):
 
   ```bash
   export SRC_TRACER_DIR=<path-to>/src-tracer/
-  export CFLAGS="-Wno-error -O1 -L${SRC_TRACER_DIR}/instrumentation -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
+  export CFLAGS="-Wno-error -O3 -mbranch-cost=5 -L${SRC_TRACER_DIR}/instrumentation -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
   export SRC_TRACER=""
   ./configure
   ```

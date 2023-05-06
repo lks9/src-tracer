@@ -146,41 +146,42 @@ class SourceTraceReplayer:
         return state
 
     def follow_trace(self, trace: Trace, func_name: str, cursor=None):
-        # start_state, simulation manager
+        # function name not given?
         if not func_name:
-            (elem, bs) = next(iter(trace))
-            if elem != 'F':
-                raise ValueError(f'Trace contains first element "{elem}"')
-            func_num = int.from_bytes(bs, "little")
+            elem = next(iter(trace))
+            if elem.letter != 'F':
+                raise ValueError(f'Trace contains first element "{elem.letter}"')
+            func_num = int.from_bytes(elem.bs, "little")
             func_name = Util.get_name(cursor, func_num)
             log.debug('Starting with function "%s"', func_name)
 
+        # start_state, simulation manager
         simgr = self.p.factory.simulation_manager(self.start_state(func_name))
 
         debug = log.isEnabledFor(logging.DEBUG)
 
         # do the actual tracing
-        for (elem, bs) in trace:
-            if elem == 'T':
+        for elem in trace:
+            if elem.letter == 'T':
                 find = [self.if_addr]
                 avoid = [self.else_addr, self.wrote_int_addr, self.return_addr, self.fun_call_addr]
-            elif elem == 'N':
+            elif elem.letter == 'N':
                 find = [self.else_addr]
                 avoid = [self.if_addr, self.wrote_int_addr, self.return_addr, self.fun_call_addr]
-            elif elem == 'R':
+            elif elem.letter == 'R':
                 find = [self.return_addr]
                 avoid = [self.if_addr, self.else_addr, self.wrote_int_addr, self.fun_call_addr]
-            elif elem == 'F':
-                if bs == b'':
+            elif elem.letter == 'F':
+                if elem.bs == b'':
                     # There is no func with num 0, that simply marks the end of the trace
                     return (simgr, simgr.found[0])
                 find = [self.fun_call_addr]
                 avoid = [self.if_addr, self.else_addr, self.wrote_int_addr, self.return_addr]
-            elif elem == 'D':
+            elif elem.letter == 'D':
                 find = [self.wrote_int_addr]
                 avoid = [self.else_addr, self.if_addr, self.return_addr, self.fun_call_addr]
             else:
-                raise ValueError(f'Trace contains unsupported element "{elem}"')
+                raise ValueError(f'Trace contains unsupported element "{elem.letter}"')
 
             try:
                 # step once to be sure that we don't stay in the current state
@@ -201,8 +202,8 @@ class SourceTraceReplayer:
             while len(simgr.active) != 0:
                 simgr.explore(find=find, avoid=avoid, avoid_priority=True)
                 if simgr.found == []:
-                    if simgr.unconstrained != [] and elem == 'F' and cursor:
-                        fun_num = int.from_bytes(bs, "little")
+                    if simgr.unconstrained != [] and elem.letter == 'F' and cursor:
+                        fun_num = int.from_bytes(elem.bs, "little")
                         fun_name = Util.get_name(cursor, fun_num)
                         fun_addr = self.addr(fun_name)
                         for ustate in simgr.unconstrained:
@@ -210,7 +211,7 @@ class SourceTraceReplayer:
                         log.debug("State was unconstrained, so constrained to the address of the next function.")
                         simgr.move(from_stash='unconstrained', to_stash='active')
                     else:
-                        log.error("Could not find %s at all in simgr %s", elem, simgr)
+                        log.error("Could not find %s at all in simgr %s", elem.letter, simgr)
                         return (simgr, state)
 
             if len(simgr.found) != 1:
@@ -240,28 +241,28 @@ class SourceTraceReplayer:
                 else:
                     break
 
-            if elem == 'D':
+            if elem.letter == 'D':
                 # add the constrain for the int
-                trace_int = int.from_bytes(bs, "little")
+                trace_int = int.from_bytes(elem.bs, "little")
                 for state in simgr.found:
                     mem_int = state.mem[self.int_addr].int.resolved
                     state.solver.add(mem_int == trace_int)
-            elif elem == 'F':
-                fun_num = int.from_bytes(bs, "little")
+            elif elem.letter == 'F':
+                fun_num = int.from_bytes(elem.bs, "little")
                 for state in simgr.found:
                     mem_num = state.mem[self.fun_num_addr].int.resolved
                     state.solver.add(mem_num == fun_num)
 
             if debug:
-                if bs == b'':
-                    log.debug(f"{elem}")
+                if elem.bs == b'':
+                    log.debug(f"{elem.letter}")
                 else:
-                    num = int.from_bytes(bs, "little")
-                    if elem == 'F' and cursor:
+                    num = int.from_bytes(elem.bs, "little")
+                    if elem.letter == 'F' and cursor:
                         name = Util.get_name(cursor, num)
-                        log.debug(f"{elem}{num:x} {name}")
+                        log.debug(f"{elem.letter}{num:x} {name}")
                     else:
-                        log.debug(f"{elem}{num:x}")
+                        log.debug(f"{elem.letter}{num:x}")
 
             # avoid all states not in found
             simgr.drop(stash="avoid")

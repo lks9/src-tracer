@@ -4,6 +4,7 @@ import logging
 import sys
 import sqlite3
 import os
+import argparse
 
 from src_tracer.retrace import SourceTraceReplayer
 from src_tracer.trace import Trace
@@ -22,37 +23,50 @@ logging.getLogger("angr.engines.successors").setLevel(logging.CRITICAL)
 # set debug level for retracing
 logging.getLogger("src_tracer.retrace").setLevel(logging.DEBUG)
 
-if len(sys.argv) == 3:
-    binary_name = sys.argv[1]
-    func_name = None
-    trace_file = sys.argv[2]
-    database_path = os.path.dirname(trace_file)
-elif len(sys.argv) == 5:
-    binary_name = sys.argv[1]
-    func_name = sys.argv[2]
-    trace_file = sys.argv[3]
-    database_path = sys.argv[4]
-else:
-    usage = f"Usage: python3 -i {sys.argv[0]} <binary_name> <trace_file>"
-    raise Exception(usage)
-
-trace = Trace.from_file(trace_file)
+# arguments
+ap = argparse.ArgumentParser()
+ap.add_argument("binary_name",
+                help="name of the retrace binary")
+ap.add_argument("trace_file",
+                help="file containing the trace")
+ap.add_argument("--seek", type=int, default=0,
+                help="skip bytes in the beginning of the tracefile")
+ap.add_argument("--count", type=int, default=-1,
+                help="stop after reading count bytes from the trace")
+ap.add_argument("--assertions", action='store_true',
+                help="print assertion check results after retracing finished")
+arggroup = ap.add_mutually_exclusive_group()
+arggroup.add_argument("--database",
+                      help="path to the function database")
+arggroup.add_argument("--fname",
+                      help="don't use the database and start tracing with function fname")
+args = ap.parse_args()
 
 # create connection to database
-try:
-    connection = sqlite3.connect(os.path.join(database_path, 'cflow_functions.db'))
-except sqlite3.OperationalError:
-    error = "the given path is not correct, make sure the dir exists beforehand"
-    raise Exception(error)
-cursor = connection.cursor()
+if args.fname is None:
+    if args.database is None:
+        database_path = os.path.dirname(args.trace_file)
+        database = os.path.join(database_path, 'cflow_functions.db')
+    else:
+        database = args.database
+    try:
+        connection = sqlite3.connect(database)
+    except sqlite3.OperationalError:
+        error = f"Could not open database from {database}"
+        raise Exception(error)
+    cursor = connection.cursor()
+else:
+    cursor = None
 
-source_tracer = SourceTraceReplayer(binary_name, auto_load_libs=False, use_sim_procedures=False)
-(simgr, state) = source_tracer.follow_trace(trace, func_name, cursor)
+# retracing
+trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count)
 
-res = source_tracer.check_all_assertions(state)
+source_tracer = SourceTraceReplayer(args.binary_name, auto_load_libs=False)
+(simgr, state) = source_tracer.follow_trace(trace, args.fname, cursor)
 
-print()
-print(f"Final assertion check result: {res.name}")
-print()
-cursor.close()
-connection.close()
+# assertion checks
+if args.assertions:
+    res = source_tracer.check_all_assertions(state)
+    print()
+    print(f"Final assertion check result: {res.name}")
+    print()
