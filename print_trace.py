@@ -18,11 +18,13 @@ ap.add_argument("trace_file",
 ap.add_argument("--seek", type=int, default=0,
                 help="skip bytes in the beginning of the tracefile")
 ap.add_argument("--count", type=int, default=-1,
-                help="stop after reading count bytes from the trace")
+                help="read count bytes from the trace (default: read all)")
+ap.add_argument("--count-elems", type=int, default=1,
+                help="read extra elems after count (default: 1)")
 ap.add_argument("--database",
                 help="path to the function database")
 ap.add_argument("--pretty", type=int, default=5,
-                help="5: pretty (default), 5+4: indent, 5+3: function names, 1 compact, 0: no newline")
+    help="5: pretty (default), 5+4: indent, 5+3: function names, 1 compact, 0: no newline, -1: informative list")
 args = ap.parse_args()
 
 # create connection to database
@@ -40,7 +42,7 @@ if args.pretty in (5,3):
 else:
     cursor = None
 
-trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count)
+trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count, count_elems=args.count_elems)
 
 previous_newline = True
 indent = 0
@@ -82,10 +84,17 @@ def print_extra(s):
     if args.pretty > 1:
         print_newline()
 
+show_pos = args.pretty > 1
+
+if args.pretty == -1:
+    for elem in trace:
+        print(elem)
+    sys.exit()
+
 for elem in trace:
     if elem.letter == 'R':
         indent -= 1
-        print_extra('R')
+        print_extra(elem.pretty(show_pos=show_pos))
     elif elem.bs == b'':
         print_with_count(f"{elem.letter}")
     else:
@@ -95,12 +104,12 @@ for elem in trace:
                 name = Util.get_name(cursor, num)
                 # All upper case letters in the trace are treated as elem,
                 # so we have to print name.lower() instead of name
-                print_extra(f"{elem.letter}{num:x} {name.lower()}")
+                print_extra(elem.pretty(show_pos=show_pos, name=name.lower()))
             else:
-                print_extra(f"{elem.letter}{num:x}")
+                print_extra(elem.pretty(show_pos=show_pos))
             indent += 1
         else:
-            print_extra(f"{elem.letter}{num:x}")
+            print_extra(elem.pretty(show_pos=show_pos))
 
 if not previous_newline:
     print_newline()

@@ -63,11 +63,32 @@ def letter(b, count=0):
 def to_number(bs):
     return int.from_bytes(bs, "little")
 
+
 class TraceElem:
-    def __init__(self, letter, bs, pos=None):
+    def __init__(self, letter, bs, pos=None, ie_pos=None):
         self.letter = letter
         self.bs = bs
         self.pos = pos
+        self.ie_pos = ie_pos
+
+    def __str__(self):
+        return self.pretty(show_ie_pos=True)
+
+    def pretty(self, show_pos=True, show_ie_pos=False, name=None):
+        res = f"{self.letter}"
+        if self.bs != b'':
+            num = int.from_bytes(self.bs, "little")
+            res += f"{num:x}"
+        if name is not None:
+            res += f" {name}"
+        if self.ie_pos is not None:
+            if show_ie_pos:
+                res += f" --count {self.pos} --count-elems {self.ie_pos}"
+        elif self.pos is not None:
+            if show_pos:
+                res += f" --count {self.pos}"
+        return res
+
 
 class Trace:
 
@@ -89,10 +110,8 @@ class Trace:
         else:
             with open(filename, 'rb') as f:
                 f.seek(seek_bytes)
-                if count_bytes >= 0:
-                    trace_bytes = f.read(count_bytes)
-                else:
-                    trace_bytes = f.read()
+                trace_bytes = f.read()
+                if count_bytes < 0:
                     count_bytes = len(trace_bytes)
             return TraceCompact(trace_bytes, seek_elems=seek_elems, count_bytes=count_bytes, count_elems=count_elems)
 
@@ -152,19 +171,19 @@ class TraceText(Trace):
         """
         Iterate over all elements, ignoring seek and count.
         """
-        for elemnum in re.findall(r"[A-Z][0-9a-z]*", trace_str):
-            if elemnum[1:] == '':
-                # TODO add pos
-                yield TraceElem(elemnum[0], b'')
+        for m in re.finditer(r"[A-Z][0-9a-z]*", trace_str):
+            letter = trace_str[m.start():m.start()+1]
+            hexstring = trace_str[m.start()+1:m.end()]
+            if hexstring == '':
+                yield TraceElem(letter, b'', m.start())
             else:
-                hexstring = elemnum[1:]
                 if len(hexstring) % 2 == 1:
                     hexstring = "0" + hexstring
                 # reverse the byte order to save as little endian
                 ba = bytearray.fromhex(hexstring)
                 ba.reverse()
                 bs = bytes(ba)
-                yield TraceElem(elemnum[0], bs)
+                yield TraceElem(letter, bs, m.start())
 
     # overwrite for complexity reasons
     def __str__(self):
@@ -213,6 +232,7 @@ class TraceCompact(Trace):
         after_count = [[], [], [], [], [], [], [], []]
         i = 0
         last_pos = -1
+        ie_pos = 0
         while i < len(trace):
             pos = i
             b = trace[i]
@@ -221,11 +241,13 @@ class TraceCompact(Trace):
             if b & TEST_IE == PUT_IE:
                 for count in range(7):
                     for elem in after_count[count]:
+                        ie_pos = 1
                         yield elem
                         last_pos = elem.pos
                     after_count[count] = []
                     # yield 'T'/'N'
-                    yield TraceElem(letter(b, count), b'', last_pos)
+                    ie_pos += 1
+                    yield TraceElem(letter(b, count), b'', last_pos, ie_pos)
                 continue
 
             len_bits = b & TEST_LEN

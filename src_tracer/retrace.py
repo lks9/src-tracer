@@ -254,15 +254,12 @@ class SourceTraceReplayer:
                     state.solver.add(mem_num == fun_num)
 
             if debug:
-                if elem.bs == b'':
-                    log.debug(f"{elem.letter}")
-                else:
+                name = None
+                if not elem.bs == b'':
                     num = int.from_bytes(elem.bs, "little")
                     if elem.letter == 'F' and cursor:
                         name = Util.get_name(cursor, num)
-                        log.debug(f"{elem.letter}{num:x} {name}")
-                    else:
-                        log.debug(f"{elem.letter}{num:x}")
+                log.debug(elem.pretty(name=name))
 
             # avoid all states not in found
             simgr.drop(stash="avoid")

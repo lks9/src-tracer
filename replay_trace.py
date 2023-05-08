@@ -32,7 +32,9 @@ ap.add_argument("trace_file",
 ap.add_argument("--seek", type=int, default=0,
                 help="skip bytes in the beginning of the tracefile")
 ap.add_argument("--count", type=int, default=-1,
-                help="stop after reading count bytes from the trace")
+                help="read count bytes from the trace (default: read all)")
+ap.add_argument("--count-elems", type=int, default=1,
+                help="read extra elems after count (default: 1)")
 ap.add_argument("--assertions", action='store_true',
                 help="print assertion check results after retracing finished")
 arggroup = ap.add_mutually_exclusive_group()
@@ -58,7 +60,7 @@ else:
     cursor = None
 
 # retracing
-trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count)
+trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count, count_elems=args.count_elems)
 
 source_tracer = SourceTraceReplayer(args.binary_name, auto_load_libs=False)
 (simgr, state) = source_tracer.follow_trace(trace, args.fname, cursor)
