@@ -4,7 +4,7 @@ This is a draft of a control flow tracer based on source code instrumentation wi
 Instrument your software with `instrumenter.py`. When running instrumented software, the trace is written into a file.
 The format is basically one character (plus an optional number)
 for each source code block on the trace.
-For accurate retracing, `replay_trace.py` uses symbolic execution.
+For accurate retracing, `retrace.py` uses symbolic execution.
 
 ## Which Software to Trace
 
@@ -121,9 +121,9 @@ Moreover, a sequence of `T` and `N` can be stored more efficient in the binary t
   ```
 * Retrace it (use `python -i` to work with the traced `state` in the interactive shell)
   ```
-  python ../replay_trace.py checksum_retrace 2023-04-28-143402-checksum.c.trace
+  python ../retrace.py checksum_retrace 2023-04-28-143402-checksum.c.trace
   echo "F1TTN" > sub.trace.txt
-  python ../replay_trace.py checksum_retrace sub.trace.txt
+  python ../retrace.py checksum_retrace sub.trace.txt
   ```
   The last one just retraces function `checksum`.
 
@@ -234,7 +234,7 @@ in `.config`:
 * Replay trace:
 
   ```bash
-  ${SRC_TRACER_DIR}/replay_trace.py busybox_retrace ~/.src_tracer/echo.trace.txt
+  ${SRC_TRACER_DIR}/retrace.py busybox_retrace ~/.src_tracer/echo.trace.txt
   ```
 
   Retracing took 42 min on my computer.
