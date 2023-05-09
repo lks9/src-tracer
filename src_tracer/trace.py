@@ -93,7 +93,7 @@ class TraceElem:
 class Trace:
 
     @staticmethod
-    def from_file(filename, seek_bytes=0, seek_elems=0, count_bytes=-1, count_elems=0):
+    def from_file(filename, seek_bytes=0, seek_elems=0, count_bytes=-1, count_elems=1):
         """
         Read and and create a trace object from a file.
         If file ends with '.txt', a text trace is assumed, otherwise a compact binary trace.
@@ -106,6 +106,7 @@ class Trace:
                     trace_tail = f.read()
                 else:
                     trace_tail = ""
+                    count_elems = 0
             return TraceText(trace_str, seek_elems=seek_elems, count_elems=count_elems, trace_tail=trace_tail)
         else:
             with open(filename, 'rb') as f:
@@ -113,6 +114,7 @@ class Trace:
                 trace_bytes = f.read()
                 if count_bytes < 0:
                     count_bytes = len(trace_bytes)
+                    count_elems = 0
             return TraceCompact(trace_bytes, seek_elems=seek_elems, count_bytes=count_bytes, count_elems=count_elems)
 
     def __str__(self):

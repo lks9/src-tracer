@@ -3,6 +3,9 @@ import logging
 import claripy
 import angr
 
+from angr.sim_type import parse_signature
+
+
 from .trace import Trace
 from .util import Util
 
@@ -13,7 +16,7 @@ from enum import Enum, auto
 
 class AssertResult(Enum):
     """
-    Basically a lattice with three elements VIOLATED (= False), UNSURE and PASSED (= True).
+    Basically the usual three valued logic VIOLATED (= False), UNSURE and PASSED (= True).
     Extra element NEVER_PASSED is neutral to all operations.
     """
 
@@ -133,19 +136,16 @@ class SourceTraceReplayer:
         if self.is_retrace_addr:
             state.mem[self.is_retrace_addr].bool = True
 
-    def start_state(self, func_name: str):
+    def start_state(self, func_name: str, **kwargs):
         addr = self.p.loader.main_object.get_symbol(func_name).rebased_addr
-        state = self.p.factory.call_state(addr=addr)
+        # prototype is just a placeholder to silence a warning in angr
+        prototype = parse_signature("void *f()")
+        state = self.p.factory.call_state(addr=addr, prototype=prototype, **kwargs)
         self.make_globals_symbolic(state)
-        # optimize a bit
-        state.options["COPY_STATES"] = False
-        state.options["ALL_FILES_EXIST"] = False
-        state.options["ANY_FILE_MIGHT_EXIST"] = True
-        #state.options["LAZY_SOLVES"] = True
-        #state.options["CONSERVATIVE_READ_STRATEGY"] = True
         return state
 
-    def follow_trace(self, trace: Trace, func_name: str, cursor=None):
+    def follow_trace(self, trace: Trace, func_name: str, cursor=None, merging=False, dropping=False,
+                     merge_after=1, **kwargs):
         # function name not given?
         if not func_name:
             elem = next(iter(trace))
@@ -156,9 +156,11 @@ class SourceTraceReplayer:
             log.debug('Starting with function "%s"', func_name)
 
         # start_state, simulation manager
-        simgr = self.p.factory.simulation_manager(self.start_state(func_name))
+        simgr = self.p.factory.simulation_manager(self.start_state(func_name, **kwargs))
 
         debug = log.isEnabledFor(logging.DEBUG)
+
+        merge_round = merge_after
 
         # do the actual tracing
         for elem in trace:
@@ -211,11 +213,26 @@ class SourceTraceReplayer:
                         log.debug("State was unconstrained, so constrained to the address of the next function.")
                         simgr.move(from_stash='unconstrained', to_stash='active')
                     else:
-                        log.error("Could not find %s at all in simgr %s", elem.letter, simgr)
+                        log.warning("Could not find %s at all in simgr %s", elem.letter, simgr)
                         return (simgr, state)
 
             if len(simgr.found) != 1:
                 log.warning("Found %i canditates in simgr %s", len(simgr.found), simgr)
+                if simgr.found == []:
+                    return simgr, state
+                if merging:
+                    merge_round -= 1
+                    if merge_round == 0:
+                        log.debug(f"Merging after {merge_after} elements")
+                        simgr.merge(stash='found')
+                        merge_round = merge_after
+                elif dropping:
+                    merge_round -= 1
+                    if merge_round == 0:
+                        log.debug(f"Dropping after {merge_after} elements")
+                        state = simgr.found[0]
+                        simgr.drop(stash='found', filter_func=lambda s: s != state)
+                        merge_round = merge_after
 
             # handle asserts
             while True:
