@@ -1,14 +1,32 @@
 // src_tracer.h
 
-// This file comes without any include.
-// Reason: It works on pre-processed files and for example "#include <stdbool.h>"
-// results in double included files!
+// This file comes without any standard library include.
+// Reason: It works on pre-processed files.
+// A "#include <stdbool.h>" would result in double included files!
 
+// editable constant definitions
+#ifndef TRACE_BUF_SIZE
+#define TRACE_BUF_SIZE 4096
+#endif
+#ifndef TRACE_USE_POSIX_WRITE
+// if TRACE_USE_POSIX_WRITE is not set we use the syscall directly
+#endif
+#ifndef EFFICIENT_TEXT_TRACE
+// well it's not for efficiency, more for debugging
+#endif
+
+// other constants
+#define PROP_FALSE          0
+#define PROP_TRUE           1
+#define PROP_DEFAULT_VALUE  2
+
+
+// and here comes the rest...
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// bool is available in C++ but not in C without include stdbool
+// bool is available in C++ but not in C without (see above) include stdbool
 #ifndef __cplusplus
 #define bool _Bool
 #endif
@@ -21,8 +39,7 @@ extern void _trace_close(void);
 extern unsigned char _trace_if_byte;
 extern int _trace_if_count;
 
-#define _TRACE_BUF_SIZE     4096
-extern unsigned char _trace_buf[_TRACE_BUF_SIZE];
+extern unsigned char _trace_buf[TRACE_BUF_SIZE];
 extern int _trace_buf_pos;
 
 #define _TRACE_TEST_IE            0b10000000
@@ -47,16 +64,20 @@ extern int _trace_buf_pos;
 #define _TRACE_PUT(c) ;{ \
     _trace_buf[_trace_buf_pos] = (c); \
     _trace_buf_pos += 1; \
-    if (_trace_buf_pos == _TRACE_BUF_SIZE) { \
-        _trace_write(_trace_buf, _TRACE_BUF_SIZE); \
+    if (_trace_buf_pos == TRACE_BUF_SIZE) { \
+        _trace_write(_trace_buf, TRACE_BUF_SIZE); \
         _trace_buf_pos = 0; \
     } \
 }
 
+#ifdef EFFICIENT_TEXT_TRACE
+#define _TRACE_PUT_TEXT     _TRACE_PUT
+#else
 #define _TRACE_PUT_TEXT(c) ;{ \
     unsigned char buf[1] = { (c) }; \
     _trace_write(buf, 1); \
 }
+#endif
 
 #define _TRACE_IE(if_true) ;{ \
     _trace_if_byte |= (if_true) << _trace_if_count; \
@@ -131,11 +152,9 @@ extern void _retrace_else(void);
 extern bool _retrace_condition(bool cond);
 extern void _retrace_fun_call(void);
 extern void _retrace_return(void);
-extern void _retrace_assert(char label[], bool a);
 extern unsigned int _retrace_num(unsigned int num);
 
 extern int _retrace_fun_num;
-extern char _retrace_assert_label[256];
 
 #define _RETRACE_FUN_CALL(num) ;{ \
     _retrace_fun_num = (num); \
@@ -186,7 +205,10 @@ extern bool _is_retrace_condition(bool cond);
 #define _TRACE_OPEN(fname)  ;_trace_open((fname));
 #define _TRACE_CLOSE        ;_trace_close();
 
+// ghost code is unsupported for the combined mode!
+
 #elif defined _TRACE_MODE
+/* trace mode */
 
 #define _IF                 _TRACE_IE(1)
 #define _ELSE               _TRACE_IE(0)
@@ -208,9 +230,10 @@ extern bool _is_retrace_condition(bool cond);
 #define _TRACE_OPEN(fname)  ;_trace_open((fname));
 #define _TRACE_CLOSE        ;_trace_close();
 
-#define _RETRACE_ASSERT(l,a)  /* nothing here */
+#define GHOST(code)         /* nothing here */
 
-#elif defined _TEXT_TRACE_MODE /* TODO, use _TRACE_MODE instead */
+#elif defined _TEXT_TRACE_MODE
+/* text trace mode */
 
 #define _IF                 ;_TRACE_PUT_TEXT('T');
 #define _ELSE               ;_TRACE_PUT_TEXT('N');
@@ -232,9 +255,10 @@ extern bool _is_retrace_condition(bool cond);
 #define _TRACE_OPEN(fname)  ;_trace_open(fname ".txt");
 #define _TRACE_CLOSE        ;_trace_close();
 
-#define _RETRACE_ASSERT(l,a)  /* nothing here */
+#define GHOST(code)         /* nothing here */
 
 #elif defined _RETRACE_MODE
+/* retrace mode */
 
 #define _IF                 ;_retrace_if();
 #define _ELSE               ;_retrace_else();
@@ -256,8 +280,11 @@ extern bool _is_retrace_condition(bool cond);
 #define _TRACE_OPEN(fname)  /* nothing here */
 #define _TRACE_CLOSE        /* nothing here */
 
-#define _RETRACE_ASSERT(label, a) \
-                            _retrace_assert(label, a);
+// no { } for ghost code!
+#define GHOST(code) \
+    _retrace_ghost_start(); \
+    code; \
+    _retrace_ghost_end();
 
 #else // neither _TRACE_MODE nor _RETRACE_MODE
 
@@ -276,7 +303,7 @@ extern bool _is_retrace_condition(bool cond);
 #define _TRACE_OPEN(fname)  /* nothing here */
 #define _TRACE_CLOSE        /* nothing here */
 
-#define _RETRACE_ASSERT(l,a)  /* nothing here */
+#define GHOST(code)         /* nothing here */
 
 #endif // _TRACE_MODE or _RETRACE_MODE
 

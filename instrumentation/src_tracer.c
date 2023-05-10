@@ -1,17 +1,25 @@
 #include "src_tracer.h"
+#include "src_tracer_ghost.h"
 
 #include <stdbool.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
 #include <stdio.h>
 
+#ifndef O_LARGEFILE
+#define O_LARGEFILE 0
+#endif
+
 int _trace_fd = 0;
 
 unsigned char _trace_if_byte = _TRACE_SET_IE;
 int _trace_if_count = 0;
 
+#ifndef _TRACE_USE_POSIX_WRITE
 // taken from musl (arch/x86_64/syscall_arch.h)
 static __inline long __syscall3(long n, long a1, long a2, long a3)
 {
@@ -20,21 +28,22 @@ static __inline long __syscall3(long n, long a1, long a2, long a3)
 						  "d"(a3) : "rcx", "r11", "memory");
 	return ret;
 }
-#define SYS_read				0
 #define SYS_write				1
-#define SYS_open				2
-#define SYS_close				3
-#define O_LARGEFILE 0100000
 // end musl code
+#endif
 
-unsigned char _trace_buf[_TRACE_BUF_SIZE];
+unsigned char _trace_buf[TRACE_BUF_SIZE];
 int _trace_buf_pos = 0;
 
 void _trace_write(const void *buf, int count) {
     const char *ptr = buf;
     while (_trace_fd > 0) {
-        // Use __syscall3 for efficiency and to avoid recursive calls
+#ifdef _TRACE_USE_POSIX_WRITE
+        ssize_t written = write(_trace_fd, ptr, count);
+#else
+        // Use __syscall3 to avoid recursive calls
         long written = __syscall3(SYS_write, (long)_trace_fd, (long)ptr, (long)count);
+#endif
         if (written < 0) {
             // some write error occured
             // abort trace recording
@@ -141,11 +150,7 @@ int _text_trace_switch(int num, const char *num_str) {
 
 // for retracing
 int _retrace_fun_num;
-bool _retrace_assert_values[256];
-char _retrace_assert_label[256];
 
-// only retrace.py should write in here
-int _retrace_assert_index;
 
 void _retrace_if(void) {}
 
@@ -164,8 +169,6 @@ void _retrace_fun_call(void) {}
 
 void _retrace_return(void) {}
 
-void _retrace_assert_passed(void) {};
-
 unsigned int _retrace_int;
 
 void _retrace_wrote_int(void) {}
@@ -176,16 +179,28 @@ unsigned int _retrace_num(unsigned int num) {
     return num;
 }
 
-void _retrace_assert(char label[], bool a) {
-    int i;
-    for (i = 0; label[i] != '\0'; i++) {
-        _retrace_assert_label[i] = label[i];
-    }
-    _retrace_assert_label[i] = '\0';
-    _retrace_assert_passed();
-    // Save the negation of the result (makes initialization simpler)
-    _retrace_assert_values[_retrace_assert_index] = !a;
-}
+// ghost code
+void _retrace_ghost_start(void) {}
+void _retrace_ghost_end(void) {}
+
+char *_retrace_assert_names[ASSERT_BUF_SIZE];
+bool  _retrace_asserts[ASSERT_BUF_SIZE];
+int   _retrace_assert_idx;
+void  _retrace_assert_passed(void) {}
+
+char *_retrace_assume_name;
+bool  _retrace_assume;
+void  _retrace_assume_passed(void) {}
+
+void _retrace_prop_start(void) {}
+bool _retrace_prop_is_assert;
+bool _retrace_prop_is_assume;
+void _retrace_prop_passed(void) {}
+
+char *_retrace_dump_names[GHOST_DUMP_BUF_SIZE];
+void *_retrace_dumps[GHOST_DUMP_BUF_SIZE];
+int   _retrace_dump_idx;
+void  _retrace_dump_passed(void) {}
 
 // for both
 bool _is_retrace_mode = false;

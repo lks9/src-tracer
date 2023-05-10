@@ -30,7 +30,9 @@ ap.add_argument("--count", type=int, default=-1, metavar="N",
                 help="read N bytes from the trace (default: read all)")
 ap.add_argument("--count-elems", type=int, default=1, metavar="N",
                 help="read N elems extra after count (default: 1)")
-ap.add_argument("--assertions", action='store_true',
+ap.add_argument("--assertions", nargs="*",
+                help="print assertion check results after retracing finished")
+ap.add_argument("--assume", nargs="*",
                 help="print assertion check results after retracing finished")
 arggroup = ap.add_mutually_exclusive_group()
 arggroup.add_argument("--database",
@@ -41,11 +43,8 @@ ap.add_argument("--add-options", nargs="*", default=[],
                 help="list of angr state options to add")
 ap.add_argument("--remove-options", nargs="*", default=[],
                 help="list of angr state options to remove")
-group2 = ap.add_mutually_exclusive_group()
-group2.add_argument("--merge", type=int, metavar="N",
-                    help="merge states after reading N elements with multiple found")
-group2.add_argument("--drop", type=int, metavar="N",
-                    help="merge states after reading N elements with multiple found")
+ap.add_argument("--merge", action='store_true',
+                help="merge states whenever possible")
 args = ap.parse_args()
 
 # create connection to database
@@ -99,14 +98,26 @@ elif args.drop is not None:
     dropping = True
     merge_after = args.drop
 
+if args.assertions:
+    assertions = args.assertions
+else:
+    assertions = []
+
+if args.assume:
+    assume = args.assume
+else:
+    assume = []
+
 trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count, count_elems=args.count_elems)
 source_tracer = SourceTraceReplayer(args.binary_name, auto_load_libs=False)
 (simgr, state) = source_tracer.follow_trace(trace, args.fname, cursor, add_options=add, remove_options=remove,
-                                            merging=merging, dropping=dropping, merge_after=merge_after)
+                                            merging=args.merge, assertions=assertions, assumptions=assume)
 
 # assertion checks
-if args.assertions:
-    res = source_tracer.check_all_assertions(state)
-    print()
-    print(f"Final assertion check result: {res.name}")
-    print()
+if args.assertions != [] or args.assume != []:
+    for state in simgr.deadended:
+        print()
+        res = source_tracer.check_all_assertions(state)
+        print()
+        print(f"Final assertion check result: {res.name}")
+        print()
