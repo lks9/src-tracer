@@ -25,6 +25,8 @@ ap.add_argument("--database",
                 help="path to the function database")
 ap.add_argument("--pretty", type=int, default=5,
     help="5: pretty (default), 5+4: indent, 5+3: function names, 1 compact, 0: no newline, -1: informative list")
+ap.add_argument("--show-pos", action='store_true',
+                help="for each element show its count offset in the trace")
 args = ap.parse_args()
 
 # create connection to database
@@ -41,6 +43,10 @@ if args.pretty in (5,3):
     cursor = connection.cursor()
 else:
     cursor = None
+
+if args.pretty in (0,1) and args.show_pos:
+    error = "--show_pos is only available for pretty > 1"
+    raise Exception(error)
 
 trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count, count_elems=args.count_elems)
 
@@ -84,8 +90,6 @@ def print_extra(s):
     if args.pretty > 1:
         print_newline()
 
-show_pos = args.pretty > 1
-
 if args.pretty == -1:
     for elem in trace:
         print(elem)
@@ -94,7 +98,7 @@ if args.pretty == -1:
 for elem in trace:
     if elem.letter == 'R':
         indent -= 1
-        print_extra(elem.pretty(show_pos=show_pos))
+        print_extra(elem.pretty(show_pos=args.show_pos))
     elif elem.bs == b'':
         print_with_count(f"{elem.letter}")
     else:
@@ -104,12 +108,12 @@ for elem in trace:
                 name = Util.get_name(cursor, num)
                 # All upper case letters in the trace are treated as elem,
                 # so we have to print name.lower() instead of name
-                print_extra(elem.pretty(show_pos=show_pos, name=name.lower()))
+                print_extra(elem.pretty(show_pos=args.show_pos, name=name.lower()))
             else:
-                print_extra(elem.pretty(show_pos=show_pos))
+                print_extra(elem.pretty(show_pos=args.show_pos))
             indent += 1
         else:
-            print_extra(elem.pretty(show_pos=show_pos))
+            print_extra(elem.pretty(show_pos=args.show_pos))
 
 if not previous_newline:
     print_newline()
