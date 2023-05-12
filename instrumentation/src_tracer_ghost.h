@@ -1,7 +1,8 @@
 // src_tracer_ghost.h
 
 // This file does not have restrictions like src_trace.h
-// so we could savely use include here.
+// so we can savely use include here.
+#include <stdbool.h>
 
 // editable constant definitions
 #ifndef ASSERT_BUF_SIZE
@@ -28,6 +29,27 @@
 //
 // etc.
 
+#define GHOST(code) \
+    _GHOST_NONREC_(code, __COUNTER__)
+
+#define _GHOST_NONREC_(code, id) \
+    _GHOST_NONREC(code, id)
+
+// No { } for ghost code (local variable scope)!
+// But we don't want to evaluate ghost code recursively.
+// Therefore, we use goto :'(
+#define _GHOST_NONREC(code, id) \
+    _GHOST( \
+        if(_retrace_in_ghost) { \
+            goto end_ghost_##id; \
+        } \
+        _retrace_in_ghost = true; \
+        _retrace_ghost_start(); \
+        code; \
+        _retrace_ghost_end(); \
+        _retrace_in_ghost = false; \
+    end_ghost_##id: ; \
+    )
 
 // check assertions in retrace mode
 
@@ -81,6 +103,7 @@
 // extern variables and functions
 extern void _retrace_ghost_start(void);
 extern void _retrace_ghost_end(void);
+extern bool _retrace_in_ghost;
 
 extern char *_retrace_assert_names[ASSERT_BUF_SIZE];
 extern bool  _retrace_asserts[ASSERT_BUF_SIZE];

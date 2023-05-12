@@ -125,6 +125,16 @@ extern int _trace_buf_pos;
 // Shift twice, otherwise we might run into undefined behavior!
 #define NIBBLE_COUNT(n,c)   (((n) >> (c)*3 >> (c)) != 0)
 
+#ifdef EFFICIENT_TEXT_TRACE
+#define _TRACE_NUM_TEXT(type, num) ;{ \
+    int count; \
+    _TRACE_PUT(type); \
+    for (count = 0; NIBBLE_COUNT((num), count); count++) {}  \
+    for (int i = count-1; i >= 0; i--) { \
+        _TRACE_PUT(NIBBLE_TO_HEX((num), i)); \
+    } \
+}
+#else
 #define _TRACE_NUM_TEXT(type, num) ;{ \
     unsigned char buf[18]; \
     int count; \
@@ -135,6 +145,7 @@ extern int _trace_buf_pos;
     } \
     _trace_write(buf, 1+count); \
 }
+#endif
 
 #define _TRACE_RETURN() \
     _TRACE_PUT(_TRACE_SET_RETURN | _trace_if_count)
@@ -230,7 +241,7 @@ extern bool _is_retrace_condition(bool cond);
 #define _TRACE_OPEN(fname)  ;_trace_open((fname));
 #define _TRACE_CLOSE        ;_trace_close();
 
-#define GHOST(code)         /* nothing here */
+#define _GHOST(code)        /* nothing here */
 
 #elif defined _TEXT_TRACE_MODE
 /* text trace mode */
@@ -255,7 +266,7 @@ extern bool _is_retrace_condition(bool cond);
 #define _TRACE_OPEN(fname)  ;_trace_open(fname ".txt");
 #define _TRACE_CLOSE        ;_trace_close();
 
-#define GHOST(code)         /* nothing here */
+#define _GHOST(code)        /* nothing here */
 
 #elif defined _RETRACE_MODE
 /* retrace mode */
@@ -280,11 +291,8 @@ extern bool _is_retrace_condition(bool cond);
 #define _TRACE_OPEN(fname)  /* nothing here */
 #define _TRACE_CLOSE        /* nothing here */
 
-// no { } for ghost code!
-#define GHOST(code) \
-    _retrace_ghost_start(); \
-    code; \
-    _retrace_ghost_end();
+#define _GHOST(code)        code
+
 
 #else // neither _TRACE_MODE nor _RETRACE_MODE
 
@@ -303,7 +311,7 @@ extern bool _is_retrace_condition(bool cond);
 #define _TRACE_OPEN(fname)  /* nothing here */
 #define _TRACE_CLOSE        /* nothing here */
 
-#define GHOST(code)         /* nothing here */
+#define _GHOST(code)        /* nothing here */
 
 #endif // _TRACE_MODE or _RETRACE_MODE
 

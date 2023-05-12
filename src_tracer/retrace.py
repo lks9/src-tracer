@@ -81,6 +81,7 @@ class SourceTraceReplayer:
         # ghost code
         self.ghost_start_addr = self.addr("_retrace_ghost_start")
         self.ghost_end_addr = self.addr("_retrace_ghost_end")
+        self.in_ghost_addr = self.addr("_retrace_in_ghost")
 
         self.assert_names_addr = self.addr("_retrace_assert_names")
         self.asserts_addr = self.addr("_retrace_asserts")
@@ -154,6 +155,8 @@ class SourceTraceReplayer:
             state.mem[self.is_retrace_addr].bool = True
         if self.assert_idx_addr:
             state.mem[self.assert_idx_addr].int = 0
+        if self.in_ghost_addr:
+            state.mem[self.in_ghost_addr].bool = False
 
     def start_state(self, func_name: str, **kwargs):
         addr = self.p.loader.main_object.get_symbol(func_name).rebased_addr
