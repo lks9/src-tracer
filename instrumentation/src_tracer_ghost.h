@@ -42,10 +42,10 @@
     _GHOST( \
         bool _retrace_temp_##id = _retrace_in_ghost; \
         _retrace_in_ghost = true; \
-        _retrace_ghost_start(); \
         if(_retrace_temp_##id) { \
             goto end_ghost_##id; \
         } \
+        _retrace_ghost_start(); \
         code; \
         _retrace_ghost_end(); \
         _retrace_in_ghost = false; \
