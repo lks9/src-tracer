@@ -36,6 +36,7 @@ extern int _trace_if_count;
 
 extern unsigned char _trace_buf[TRACE_BUF_SIZE];
 extern char *_trace_ptr;
+extern int _trace_ptr_count;
 extern int _trace_buf_pos;
 
 #define _TRACE_TEST_IE            0b10000000
@@ -59,7 +60,7 @@ extern int _trace_buf_pos;
 
 #define _TRACE_PUT(c) ;{ \
     _trace_ptr[0] = (c); \
-    _trace_ptr = &_trace_ptr[1]; \
+    _trace_ptr = &_trace_ptr[_trace_ptr_count]; \
 }
 
 #define _TRACE_PUT_TEXT     _TRACE_PUT

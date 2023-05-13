@@ -46,9 +46,23 @@ static __inline long __syscall3(long n, long a1, long a2, long a3)
 						  "d"(a3) : "rcx", "r11", "memory");
 	return ret;
 }
+
+static __inline long __syscall6(long n, long a1, long a2, long a3, long a4, long a5, long a6)
+{
+	unsigned long ret;
+	register long r10 __asm__("r10") = a4;
+	register long r8 __asm__("r8") = a5;
+	register long r9 __asm__("r9") = a6;
+	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
+						  "d"(a3), "r"(r10), "r"(r8), "r"(r9) : "rcx", "r11", "memory");
+	return ret;
+}
+
 #define SYS_write				1
+#define SYS_mmap				9
 #define SYS_mprotect			10
 #define SYS_munmap				11
+#define SYS_ftruncate			77
 // end musl code
 #endif
 
@@ -56,38 +70,19 @@ static char dummy;
 char *_trace_ptr = &dummy;
 int _trace_ptr_count = 0;
 static void *trace_page_ptr;
+static size_t trace_file_offset = 0;
 static void trace_abort(void);
 
-static int trace_write(const void *buf, int count) {
-    const char *ptr = buf;
-    while (_trace_fd > 0) {
-        // Use __syscall3 to avoid recursive calls
-        long written = __syscall3(SYS_write, (long)_trace_fd, (long)ptr, (long)count);
-        if (written < 0) {
-            // some write error occured
-            // abort trace recording
-            trace_abort();
-            return -1;
-        } else if (written == count) {
-            return 0;
-        }
-        ptr = &ptr[written];
-        count -= written;
-    }
-    return 0;
-}
-
 static void segv_handler(int sig, siginfo_t *si, void *unused) {
-    if (trace_write(trace_page_ptr, 4096)) {
-        return;
-    }
-    if (__syscall2(SYS_munmap, (long)trace_page_ptr, 4096l)) {
+    if (__syscall2(SYS_munmap, (long)trace_page_ptr, 8*4096l)) {
         trace_abort();
         return;
     }
-    trace_page_ptr += 4096;
-    if(__syscall3(SYS_mprotect, (long)trace_page_ptr, 4096l, PROT_WRITE) < 0) {
+    trace_page_ptr += 8*4096l;
+    trace_file_offset += 8*4096l;
+    if(__syscall2(SYS_ftruncate, (long)_trace_fd, (long)trace_file_offset) < 0) {
         trace_abort();
+        return;
     }
     return;
 }
@@ -125,24 +120,16 @@ void _trace_open(const char *fname) {
     strftime(timed_fname, 200, fname, gmtime(&now.tv_sec));
     snprintf(nano_fname, 200, timed_fname, now.tv_nsec);
 
-    int lowfd = open(nano_fname, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    int lowfd = open(nano_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
 
-    // reserve memory for the trace buffer
-    trace_page_ptr = mmap(NULL, 1l << 32, PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (trace_page_ptr == MAP_FAILED) {
-        trace_page_ptr = NULL;
-        return;
-    }
-    if (mprotect(trace_page_ptr + 4096, 1l << 32, PROT_NONE) < 0) {
-        return;
-    }
     struct sigaction sa;
     sa.sa_flags = SA_SIGINFO;
     sigemptyset(&sa.sa_mask);
     sa.sa_sigaction = segv_handler;
-    if (sigaction(SIGSEGV, &sa, NULL) < 0) {
-        return;
-    }
+    //if (sigaction(SIGBUS, &sa, NULL) < 0) {
+    //    printf("sigaction\n");
+    //    return;
+    //}
 
     // The posix standard specifies that open always returns the lowest-numbered unused fd.
     // It is possbile that the traced software relies on that behavior and expects a particalur fd number
@@ -151,7 +138,26 @@ void _trace_open(const char *fname) {
     int fd = dup2(lowfd, lowfd + 42);
     close(lowfd);
 
+
+    trace_file_offset = 3374620672l;
+    if(ftruncate(fd, trace_file_offset) < 0) {
+        perror("ftruncate");
+        return;
+    }
+    // reserve memory for the trace buffer
+    trace_page_ptr = mmap(NULL, 1l << 32, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (trace_page_ptr == MAP_FAILED) {
+        trace_page_ptr = NULL;
+        perror("zweites mmap");
+        return;
+    }
+    //if (mprotect(trace_page_ptr + 4096, 1l << 32, PROT_NONE) < 0) {
+    //    perror("mprotect");
+    //    return;
+    //}
+
     atexit(_trace_close);
+    printf("alles gut\n");
 
     // now the tracing can start (guarded by _trace_fd > 0)
     _trace_fd = fd;
@@ -178,9 +184,6 @@ void _trace_close(void) {
     if (_trace_if_count != 0) {
         _TRACE_NUM(_TRACE_SET_FUNC, 0);
         _TRACE_PUT(_trace_if_byte);
-    }
-    if (_trace_ptr != &dummy) {
-        trace_write(trace_page_ptr, (void*)_trace_ptr - trace_page_ptr);
     }
     // stop tracing
     trace_abort();
