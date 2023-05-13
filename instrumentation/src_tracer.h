@@ -204,7 +204,7 @@ extern bool _is_retrace_condition(bool cond);
 // non-macro version for switch
 #define _SWITCH(num)        _is_retrace_switch((num))
 // experimental version for switch
-#define _SWITCH_START(id)   ;_Bool _cflow_switch_##id = 1;
+#define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id)      ;if (_cflow_switch_##id) { \
                                 _IS_RETRACE(_RETRACE_NUM(num), _TRACE_NUM(_TRACE_SET_DATA, num)) \
                                 _cflow_switch_##id = 0; \
@@ -230,7 +230,7 @@ extern bool _is_retrace_condition(bool cond);
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num(_TRACE_SET_DATA, (num))
 // experimental version for switch
-#define _SWITCH_START(id)   ;_Bool _cflow_switch_##id = 1;
+#define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id)      ;if (_cflow_switch_##id) { \
                                 _TRACE_NUM(_TRACE_SET_DATA, num) \
                                 _cflow_switch_##id = 0; \
@@ -255,7 +255,7 @@ extern bool _is_retrace_condition(bool cond);
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num_text('D', ((unsigned int)num))
 // experimental version for switch
-#define _SWITCH_START(id)   ;_Bool _cflow_switch_##id = 1;
+#define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id)      ;if (_cflow_switch_##id) { \
                                 _TRACE_NUM_TEXT('D', ((unsigned int)num)); \
                                 _cflow_switch_##id = 0; \
@@ -280,7 +280,7 @@ extern bool _is_retrace_condition(bool cond);
 // non-macro version for switch
 #define _SWITCH(num)        _retrace_num(num)
 // experimental version for switch
-#define _SWITCH_START(id)   ;_Bool _cflow_switch_##id = 1;
+#define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id)      ;if (_cflow_switch_##id) { \
                                 _RETRACE_NUM(num) \
                                 _cflow_switch_##id = 0; \
