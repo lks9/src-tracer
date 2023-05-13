@@ -74,12 +74,12 @@ static size_t trace_file_offset = 0;
 static void trace_abort(void);
 
 static void segv_handler(int sig, siginfo_t *si, void *unused) {
-    if (__syscall2(SYS_munmap, (long)trace_page_ptr, 8*4096l)) {
+    if (__syscall2(SYS_munmap, (long)trace_page_ptr, 4096l)) {
         trace_abort();
         return;
     }
-    trace_page_ptr += 8*4096l;
-    trace_file_offset += 8*4096l;
+    trace_page_ptr += 4096l;
+    trace_file_offset += 4096l;
     if(__syscall2(SYS_ftruncate, (long)_trace_fd, (long)trace_file_offset) < 0) {
         trace_abort();
         return;
@@ -126,10 +126,7 @@ void _trace_open(const char *fname) {
     sa.sa_flags = SA_SIGINFO;
     sigemptyset(&sa.sa_mask);
     sa.sa_sigaction = segv_handler;
-    //if (sigaction(SIGBUS, &sa, NULL) < 0) {
-    //    printf("sigaction\n");
-    //    return;
-    //}
+    sigaction(SIGBUS, &sa, NULL);
 
     // The posix standard specifies that open always returns the lowest-numbered unused fd.
     // It is possbile that the traced software relies on that behavior and expects a particalur fd number
@@ -139,11 +136,8 @@ void _trace_open(const char *fname) {
     close(lowfd);
 
 
-    trace_file_offset = 3374620672l;
-    if(ftruncate(fd, trace_file_offset) < 0) {
-        perror("ftruncate");
-        return;
-    }
+    trace_file_offset = 4096;
+    ftruncate(fd, trace_file_offset);
     // reserve memory for the trace buffer
     trace_page_ptr = mmap(NULL, 1l << 32, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (trace_page_ptr == MAP_FAILED) {
@@ -157,7 +151,6 @@ void _trace_open(const char *fname) {
     //}
 
     atexit(_trace_close);
-    printf("alles gut\n");
 
     // now the tracing can start (guarded by _trace_fd > 0)
     _trace_fd = fd;
