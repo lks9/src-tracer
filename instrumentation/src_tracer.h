@@ -11,9 +11,6 @@
 #ifndef TRACE_USE_POSIX_WRITE
 // if TRACE_USE_POSIX_WRITE is not set we use the syscall directly
 #endif
-#ifndef EFFICIENT_TEXT_TRACE
-// well it's not for efficiency, more for debugging
-#endif
 
 // other constants
 #define PROP_FALSE          0
@@ -31,8 +28,6 @@ extern "C" {
 #define bool _Bool
 #endif
 
-extern void _trace_write(const void* buf, int count);
-
 extern void _trace_open(const char *fname);
 extern void _trace_close(void);
 
@@ -40,6 +35,7 @@ extern unsigned char _trace_if_byte;
 extern int _trace_if_count;
 
 extern unsigned char _trace_buf[TRACE_BUF_SIZE];
+extern char *_trace_ptr;
 extern int _trace_buf_pos;
 
 #define _TRACE_TEST_IE            0b10000000
@@ -62,22 +58,11 @@ extern int _trace_buf_pos;
 #define _TRACE_TEST_IE_COUNT      0b10000111
 
 #define _TRACE_PUT(c) ;{ \
-    _trace_buf[_trace_buf_pos] = (c); \
-    _trace_buf_pos += 1; \
-    if (_trace_buf_pos == TRACE_BUF_SIZE) { \
-        _trace_write(_trace_buf, TRACE_BUF_SIZE); \
-        _trace_buf_pos = 0; \
-    } \
+    _trace_ptr[0] = (c); \
+    _trace_ptr = &_trace_ptr[1]; \
 }
 
-#ifdef EFFICIENT_TEXT_TRACE
 #define _TRACE_PUT_TEXT     _TRACE_PUT
-#else
-#define _TRACE_PUT_TEXT(c) ;{ \
-    unsigned char buf[1] = { (c) }; \
-    _trace_write(buf, 1); \
-}
-#endif
 
 #define _TRACE_IE(if_true) ;{ \
     _trace_if_byte |= (if_true) << _trace_if_count; \
@@ -125,7 +110,6 @@ extern int _trace_buf_pos;
 // Shift twice, otherwise we might run into undefined behavior!
 #define NIBBLE_COUNT(n,c)   (((n) >> (c)*3 >> (c)) != 0)
 
-#ifdef EFFICIENT_TEXT_TRACE
 #define _TRACE_NUM_TEXT(type, num) ;{ \
     int count; \
     _TRACE_PUT(type); \
@@ -134,18 +118,6 @@ extern int _trace_buf_pos;
         _TRACE_PUT(NIBBLE_TO_HEX((num), i)); \
     } \
 }
-#else
-#define _TRACE_NUM_TEXT(type, num) ;{ \
-    unsigned char buf[18]; \
-    int count; \
-    buf[0] = (type); \
-    for (count = 0; NIBBLE_COUNT((num), count); count++) {}  \
-    for (int i = 0; i < count; i++) { \
-        buf[count-i] = NIBBLE_TO_HEX((num), i); \
-    } \
-    _trace_write(buf, 1+count); \
-}
-#endif
 
 #define _TRACE_RETURN() \
     _TRACE_PUT(_TRACE_SET_RETURN | _trace_if_count)

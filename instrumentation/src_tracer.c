@@ -9,6 +9,8 @@
 #include <time.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <sys/mman.h>
+#include <signal.h>
 
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
@@ -21,6 +23,22 @@ int _trace_if_count = 0;
 
 #ifndef _TRACE_USE_POSIX_WRITE
 // taken from musl (arch/x86_64/syscall_arch.h)
+
+static __inline long __syscall1(long n, long a1)
+{
+	unsigned long ret;
+	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1) : "rcx", "r11", "memory");
+	return ret;
+}
+
+static __inline long __syscall2(long n, long a1, long a2)
+{
+	unsigned long ret;
+	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2)
+						  : "rcx", "r11", "memory");
+	return ret;
+}
+
 static __inline long __syscall3(long n, long a1, long a2, long a3)
 {
 	unsigned long ret;
@@ -29,34 +47,49 @@ static __inline long __syscall3(long n, long a1, long a2, long a3)
 	return ret;
 }
 #define SYS_write				1
+#define SYS_mprotect			10
+#define SYS_munmap				11
 // end musl code
 #endif
 
-unsigned char _trace_buf[TRACE_BUF_SIZE];
-int _trace_buf_pos = 0;
+static char dummy;
+char *_trace_ptr = &dummy;
+int _trace_ptr_count = 0;
+static void *trace_page_ptr;
+static void trace_abort(void);
 
-void _trace_write(const void *buf, int count) {
+static int trace_write(const void *buf, int count) {
     const char *ptr = buf;
     while (_trace_fd > 0) {
-#ifdef _TRACE_USE_POSIX_WRITE
-        ssize_t written = write(_trace_fd, ptr, count);
-#else
         // Use __syscall3 to avoid recursive calls
         long written = __syscall3(SYS_write, (long)_trace_fd, (long)ptr, (long)count);
-#endif
         if (written < 0) {
             // some write error occured
             // abort trace recording
-            int fd = _trace_fd;
-            _trace_fd = 0;
-            close(fd);
-            return;
+            trace_abort();
+            return -1;
         } else if (written == count) {
-            return;
+            return 0;
         }
         ptr = &ptr[written];
         count -= written;
     }
+    return 0;
+}
+
+static void segv_handler(int sig, siginfo_t *si, void *unused) {
+    if (trace_write(trace_page_ptr, 4096)) {
+        return;
+    }
+    if (__syscall2(SYS_munmap, (long)trace_page_ptr, 4096l)) {
+        trace_abort();
+        return;
+    }
+    trace_page_ptr += 4096;
+    if(__syscall3(SYS_mprotect, (long)trace_page_ptr, 4096l, PROT_WRITE) < 0) {
+        trace_abort();
+    }
+    return;
 }
 
 // same as the macro version
@@ -94,6 +127,23 @@ void _trace_open(const char *fname) {
 
     int lowfd = open(nano_fname, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
 
+    // reserve memory for the trace buffer
+    trace_page_ptr = mmap(NULL, 1l << 32, PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (trace_page_ptr == MAP_FAILED) {
+        trace_page_ptr = NULL;
+        return;
+    }
+    if (mprotect(trace_page_ptr + 4096, 1l << 32, PROT_NONE) < 0) {
+        return;
+    }
+    struct sigaction sa;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_sigaction = segv_handler;
+    if (sigaction(SIGSEGV, &sa, NULL) < 0) {
+        return;
+    }
+
     // The posix standard specifies that open always returns the lowest-numbered unused fd.
     // It is possbile that the traced software relies on that behavior and expects a particalur fd number
     // for a subsequent open call, how ugly this might be (busybox unzip expects fd number 3).
@@ -105,9 +155,19 @@ void _trace_open(const char *fname) {
 
     // now the tracing can start (guarded by _trace_fd > 0)
     _trace_fd = fd;
-    _trace_buf_pos = 0;
     _trace_if_count = 0;
     _trace_if_byte = _TRACE_SET_IE;
+    _trace_ptr = trace_page_ptr;
+    _trace_ptr_count = 1;
+}
+
+static void trace_abort(void) {
+    int fd = _trace_fd;
+    _trace_fd = 0;
+    _trace_ptr = &dummy;
+    _trace_ptr_count = 0;
+    // now we call a library function without being traced
+    close(fd);
 }
 
 void _trace_close(void) {
@@ -119,14 +179,11 @@ void _trace_close(void) {
         _TRACE_NUM(_TRACE_SET_FUNC, 0);
         _TRACE_PUT(_trace_if_byte);
     }
-    if (_trace_buf_pos != 0) {
-        _trace_write(_trace_buf, _trace_buf_pos);
+    if (_trace_ptr != &dummy) {
+        trace_write(trace_page_ptr, (void*)_trace_ptr - trace_page_ptr);
     }
     // stop tracing
-    int fd = _trace_fd;
-    _trace_fd = 0;
-    // now we call a library function without being traced
-    close(fd);
+    trace_abort();
 }
 
 
