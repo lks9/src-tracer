@@ -182,7 +182,8 @@ unsigned int _retrace_num(unsigned int num) {
 // ghost code
 void _retrace_ghost_start(void) {}
 void _retrace_ghost_end(void) {}
-bool _retrace_in_ghost;
+// true for combined trace/retrace mode
+bool _retrace_in_ghost = true;
 
 char *_retrace_assert_names[ASSERT_BUF_SIZE];
 bool  _retrace_asserts[ASSERT_BUF_SIZE];

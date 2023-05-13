@@ -213,10 +213,11 @@ extern bool _is_retrace_condition(bool cond);
 #define _LOOP_BODY(id)      _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
 #define _LOOP_END(id)       _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
 
-#define _TRACE_OPEN(fname)  ;_trace_open((fname));
-#define _TRACE_CLOSE        ;_trace_close();
+#define _TRACE_OPEN(fname)  _IS_RETRACE( ,_trace_open((fname)))
+#define _TRACE_CLOSE        _IS_RETRACE( ,_trace_close())
 
-// ghost code is unsupported for the combined mode!
+#define _GHOST(code)        code
+
 
 #elif defined _TRACE_MODE
 /* trace mode */
