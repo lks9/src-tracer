@@ -70,17 +70,6 @@ static char dummy;
 char *_trace_ptr = &dummy;
 bool _trace_ptr_count = 0;
 static void *trace_page_ptr;
-static size_t trace_file_offset = 0;
-static void trace_abort(void);
-
-static void segv_handler(int sig, siginfo_t *si, void *unused) {
-    trace_file_offset += 8*4096l;
-    if(__syscall2(SYS_ftruncate, (long)_trace_fd, (long)trace_file_offset) < 0) {
-        trace_abort();
-        return;
-    }
-    return;
-}
 
 // same as the macro version
 // but returns num
@@ -117,12 +106,6 @@ void _trace_open(const char *fname) {
 
     int lowfd = open(nano_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
 
-    struct sigaction sa;
-    sa.sa_flags = SA_SIGINFO;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_sigaction = segv_handler;
-    sigaction(SIGBUS, &sa, NULL);
-
     // The posix standard specifies that open always returns the lowest-numbered unused fd.
     // It is possbile that the traced software relies on that behavior and expects a particalur fd number
     // for a subsequent open call, how ugly this might be (busybox unzip expects fd number 3).
@@ -130,9 +113,7 @@ void _trace_open(const char *fname) {
     int fd = dup2(lowfd, lowfd + 42);
     close(lowfd);
 
-
-    trace_file_offset = 8*4096;
-    if(ftruncate(fd, trace_file_offset) < 0) {
+    if(ftruncate(fd, 1l << 36) < 0) {
         perror("ftruncate");
         return;
     }
@@ -147,6 +128,8 @@ void _trace_open(const char *fname) {
         perror("madvise");
         return;
     }
+    // map empty block at the end
+    //mmap(trace_page_ptr + (1l << 38), 4096, PROT_NONE, MAP_FIXED | MAP_ANON, -1, 0);
 
     atexit(_trace_close);
 
@@ -156,15 +139,6 @@ void _trace_open(const char *fname) {
     _trace_if_byte = _TRACE_SET_IE;
     _trace_ptr = trace_page_ptr;
     _trace_ptr_count = 1;
-}
-
-static void trace_abort(void) {
-    int fd = _trace_fd;
-    _trace_fd = 0;
-    _trace_ptr = &dummy;
-    _trace_ptr_count = 0;
-    // now we call a library function without being traced
-    close(fd);
 }
 
 void _trace_close(void) {
@@ -177,7 +151,15 @@ void _trace_close(void) {
         _TRACE_PUT(_trace_if_byte);
     }
     // stop tracing
-    trace_abort();
+    int fd = _trace_fd;
+    _trace_fd = 0;
+    ssize_t written = (char*)_trace_ptr - (char*)trace_page_ptr;
+    _trace_ptr = &dummy;
+    _trace_ptr_count = 0;
+    // now we call a library function without being traced
+    ftruncate(fd, written);
+    munmap(trace_page_ptr, 1l << 36);
+    close(fd);
 }
 
 
