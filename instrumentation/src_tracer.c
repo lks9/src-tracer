@@ -68,18 +68,13 @@ static __inline long __syscall6(long n, long a1, long a2, long a3, long a4, long
 
 static char dummy;
 char *_trace_ptr = &dummy;
-int _trace_ptr_count = 0;
+bool _trace_ptr_count = 0;
 static void *trace_page_ptr;
 static size_t trace_file_offset = 0;
 static void trace_abort(void);
 
 static void segv_handler(int sig, siginfo_t *si, void *unused) {
-    if (__syscall2(SYS_munmap, (long)trace_page_ptr, 4096l)) {
-        trace_abort();
-        return;
-    }
-    trace_page_ptr += 4096l;
-    trace_file_offset += 4096l;
+    trace_file_offset += 8*4096l;
     if(__syscall2(SYS_ftruncate, (long)_trace_fd, (long)trace_file_offset) < 0) {
         trace_abort();
         return;
@@ -136,19 +131,22 @@ void _trace_open(const char *fname) {
     close(lowfd);
 
 
-    trace_file_offset = 4096;
-    ftruncate(fd, trace_file_offset);
-    // reserve memory for the trace buffer
-    trace_page_ptr = mmap(NULL, 1l << 32, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (trace_page_ptr == MAP_FAILED) {
-        trace_page_ptr = NULL;
-        perror("zweites mmap");
+    trace_file_offset = 8*4096;
+    if(ftruncate(fd, trace_file_offset) < 0) {
+        perror("ftruncate");
         return;
     }
-    //if (mprotect(trace_page_ptr + 4096, 1l << 32, PROT_NONE) < 0) {
-    //    perror("mprotect");
-    //    return;
-    //}
+    // reserve memory for the trace buffer
+    trace_page_ptr = mmap(NULL, 1l << 36, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (trace_page_ptr == MAP_FAILED) {
+        trace_page_ptr = NULL;
+        perror("mmap");
+        return;
+    }
+    if (madvise(trace_page_ptr, 1l << 36, MADV_SEQUENTIAL) <  0) {
+        perror("madvise");
+        return;
+    }
 
     atexit(_trace_close);
 

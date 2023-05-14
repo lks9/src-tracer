@@ -34,10 +34,8 @@ extern void _trace_close(void);
 extern unsigned char _trace_if_byte;
 extern int _trace_if_count;
 
-extern unsigned char _trace_buf[TRACE_BUF_SIZE];
 extern char *_trace_ptr;
-extern int _trace_ptr_count;
-extern int _trace_buf_pos;
+extern bool _trace_ptr_count;
 
 #define _TRACE_TEST_IE            0b10000000
  #define _TRACE_SET_IE            0b10000000
