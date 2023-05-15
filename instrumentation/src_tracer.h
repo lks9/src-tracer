@@ -31,7 +31,7 @@ extern "C" {
 #define bool _Bool
 #endif
 
-extern void _trace_write(const void* buf, int count);
+extern void _trace_write(void);
 
 extern void _trace_open(const char *fname);
 extern void _trace_close(void);
@@ -41,6 +41,8 @@ extern int _trace_if_count;
 
 extern unsigned char _trace_buf[TRACE_BUF_SIZE];
 extern int _trace_buf_pos;
+
+extern int _trace_fd;
 
 #define _TRACE_TEST_IE            0b10000000
  #define _TRACE_SET_IE            0b10000000
@@ -61,12 +63,14 @@ extern int _trace_buf_pos;
  #define _TRACE_SET_RETURN        0b01010000
 #define _TRACE_TEST_IE_COUNT      0b10000111
 
+#define likely(x)       __builtin_expect((x),1)
+#define unlikely(x)     __builtin_expect((x),0)
+
 #define _TRACE_PUT(c) ;{ \
     _trace_buf[_trace_buf_pos] = (c); \
     _trace_buf_pos += 1; \
-    if (_trace_buf_pos == TRACE_BUF_SIZE) { \
-        _trace_write(_trace_buf, TRACE_BUF_SIZE); \
-        _trace_buf_pos = 0; \
+    if (unlikely(_trace_fd && _trace_buf_pos == TRACE_BUF_SIZE)) { \
+        _trace_write(); \
     } \
 }
 

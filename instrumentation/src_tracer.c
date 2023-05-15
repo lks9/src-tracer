@@ -35,28 +35,41 @@ static __inline long __syscall3(long n, long a1, long a2, long a3)
 unsigned char _trace_buf[TRACE_BUF_SIZE];
 int _trace_buf_pos = 0;
 
-void _trace_write(const void *buf, int count) {
-    const char *ptr = buf;
-    while (_trace_fd > 0) {
+void _trace_write(void) {
 #ifdef _TRACE_USE_POSIX_WRITE
-        ssize_t written = write(_trace_fd, ptr, count);
+    ssize_t written = write(_trace_fd, _trace_buf, 4096);
 #else
-        // Use __syscall3 to avoid recursive calls
-        long written = __syscall3(SYS_write, (long)_trace_fd, (long)ptr, (long)count);
+    // Use __syscall3 to avoid recursive calls
+    long written = __syscall3(SYS_write, (long)_trace_fd, (long)_trace_buf, (long)4096);
 #endif
-        if (written < 0) {
-            // some write error occured
-            // abort trace recording
-            int fd = _trace_fd;
-            _trace_fd = 0;
-            close(fd);
-            return;
-        } else if (written == count) {
-            return;
-        }
-        ptr = &ptr[written];
-        count -= written;
+    _trace_buf_pos = 0;
+    if (likely(written == 4096)) {
+        return;
     }
+    // some write error occured
+    // abort trace recording
+    int fd = _trace_fd;
+    _trace_fd = 0;
+    close(fd);
+    return;
+}
+
+static void trace_write_rest(void) {
+#ifdef _TRACE_USE_POSIX_WRITE
+    ssize_t written = write(_trace_fd, _trace_buf, _trace_buf_pos);
+#else
+    // Use __syscall3 to avoid recursive calls
+    long written = __syscall3(SYS_write, (long)_trace_fd, (long)_trace_buf, (long)_trace_buf_pos);
+#endif
+    if (written == _trace_buf_pos) {
+        return;
+    }
+    // some write error occured
+    // abort trace recording
+    int fd = _trace_fd;
+    _trace_fd = 0;
+    close(fd);
+    return;
 }
 
 // same as the macro version
@@ -120,7 +133,7 @@ void _trace_close(void) {
         _TRACE_PUT(_trace_if_byte);
     }
     if (_trace_buf_pos != 0) {
-        _trace_write(_trace_buf, _trace_buf_pos);
+        trace_write_rest();
     }
     // stop tracing
     int fd = _trace_fd;
