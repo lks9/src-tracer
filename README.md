@@ -63,7 +63,7 @@ Elements are written sequentially without any separator.
 | `_FUNC(num)`         | `F` + `num` | Function call, use `num` to distinguish functions       |
 | `_RETURN`            | `R`         | Function return                                         |
 | `_SWITCH(num)`       | `D` + `num` | Jump to case indicated with `num` in a switch-clause    |
-| `_CONDITION(b)`      | `T`/`N`     | Left value of short circuit operation `&&`, `||` or `?:`|
+| `_CONDITION(b)`      | `T`/`N`     | Left value of short circuit operation `&&`, `\|\|` or `?:`|
 | `_IF`                | `T`         | The if-branch of an if-clause is taken                  |
 | `_ELSE`              | `N`         | The else-branch of an if-clause is taken                |
 | `_LOOP_START(id)`    |             | Beginning of a loop (for, while etc.)                   |
