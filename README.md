@@ -70,7 +70,7 @@ Elements are written sequentially without any separator.
 | `_LOOP_BODY(id)`     | `T`         | Begin of a loop iteration                               |
 | `_LOOP_END(id)`      | `N`         | End of a loop                                           |
 | `_TRACE_OPEN(fname)` |             | Initialize, write trace to file named `fname`           |
-| `_TRACE_CLOSE`       | `C`         | End of the trace                                        |
+| `_TRACE_CLOSE`       | `E`         | End of the trace                                        |
 
 An example trace is `F2NF1TTNT`, which includes sub-traces, for example `F1TTN` or `TTN`.
 
