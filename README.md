@@ -62,14 +62,15 @@ Elements are written sequentially without any separator.
 |----------------------|-------------|---------------------------------------------------------|
 | `_FUNC(num)`         | `F` + `num` | Function call, use `num` to distinguish functions       |
 | `_RETURN`            | `R`         | Function return                                         |
+| `_SWITCH(num)`       | `D` + `num` | Jump to case indicated with `num` in a switch-clause    |
+| `_CONDITION(b)`      | `T`/`N`     | Left value of short circuit operation `&&`, `||` or `?:`|
 | `_IF`                | `T`         | The if-branch of an if-clause is taken                  |
 | `_ELSE`              | `N`         | The else-branch of an if-clause is taken                |
-| `_SWITCH(num)`       | `D` + `num` | Jump to case indicated with `num` in a switch-clause    |
 | `_LOOP_START(id)`    |             | Beginning of a loop (for, while etc.)                   |
-| `_LOOP_BODY(id)`     | `T`         | Loop iteration, nothing is emitted                      |
-| `_LOOP_END(id)`      | `N`         | End of a loop, `num` indicates the number of iterations |
+| `_LOOP_BODY(id)`     | `T`         | Begin of a loop iteration                               |
+| `_LOOP_END(id)`      | `N`         | End of a loop                                           |
 | `_TRACE_OPEN(fname)` |             | Initialize, write trace to file named `fname`           |
-| `_TRACE_CLOSE`       | `F0`        | Close the cflow tracer                                  |
+| `_TRACE_CLOSE`       | `C`         | End of the trace                                        |
 
 An example trace is `F2NF1TTNT`, which includes sub-traces, for example `F1TTN` or `TTN`.
 

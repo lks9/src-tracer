@@ -50,7 +50,7 @@ def letter(b, count=0):
             return 'D'
     elif b & TEST_FUNC == PUT_FUNC:
         if b & TEST_END == PUT_END:
-            return 'E'
+            return 'C'
         elif b & TEST_RETURN == PUT_RETURN:
             return 'R'
         elif b & TEST_LEN == PUT_LEN_STRING:
@@ -128,7 +128,7 @@ class Trace:
                 # remove a leading 0
                 hexstring = hexstring[1:]
             res += elem.letter + hexstring
-            if elem.letter == 'E':
+            if elem.letter == 'C':
                 return res
         # normally, a trace should end with F0
         return res
@@ -214,7 +214,7 @@ class TraceCompact(Trace):
         for elem in it:
             if elem.pos < 0:
                 continue
-            elif elem.letter == 'E':
+            elif elem.letter == 'C':
                 break
             elif elem.pos < self._count_bytes:
                 yield elem
