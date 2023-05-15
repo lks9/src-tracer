@@ -8,7 +8,7 @@ For accurate retracing, `retrace.py` uses symbolic execution.
 
 ## Which Software to Trace
 
-Any software which is written in C, with the source code available.
+Any software which is written in C/C++, with the source code available.
 
 ## Dependencies
 ### For the Instrumentation
