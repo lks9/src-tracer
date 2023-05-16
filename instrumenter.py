@@ -19,7 +19,7 @@ ap.add_argument("--no-return", action='store_true',
 ap.add_argument("--cases", action='store_true',
                 help="instrument all switch cases instead of switch number (experimental)")
 ap.add_argument("--short-circuit", action='store_true',
-                help="instrument short circuit operators (only ?: yet; experimental)")
+                help="instrument short circuit operators (experimental)")
 args = ap.parse_args()
 
 # trace store dir

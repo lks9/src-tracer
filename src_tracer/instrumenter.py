@@ -320,8 +320,8 @@ class Instrumenter:
         left = children[0]
         right = children[1]
 
-        if self.search(rb"(&&|\|\|)", left.extent.end, right.extent.start):
-            # found short-circuit && or ||
+        if self.search(rb"(&&|\|\||\?\:)", left.extent.end, right.extent.start):
+            # found short-circuit && or || or ?:
             self.add_annotation(b" _CONDITION(", left.extent.start)
             self.prepent_annotation(b") ", left.extent.end, 1)
 
