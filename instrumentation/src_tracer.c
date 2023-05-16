@@ -112,54 +112,16 @@ void _trace_close(void) {
 }
 
 
-// text trace
-bool _text_trace_condition(bool cond) {
-    if (cond) {
-        _TRACE_PUT_TEXT('T');
-    } else {
-        _TRACE_PUT_TEXT('N');
-    }
-    return cond;
-}
-
-int _text_trace_switch(int num, const char *num_str) {
-    _TRACE_PUT_TEXT('D');
-    for (const char *ptr = &num_str[2]; *ptr != '\0'; ptr = &ptr[1]) {
-        _TRACE_PUT_TEXT(*ptr);
-    }
-    return num;
-}
-
 // for retracing
-int _retrace_fun_num;
-
-
 void _retrace_if(void) {}
-
 void _retrace_else(void) {}
 
-bool _retrace_condition(bool cond) {
-    if (cond) {
-        _retrace_if();
-    } else {
-        _retrace_else();
-    }
-    return cond;
-}
-
+int _retrace_fun_num;
 void _retrace_fun_call(void) {}
-
 void _retrace_return(void) {}
 
-unsigned int _retrace_int;
-
+long long int _retrace_int;
 void _retrace_wrote_int(void) {}
-
-unsigned int _retrace_num(unsigned int num) {
-    _retrace_int = num;
-    _retrace_wrote_int();
-    return num;
-}
 
 // ghost code
 void _retrace_ghost_start(void) {}
@@ -186,28 +148,5 @@ void *_retrace_dumps[GHOST_DUMP_BUF_SIZE];
 int   _retrace_dump_idx;
 void  _retrace_dump_passed(void) {}
 
-// for both
+// for both tracing and retracing
 bool _is_retrace_mode = false;
-
-bool _is_retrace_condition(bool cond) {
-    if (cond) {
-        _IS_RETRACE(_retrace_if(), _TRACE_IE(1));
-    } else {
-        _IS_RETRACE(_retrace_else(), _TRACE_IE(0));
-    }
-    return cond;
-}
-
-
-/* This can be used for switch:
- *    switch(        num ) { ... }
- * Annotated:
- *    switch(_SWITCH(num)) { ... }
- * The makro _SWITCH might translate to _is_retrace_switch.
- */
-unsigned int _is_retrace_switch(unsigned int num) {
-    _IS_RETRACE(_RETRACE_NUM(num),
-                _TRACE_NUM(_TRACE_SET_DATA, num)
-    )
-    return num;
-}
