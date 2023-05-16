@@ -216,6 +216,11 @@ class Instrumenter:
             i -= 1
         return i
 
+    def search(self, b_str, start, end):
+        filename = self.filename(start)
+        content = self.annotations[filename]["content"][start.offset:end.offset]
+        return re.search(b_str, content)
+
     def check_location(self, location, strlist):
         filename = self.filename(location)
         try:
@@ -307,6 +312,18 @@ class Instrumenter:
         condition = children[0]
         self.add_annotation(b" _CONDITION(", condition.extent.start)
         self.add_annotation(b") ", condition.extent.end)
+
+    def visit_binary_op(self, node):
+        children = [c for c in node.get_children()]
+        if len(children) != 2:
+            raise Exception
+        left = children[0]
+        right = children[1]
+
+        if self.search(rb"(&&|\|\|)", left.extent.end, right.extent.start):
+            # found short-circuit && or ||
+            self.add_annotation(b" _CONDITION(", left.extent.start)
+            self.prepent_annotation(b") ", left.extent.end, 1)
 
     def visit_loop(self, node):
         loop_id = bytes(hex(len(self.loops)), "utf-8")
@@ -437,6 +454,9 @@ class Instrumenter:
                 self.visit_function(node)
             elif node.kind == CursorKind.IF_STMT:
                 self.visit_if(node)
+            elif node.kind == CursorKind.BINARY_OPERATOR:
+                if self.boolop_instrument and not file_scope:
+                    self.visit_binary_op(node)
             elif node.kind == CursorKind.CONDITIONAL_OPERATOR:
                 # ?: operator
                 if self.boolop_instrument and not file_scope:
