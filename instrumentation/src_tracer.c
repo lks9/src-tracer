@@ -59,24 +59,6 @@ void _trace_write(const void *buf, int count) {
     }
 }
 
-// same as the macro version
-// but returns num
-// can be used inside switch conditions
-unsigned int _trace_num(char type, unsigned int num) {
-    _TRACE_NUM(type, num);
-    return num;
-}
-
-unsigned int _trace_num_text(char type, unsigned int num) {
-    _TRACE_NUM_TEXT(type, num);
-    return num;
-}
-
-bool _trace_condition(bool cond) {
-    _TRACE_IE(cond);
-    return cond;
-}
-
 void _trace_open(const char *fname) {
     if (_trace_fd > 0) {
         // already opened

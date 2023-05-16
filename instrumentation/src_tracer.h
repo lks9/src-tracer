@@ -153,9 +153,20 @@ extern int _trace_buf_pos;
 // same as the macro version
 // but returns num
 // can be used inside switch conditions
-extern unsigned int _trace_num(char c, unsigned int num);
-extern unsigned int _trace_num_text(char c, unsigned int num);
-extern bool _trace_condition(bool cond);
+static inline long long int _trace_num(char type, long long int num) {
+    _TRACE_NUM(type, num);
+    return num;
+}
+
+static inline long long int _trace_num_text(char type, long long int num) {
+    _TRACE_NUM_TEXT(type, num);
+    return num;
+}
+
+static inline long long int _trace_condition(long long int cond) {
+    _TRACE_IE(cond);
+    return cond;
+}
 
 // for retracing
 extern void _retrace_if(void);
