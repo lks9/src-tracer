@@ -323,7 +323,7 @@ class Instrumenter:
         if self.search(rb"(&&|\|\||\?\:)", left.extent.end, right.extent.start):
             # found short-circuit && or || or ?:
             self.add_annotation(b" _CONDITION(", left.extent.start)
-            self.prepent_annotation(b") ", left.extent.end, 1)
+            self.prepent_annotation(b") ", left.extent.end)
 
     def visit_loop(self, node):
         loop_id = bytes(hex(len(self.loops)), "utf-8")
