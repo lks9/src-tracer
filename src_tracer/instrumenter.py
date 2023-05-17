@@ -320,8 +320,8 @@ class Instrumenter:
         left = children[0]
         right = children[1]
 
-        if self.search(rb"(&&|\|\||\?\:)", left.extent.end, right.extent.start):
-            # found short-circuit && or || or ?:
+        if self.search(rb"(&&|\|\|)", left.extent.end, right.extent.start):
+            # found short-circuit && or ||
             self.add_annotation(b" _CONDITION(", left.extent.start)
             self.prepent_annotation(b") ", left.extent.end)
 
@@ -441,7 +441,7 @@ class Instrumenter:
             # print("Skipping " + filename + " (nothing to annotate)")
             return False
 
-    def traverse(self, node, file_scope=True):
+    def traverse(self, node, function_scope=False):
         try:
             if node.kind in (CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE):
                 # no recursive annotation
@@ -450,16 +450,16 @@ class Instrumenter:
                 # no instrumentation of C++ constant functions
                 if self.check_const_method(node):
                     return
-                file_scope = False
+                function_scope = True
                 self.visit_function(node)
             elif node.kind == CursorKind.IF_STMT:
                 self.visit_if(node)
             elif node.kind == CursorKind.BINARY_OPERATOR:
-                if self.boolop_instrument and not file_scope:
+                if self.boolop_instrument and function_scope:
                     self.visit_binary_op(node)
             elif node.kind == CursorKind.CONDITIONAL_OPERATOR:
                 # ?: operator
-                if self.boolop_instrument and not file_scope:
+                if self.boolop_instrument and function_scope:
                     self.visit_conditional_op(node)
             elif node.kind in (CursorKind.WHILE_STMT, CursorKind.FOR_STMT, CursorKind.DO_STMT):
                 self.visit_loop(node)
@@ -469,11 +469,12 @@ class Instrumenter:
                 # skip constants
                 return
             elif node.storage_class == StorageClass.STATIC and not node.kind in (CursorKind.FUNCTION_DECL, CursorKind.COMPOUND_STMT):
-                # hack: something static, not a function declaration smells like a constant expression
-                return
+                # something static, not a function declaration smells like a constant expression
+                # anyway, static means it cannot be function local
+                function_scope = False
         except:
             message = "Failed to annotate a " + str(node.kind)
             raise Exception(message)
 
         for child in node.get_children():
-            self.traverse(child, file_scope=file_scope)
+            self.traverse(child, function_scope=function_scope)
