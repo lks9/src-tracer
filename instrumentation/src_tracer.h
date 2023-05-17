@@ -256,7 +256,7 @@ static inline long long int _is_retrace_switch(long long int num) {
 
 #define _IF                 _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
 #define _ELSE               _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
-#define _CONDITION(cond)    _is_retrace_condition((cond))
+#define _CONDITION(cond)    _is_retrace_condition((long long int)(cond))
 #define _FUNC(num)          _IS_RETRACE(_RETRACE_FUN_CALL((num)), _TRACE_NUM(_TRACE_SET_FUNC, (num)))
 #define _FUNC_RETURN        _IS_RETRACE(_retrace_return(), _TRACE_RETURN())
 // non-macro version for switch
@@ -282,7 +282,7 @@ static inline long long int _is_retrace_switch(long long int num) {
 
 #define _IF                 _TRACE_IE(1)
 #define _ELSE               _TRACE_IE(0)
-#define _CONDITION(cond)    _trace_condition((cond))
+#define _CONDITION(cond)    _trace_condition((long long int)(cond))
 #define _FUNC(num)          _TRACE_NUM(_TRACE_SET_FUNC, (num))
 #define _FUNC_RETURN        _TRACE_RETURN()
 // non-macro version for switch
@@ -308,7 +308,7 @@ static inline long long int _is_retrace_switch(long long int num) {
 
 #define _IF                 ;_TRACE_PUT_TEXT('T');
 #define _ELSE               ;_TRACE_PUT_TEXT('N');
-#define _CONDITION(cond)    _text_trace_condition(cond)
+#define _CONDITION(cond)    _text_trace_condition((unsigned int)cond)
 #define _FUNC(num)          ;_TRACE_NUM_TEXT('F', ((unsigned int)num));
 #define _FUNC_RETURN        ;_TRACE_PUT_TEXT('R');
 // non-macro version for switch
@@ -334,7 +334,7 @@ static inline long long int _is_retrace_switch(long long int num) {
 
 #define _IF                 ;_retrace_if();
 #define _ELSE               ;_retrace_else();
-#define _CONDITION(cond)    _retrace_condition(cond)
+#define _CONDITION(cond)    _retrace_condition((long long int)(cond))
 #define _FUNC(num)          _RETRACE_FUN_CALL(num)
 #define _FUNC_RETURN        ;_retrace_return();
 // non-macro version for switch
