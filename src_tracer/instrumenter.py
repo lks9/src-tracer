@@ -2,7 +2,7 @@ import re
 import os
 import sqlite3
 
-from clang.cindex import Index, CursorKind
+from clang.cindex import Index, CursorKind, StorageClass
 
 
 class Instrumenter:
@@ -93,14 +93,14 @@ class Instrumenter:
             pass
         cursor.close()
         self.connection.commit()
-        cursor = self.connection.cursor()
-        func_num_manu = cursor.execute('''
-                SELECT num
-                FROM manual_lookup
-                WHERE pre_file=? and offset=?
-                ''', (pre_file, offset)).fetchone()
-        cursor.close()
-        self.connection.commit()
+        #cursor = self.connection.cursor()
+        #func_num_manu = cursor.execute('''
+        #        SELECT num
+        #        FROM manual_lookup
+        #        WHERE pre_file=? and offset=?
+        #        ''', (pre_file, offset)).fetchone()
+        #cursor.close()
+        #self.connection.commit()
         cursor = self.connection.cursor()
         func_num_auto = cursor.execute('''
                 SELECT rowid
@@ -110,19 +110,19 @@ class Instrumenter:
         cursor.close()
         self.connection.commit()
         num = func_num_auto[0]
-        if func_num_manu is None:
-            cursor = self.connection.cursor()
-            try:
-                cursor.execute('''
-                    INSERT INTO manual_lookup
-                    VALUES(?,?,?)
-                    ON CONFLICT DO NOTHING
-                    ''', (num, pre_file, offset))
-            except sqlite3.OperationalError:
-                # don't care
-                pass
-            cursor.close()
-            self.connection.commit()
+        #if func_num_manu is None:
+        #    cursor = self.connection.cursor()
+        #    try:
+        #        cursor.execute('''
+        #            INSERT INTO manual_lookup
+        #            VALUES(?,?,?)
+        #            ON CONFLICT DO NOTHING
+        #            ''', (num, pre_file, offset))
+        #    except sqlite3.OperationalError:
+        #        # don't care
+        #        pass
+        #    cursor.close()
+        #    self.connection.commit()
         return num
 
     def add_annotation(self, annotation, location, add_offset=0):
@@ -465,6 +465,12 @@ class Instrumenter:
                 self.visit_loop(node)
             elif node.kind == CursorKind.SWITCH_STMT:
                 self.visit_switch(node)
+            elif node.type.is_const_qualified():
+                # skip constants
+                return
+            elif node.storage_class == StorageClass.STATIC and not node.kind in (CursorKind.FUNCTION_DECL, CursorKind.COMPOUND_STMT):
+                # hack: something static, not a function declaration smells like a constant expression
+                return
         except:
             message = "Failed to annotate a " + str(node.kind)
             raise Exception(message)
