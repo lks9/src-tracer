@@ -124,19 +124,41 @@ extern bool _trace_ptr_count;
 // same as the macro version
 // but returns num
 // can be used inside switch conditions
-extern unsigned int _trace_num(char c, unsigned int num);
-extern unsigned int _trace_num_text(char c, unsigned int num);
-extern bool _trace_condition(bool cond);
+static inline long long int _trace_num(char type, long long int num) {
+    _TRACE_NUM(type, num);
+    return num;
+}
+
+static inline long long int _trace_num_text(char type, long long int num) {
+    _TRACE_NUM_TEXT(type, num);
+    return num;
+}
+
+static inline long long int _trace_condition(long long int cond) {
+    _TRACE_IE(cond);
+    return cond;
+}
+
+static inline long long int _text_trace_condition(long long int cond) {
+    if (cond) {
+        _TRACE_PUT_TEXT('T');
+    } else {
+        _TRACE_PUT_TEXT('N');
+    }
+    return cond;
+}
+
 
 // for retracing
 extern void _retrace_if(void);
 extern void _retrace_else(void);
-extern bool _retrace_condition(bool cond);
-extern void _retrace_fun_call(void);
-extern void _retrace_return(void);
-extern unsigned int _retrace_num(unsigned int num);
 
 extern int _retrace_fun_num;
+extern void _retrace_fun_call(void);
+extern void _retrace_return(void);
+
+extern long long int _retrace_int;
+extern void _retrace_wrote_int(void);
 
 #define _RETRACE_FUN_CALL(num) ;{ \
     _retrace_fun_num = (num); \
@@ -148,6 +170,24 @@ extern int _retrace_fun_num;
     _retrace_wrote_int(); \
 }
 
+static inline long long int _retrace_num(long long int num) {
+    _retrace_int = num;
+    _retrace_wrote_int();
+    return num;
+}
+
+static inline long long int _retrace_condition(long long int cond) {
+    if (cond) {
+        _retrace_if();
+    } else {
+        _retrace_else();
+    }
+    return cond;
+}
+
+// for both tracing and retracing
+extern bool _is_retrace_mode;
+
 #define _IS_RETRACE(a,b)    ; \
     if (_is_retrace_mode) { \
         a; \
@@ -155,21 +195,39 @@ extern int _retrace_fun_num;
         b; \
     }
 
+static inline long long int _is_retrace_condition(long long int cond) {
+    if (cond) {
+        _IS_RETRACE(_retrace_if(), _TRACE_IE(1));
+    } else {
+        _IS_RETRACE(_retrace_else(), _TRACE_IE(0));
+    }
+    return cond;
+}
+
+/* This can be used for switch:
+ *    switch(        num ) { ... }
+ * Annotated:
+ *    switch(_SWITCH(num)) { ... }
+ * The makro _SWITCH might translate to _is_retrace_switch.
+ */
+static inline long long int _is_retrace_switch(long long int num) {
+    _IS_RETRACE(_RETRACE_NUM(num),
+                _TRACE_NUM(_TRACE_SET_DATA, num)
+    )
+    return num;
+}
+
 /*
  * Macros used in the instrumentation.
  * 2 versions: _TRACE_MODE and _RETRACE_MODE
  */
 
 #if defined _TRACE_MODE && defined _RETRACE_MODE
-/* both */
-
-extern bool _is_retrace_mode;
-extern unsigned int _is_retrace_switch(unsigned int num);
-extern bool _is_retrace_condition(bool cond);
+/* combined trace/retrace mode, experimental */
 
 #define _IF                 _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
 #define _ELSE               _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
-#define _CONDITION(cond)    _is_retrace_condition((cond))
+#define _CONDITION(cond)    _is_retrace_condition((long long int)(cond))
 #define _FUNC(num)          _IS_RETRACE(_RETRACE_FUN_CALL((num)), _TRACE_NUM(_TRACE_SET_FUNC, (num)))
 #define _FUNC_RETURN        _IS_RETRACE(_retrace_return(), _TRACE_RETURN())
 // non-macro version for switch
@@ -195,7 +253,7 @@ extern bool _is_retrace_condition(bool cond);
 
 #define _IF                 _TRACE_IE(1)
 #define _ELSE               _TRACE_IE(0)
-#define _CONDITION(cond)    _trace_condition((cond))
+#define _CONDITION(cond)    _trace_condition((long long int)(cond))
 #define _FUNC(num)          _TRACE_NUM(_TRACE_SET_FUNC, (num))
 #define _FUNC_RETURN        _TRACE_RETURN()
 // non-macro version for switch
@@ -215,12 +273,13 @@ extern bool _is_retrace_condition(bool cond);
 
 #define _GHOST(code)        /* nothing here */
 
+
 #elif defined _TEXT_TRACE_MODE
-/* text trace mode */
+/* text trace mode, experimental */
 
 #define _IF                 ;_TRACE_PUT_TEXT('T');
 #define _ELSE               ;_TRACE_PUT_TEXT('N');
-#define _CONDITION(cond)    _text_trace_condition(cond)
+#define _CONDITION(cond)    _text_trace_condition((unsigned int)cond)
 #define _FUNC(num)          ;_TRACE_NUM_TEXT('F', ((unsigned int)num));
 #define _FUNC_RETURN        ;_TRACE_PUT_TEXT('R');
 // non-macro version for switch
@@ -240,12 +299,13 @@ extern bool _is_retrace_condition(bool cond);
 
 #define _GHOST(code)        /* nothing here */
 
+
 #elif defined _RETRACE_MODE
 /* retrace mode */
 
 #define _IF                 ;_retrace_if();
 #define _ELSE               ;_retrace_else();
-#define _CONDITION(cond)    _retrace_condition(cond)
+#define _CONDITION(cond)    _retrace_condition((long long int)(cond))
 #define _FUNC(num)          _RETRACE_FUN_CALL(num)
 #define _FUNC_RETURN        ;_retrace_return();
 // non-macro version for switch

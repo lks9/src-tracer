@@ -343,7 +343,7 @@ class SourceTraceReplayer:
                 # add the constrain for the int
                 trace_int = int.from_bytes(elem.bs, "little")
                 for state in simgr.traced:
-                    mem_int = state.mem[self.int_addr].int.resolved
+                    mem_int = state.mem[self.int_addr].with_type(parse_type("long long int")).resolved
                     state.solver.add(mem_int == trace_int)
             elif elem.letter == 'F':
                 fun_num = int.from_bytes(elem.bs, "little")
