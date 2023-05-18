@@ -8,7 +8,7 @@ from clang.cindex import Index, CursorKind, StorageClass
 class Instrumenter:
 
     def __init__(self, connection, trace_store_dir, case_instrument=False, boolop_instrument=False,
-                 return_instrument=True):
+                 return_instrument=True, inline_instrument=False):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
@@ -20,6 +20,7 @@ class Instrumenter:
         self.case_instrument = case_instrument
         self.boolop_instrument = boolop_instrument
         self.return_instrument = return_instrument
+        self.inline_instrument = inline_instrument
 
         self.ifs = []
         self.loops = []
@@ -217,8 +218,7 @@ class Instrumenter:
         return i
 
     def search(self, b_str, start, end):
-        filename = self.filename(start)
-        content = self.annotations[filename]["content"][start.offset:end.offset]
+        content = self.get_content(start, end)
         return re.search(b_str, content)
 
     def check_location(self, location, strlist):
@@ -243,6 +243,7 @@ class Instrumenter:
         if node.is_const_method():
             return True
         try:
+            # FIXME might detect false positives!
             children = [c for c in node.get_children()]
             body = children[-1]
             low = node.extent.start
@@ -252,6 +253,17 @@ class Instrumenter:
         except:
             pass
         return False
+
+    def check_inline_method(self, node):
+        try:
+            # FIXME might detect false positives!
+            children = [c for c in node.get_children()]
+            body = children[-1]
+            low = node.extent.start
+            high = body.extent.start
+            return self.search(rb"inline", low, high)
+        except:
+            return False
 
     def visit_if(self, node):
         self.ifs.append(node)
@@ -451,7 +463,10 @@ class Instrumenter:
                 if self.check_const_method(node):
                     return
                 function_scope = True
-                self.visit_function(node)
+                if not self.inline_instrument and self.check_inline_method(node):
+                    pass
+                else:
+                    self.visit_function(node)
             elif node.kind == CursorKind.IF_STMT:
                 self.visit_if(node)
             elif node.kind == CursorKind.BINARY_OPERATOR:
