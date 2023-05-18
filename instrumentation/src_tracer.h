@@ -124,22 +124,22 @@ extern bool _trace_ptr_count;
 // same as the macro version
 // but returns num
 // can be used inside switch conditions
-static inline long long int _trace_num(char type, long long int num) {
+static inline __attribute__((always_inline)) long long int _trace_num(char type, long long int num) {
     _TRACE_NUM(type, num);
     return num;
 }
 
-static inline long long int _trace_num_text(char type, long long int num) {
+static inline __attribute__((always_inline)) long long int _trace_num_text(char type, long long int num) {
     _TRACE_NUM_TEXT(type, num);
     return num;
 }
 
-static inline long long int _trace_condition(long long int cond) {
+static inline __attribute__((always_inline)) bool _trace_condition(bool cond) {
     _TRACE_IE(cond);
     return cond;
 }
 
-static inline long long int _text_trace_condition(long long int cond) {
+static inline __attribute__((always_inline)) bool _text_trace_condition(bool cond) {
     if (cond) {
         _TRACE_PUT_TEXT('T');
     } else {
@@ -170,13 +170,13 @@ extern void _retrace_wrote_int(void);
     _retrace_wrote_int(); \
 }
 
-static inline long long int _retrace_num(long long int num) {
+static inline __attribute__((always_inline)) long long int _retrace_num(long long int num) {
     _retrace_int = num;
     _retrace_wrote_int();
     return num;
 }
 
-static inline long long int _retrace_condition(long long int cond) {
+static inline __attribute__((always_inline)) bool _retrace_condition(bool cond) {
     if (cond) {
         _retrace_if();
     } else {
@@ -195,7 +195,7 @@ extern bool _is_retrace_mode;
         b; \
     }
 
-static inline long long int _is_retrace_condition(long long int cond) {
+static inline __attribute__((always_inline)) bool _is_retrace_condition(bool cond) {
     if (cond) {
         _IS_RETRACE(_retrace_if(), _TRACE_IE(1));
     } else {
@@ -210,7 +210,7 @@ static inline long long int _is_retrace_condition(long long int cond) {
  *    switch(_SWITCH(num)) { ... }
  * The makro _SWITCH might translate to _is_retrace_switch.
  */
-static inline long long int _is_retrace_switch(long long int num) {
+static inline __attribute__((always_inline)) long long int _is_retrace_switch(long long int num) {
     _IS_RETRACE(_RETRACE_NUM(num),
                 _TRACE_NUM(_TRACE_SET_DATA, num)
     )
@@ -227,7 +227,7 @@ static inline long long int _is_retrace_switch(long long int num) {
 
 #define _IF                 _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
 #define _ELSE               _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
-#define _CONDITION(cond)    _is_retrace_condition((long long int)(cond))
+#define _CONDITION(cond)    _is_retrace_condition(cond)
 #define _FUNC(num)          _IS_RETRACE(_RETRACE_FUN_CALL((num)), _TRACE_NUM(_TRACE_SET_FUNC, (num)))
 #define _FUNC_RETURN        _IS_RETRACE(_retrace_return(), _TRACE_RETURN())
 // non-macro version for switch
@@ -253,7 +253,7 @@ static inline long long int _is_retrace_switch(long long int num) {
 
 #define _IF                 _TRACE_IE(1)
 #define _ELSE               _TRACE_IE(0)
-#define _CONDITION(cond)    _trace_condition((long long int)(cond))
+#define _CONDITION(cond)    _trace_condition(cond)
 #define _FUNC(num)          _TRACE_NUM(_TRACE_SET_FUNC, (num))
 #define _FUNC_RETURN        _TRACE_RETURN()
 // non-macro version for switch
@@ -279,15 +279,15 @@ static inline long long int _is_retrace_switch(long long int num) {
 
 #define _IF                 ;_TRACE_PUT_TEXT('T');
 #define _ELSE               ;_TRACE_PUT_TEXT('N');
-#define _CONDITION(cond)    _text_trace_condition((unsigned int)cond)
-#define _FUNC(num)          ;_TRACE_NUM_TEXT('F', ((unsigned int)num));
+#define _CONDITION(cond)    _text_trace_condition(cond)
+#define _FUNC(num)          ;_TRACE_NUM_TEXT('F', ((unsigned int)(num)));
 #define _FUNC_RETURN        ;_TRACE_PUT_TEXT('R');
 // non-macro version for switch
-#define _SWITCH(num)        _trace_num_text('D', ((unsigned int)num))
+#define _SWITCH(num)        _trace_num_text('D', ((unsigned int)(num)))
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id)      ;if (_cflow_switch_##id) { \
-                                _TRACE_NUM_TEXT('D', ((unsigned int)num)); \
+                                _TRACE_NUM_TEXT('D', ((unsigned int)(num))); \
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
@@ -305,7 +305,7 @@ static inline long long int _is_retrace_switch(long long int num) {
 
 #define _IF                 ;_retrace_if();
 #define _ELSE               ;_retrace_else();
-#define _CONDITION(cond)    _retrace_condition((long long int)(cond))
+#define _CONDITION(cond)    _retrace_condition(cond)
 #define _FUNC(num)          _RETRACE_FUN_CALL(num)
 #define _FUNC_RETURN        ;_retrace_return();
 // non-macro version for switch
