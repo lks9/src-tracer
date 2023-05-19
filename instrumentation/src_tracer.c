@@ -9,6 +9,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <string.h>
 
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
@@ -18,9 +19,6 @@ int _trace_fd = 0;
 
 unsigned char _trace_if_byte = _TRACE_SET_IE;
 int _trace_if_count = 0;
-
-int _trace_fork_count = 0;
-char _trace_fname[160];
 
 #ifndef _TRACE_USE_POSIX_WRITE
 // taken from musl (arch/x86_64/syscall_arch.h)
@@ -37,6 +35,15 @@ static __inline long __syscall3(long n, long a1, long a2, long a3)
 
 unsigned char _trace_buf[TRACE_BUF_SIZE];
 int _trace_buf_pos = 0;
+
+static char trace_fname[160];
+
+static int trace_fork_count = 0;
+static char temp_trace_buf[TRACE_BUF_SIZE];
+static int temp_trace_buf_pos;
+static unsigned char temp_trace_if_byte;
+static int temp_trace_if_count;
+static int temp_trace_fd;
 
 void _trace_write(const void *buf, int count) {
     const char *ptr = buf;
@@ -68,22 +75,22 @@ void _trace_open(const char *fname) {
         return;
     }
     // Make the file name time dependent
-    char time_string[20];
+    char timed_fname[160];
     struct timespec now;
     if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
         return;
     }
-    strftime(time_string, 20, "%F-%H%M%S", gmtime(&now.tv_sec));
-    snprintf(_trace_fname, 160, fname, time_string, now.tv_nsec);
-    //printf("Trace to: %s\n", _trace_fname);
+    strftime(timed_fname, 160, fname, gmtime(&now.tv_sec));
+    snprintf(trace_fname, 170, timed_fname, now.tv_nsec);
+    //printf("Trace to: %s\n", trace_fname);
 
-    int lowfd = open(_trace_fname, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    int lowfd = open(trace_fname, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
 
     // The posix standard specifies that open always returns the lowest-numbered unused fd.
     // It is possbile that the traced software relies on that behavior and expects a particalur fd number
     // for a subsequent open call, how ugly this might be (busybox unzip expects fd number 3).
     // The workaround is to increase the trace fd number by 42.
-    int fd = dup2(lowfd, lowfd + 42);
+    int fd = fcntl(lowfd, F_DUPFD_CLOEXEC, lowfd + 42);
     close(lowfd);
 
     atexit(_trace_close);
@@ -96,17 +103,41 @@ void _trace_open(const char *fname) {
 }
 
 void _trace_before_fork(void) {
-    _trace_fork_count += 1;
-    _TRACE_NUM(_TRACE_SET_DATA, _trace_fork_count);
-    _trace_close();
+    trace_fork_count += 1;
+    _TRACE_NUM(_TRACE_SET_DATA, trace_fork_count);
+
+    // stop tracing
+    for (int k = 0; k < TRACE_BUF_SIZE; k++) {
+        temp_trace_buf[k] = _trace_buf[k];
+    }
+    temp_trace_buf_pos = _trace_buf_pos;
+    temp_trace_fd = _trace_fd;
+    temp_trace_if_byte = _trace_if_byte;
+    temp_trace_if_count = _trace_if_count;
+    _trace_fd = 0;
 }
 
 void _trace_after_fork(int i) {
-    char final_fname[200];
-    snprintf(final_fname, 200, "%s-%dfork-%d.trace", _trace_fname, _trace_fork_count, i);
-    //printf("Trace to: %s\n", final_fname);
+    if (i < 0) {
+        return;
+    } else if (i > 0) {
+        // resume tracing
+        for (int k = 0; i < TRACE_BUF_SIZE; k++) {
+            _trace_buf[k] = temp_trace_buf[k];
+        }
+        _trace_buf_pos = temp_trace_buf_pos;
+        _trace_if_byte = temp_trace_if_byte;
+        _trace_if_count = temp_trace_if_count;
+        _trace_fd = temp_trace_fd;
+        return;
+    }
+    char fname_suffix[20];
+    snprintf(fname_suffix, 20, "-fork-%d.trace", trace_fork_count);
+    strncat(trace_fname, fname_suffix, 20);
+    //printf("Trace to: %s\n", trace_fname);
 
-    int fd = open(final_fname, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    int lowfd = open(trace_fname, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    int fd = fcntl(lowfd, F_DUPFD_CLOEXEC, lowfd + 42);
 
     // now the tracing can start (guarded by _trace_fd > 0)
     _trace_fd = fd;
