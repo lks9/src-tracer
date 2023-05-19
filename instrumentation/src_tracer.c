@@ -27,7 +27,7 @@ bool _trace_ptr_count = 0;
 static void *trace_page_ptr;
 
 int _trace_fork_count = 0;
-char _trace_forked_fname[200];
+char _trace_fname[160];
 
 void _trace_open(const char *fname) {
     if (_trace_fd > 0) {
@@ -35,20 +35,16 @@ void _trace_open(const char *fname) {
         return;
     }
     // Make the file name time dependent
-    char timed_fname[200];
-    char final_fname[200];
-    char nano_string[20];
+    char time_string[20];
     struct timespec now;
     if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
         return;
     }
-    strftime(timed_fname, 200, fname, gmtime(&now.tv_sec));
-    snprintf(nano_string, 20, "%lx%%s", now.tv_nsec);
-    snprintf(_trace_forked_fname, 200, timed_fname, nano_string);
-    snprintf(final_fname, 200, _trace_forked_fname, "");
-    // printf("Trace to: %s\n", final_fname);
+    strftime(time_string, 20, "%F-%H%M%S", gmtime(&now.tv_sec));
+    snprintf(_trace_fname, 160, fname, time_string, now.tv_nsec);
+    //printf("Trace to: %s\n", _trace_fname);
 
-    int lowfd = open(final_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    int lowfd = open(_trace_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
 
     // The posix standard specifies that open always returns the lowest-numbered unused fd.
     // It is possbile that the traced software relies on that behavior and expects a particalur fd number
@@ -93,9 +89,7 @@ void _trace_before_fork(void) {
 
 void _trace_after_fork(int i) {
     char final_fname[200];
-    char fork_name[20];
-    snprintf(fork_name, 20, "-%d-fork-%d", _trace_fork_count, i);
-    snprintf(final_fname, 200, _trace_forked_fname, fork_name);
+    snprintf(final_fname, 200, "%s-%dfork-%d.trace", _trace_fname, _trace_fork_count, i);
     // printf("Trace to: %s\n", final_fname);
 
     int fd = open(final_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
