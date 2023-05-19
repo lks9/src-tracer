@@ -50,13 +50,13 @@ void _trace_open(const char *fname) {
     snprintf(trace_fname, 170, timed_fname, now.tv_nsec);
     //dprintf(2, "Trace to: %s\n", trace_fname);
 
-    int lowfd = open(trace_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE | O_CLOEXEC, S_IRUSR | S_IWUSR);
+    int lowfd = open(trace_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
 
     // The posix standard specifies that open always returns the lowest-numbered unused fd.
     // It is possbile that the traced software relies on that behavior and expects a particalur fd number
     // for a subsequent open call, how ugly this might be (busybox unzip expects fd number 3).
     // The workaround is to increase the trace fd number by 42.
-    int fd = dup2(lowfd, lowfd + 42);
+    int fd = fcntl(lowfd, F_DUPFD_CLOEXEC, lowfd + 42);
     close(lowfd);
 
     if(ftruncate(fd, 1l << 36) < 0) {
@@ -124,8 +124,8 @@ void _trace_after_fork(int i) {
     strncat(trace_fname, fname_suffix, 20);
     //dprintf(2, "Trace to: %s\n", trace_fname);
 
-    int lowfd = open(trace_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE | O_CLOEXEC, S_IRUSR | S_IWUSR);
-    int fd = dup2(lowfd, lowfd + 42);
+    int lowfd = open(trace_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    int fd = fcntl(lowfd, F_DUPFD_CLOEXEC, lowfd + 42);
     close(lowfd);
 
     if(ftruncate(fd, 1l << 36) < 0) {
