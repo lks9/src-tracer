@@ -30,6 +30,8 @@ extern "C" {
 
 extern void _trace_open(const char *fname);
 extern void _trace_close(void);
+extern void _trace_before_fork(void);
+extern void _trace_after_fork(int);
 
 extern unsigned char _trace_if_byte;
 extern int _trace_if_count;

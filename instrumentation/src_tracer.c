@@ -26,6 +26,9 @@ char *_trace_ptr = &dummy;
 bool _trace_ptr_count = 0;
 static void *trace_page_ptr;
 
+int _trace_fork_count = 0;
+char _trace_forked_fname[200];
+
 void _trace_open(const char *fname) {
     if (_trace_fd > 0) {
         // already opened
@@ -33,15 +36,19 @@ void _trace_open(const char *fname) {
     }
     // Make the file name time dependent
     char timed_fname[200];
-    char nano_fname[200];
+    char final_fname[200];
+    char nano_string[20];
     struct timespec now;
     if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
         return;
     }
     strftime(timed_fname, 200, fname, gmtime(&now.tv_sec));
-    snprintf(nano_fname, 200, timed_fname, now.tv_nsec);
+    snprintf(nano_string, 20, "%lx%%s", now.tv_nsec);
+    snprintf(_trace_forked_fname, 200, timed_fname, nano_string);
+    snprintf(final_fname, 200, _trace_forked_fname, "");
+    // printf("Trace to: %s\n", final_fname);
 
-    int lowfd = open(nano_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    int lowfd = open(final_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
 
     // The posix standard specifies that open always returns the lowest-numbered unused fd.
     // It is possbile that the traced software relies on that behavior and expects a particalur fd number
@@ -70,6 +77,44 @@ void _trace_open(const char *fname) {
 
     atexit(_trace_close);
 
+    // now the tracing can start (guarded by _trace_fd > 0)
+    _trace_fd = fd;
+    _trace_if_count = 0;
+    _trace_if_byte = _TRACE_SET_IE;
+    _trace_ptr = trace_page_ptr;
+    _trace_ptr_count = 1;
+}
+
+void _trace_before_fork(void) {
+    _trace_fork_count += 1;
+    _TRACE_NUM(_TRACE_SET_DATA, _trace_fork_count);
+    _trace_close();
+}
+
+void _trace_after_fork(int i) {
+    char final_fname[200];
+    char fork_name[20];
+    snprintf(fork_name, 20, "-%d-fork-%d", _trace_fork_count, i);
+    snprintf(final_fname, 200, _trace_forked_fname, fork_name);
+    // printf("Trace to: %s\n", final_fname);
+
+    int fd = open(final_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
+
+    if(ftruncate(fd, 1l << 36) < 0) {
+        perror("ftruncate");
+        return;
+    }
+    // reserve memory for the trace buffer
+    trace_page_ptr = mmap(NULL, 1l << 36, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (trace_page_ptr == MAP_FAILED) {
+        trace_page_ptr = NULL;
+        perror("mmap");
+        return;
+    }
+    if (madvise(trace_page_ptr, 1l << 36, MADV_SEQUENTIAL) <  0) {
+        perror("madvise");
+        return;
+    }
     // now the tracing can start (guarded by _trace_fd > 0)
     _trace_fd = fd;
     _trace_if_count = 0;
