@@ -35,13 +35,13 @@ void _trace_open(const char *fname) {
         return;
     }
     // Make the file name time dependent
-    char time_string[20];
+    char timed_fname[160];
     struct timespec now;
     if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
         return;
     }
-    strftime(time_string, 20, "%F-%H%M%S", gmtime(&now.tv_sec));
-    snprintf(_trace_fname, 160, fname, time_string, now.tv_nsec);
+    strftime(timed_fname, 160, fname, gmtime(&now.tv_sec));
+    snprintf(_trace_fname, 160, timed_fname, now.tv_nsec);
     //printf("Trace to: %s\n", _trace_fname);
 
     int lowfd = open(_trace_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
