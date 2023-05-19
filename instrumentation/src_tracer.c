@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <sys/mman.h>
 #include <signal.h>
+#include <string.h>
 
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
@@ -26,8 +27,13 @@ char *_trace_ptr = &dummy;
 bool _trace_ptr_count = 0;
 static void *trace_page_ptr;
 
-int _trace_fork_count = 0;
-char _trace_fname[160];
+static char *temp_trace_ptr;
+static unsigned char temp_trace_if_byte;
+static int temp_trace_if_count;
+static int temp_trace_fd;
+
+static int trace_fork_count = 0;
+static char trace_fname[200];
 
 void _trace_open(const char *fname) {
     if (_trace_fd > 0) {
@@ -41,10 +47,10 @@ void _trace_open(const char *fname) {
         return;
     }
     strftime(timed_fname, 160, fname, gmtime(&now.tv_sec));
-    snprintf(_trace_fname, 160, timed_fname, now.tv_nsec);
-    //printf("Trace to: %s\n", _trace_fname);
+    snprintf(trace_fname, 170, timed_fname, now.tv_nsec);
+    //dprintf(2, "Trace to: %s\n", trace_fname);
 
-    int lowfd = open(_trace_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    int lowfd = open(trace_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE | O_CLOEXEC, S_IRUSR | S_IWUSR);
 
     // The posix standard specifies that open always returns the lowest-numbered unused fd.
     // It is possbile that the traced software relies on that behavior and expects a particalur fd number
@@ -68,6 +74,10 @@ void _trace_open(const char *fname) {
         perror("madvise");
         return;
     }
+    if (madvise(trace_page_ptr, 1l << 36, MADV_DONTFORK) <  0) {
+        perror("madvise 2");
+        return;
+    }
     // map empty block at the end
     //mmap(trace_page_ptr + (1l << 38), 4096, PROT_NONE, MAP_FIXED | MAP_ANON, -1, 0);
 
@@ -82,17 +92,41 @@ void _trace_open(const char *fname) {
 }
 
 void _trace_before_fork(void) {
-    _trace_fork_count += 1;
-    _TRACE_NUM(_TRACE_SET_DATA, _trace_fork_count);
-    _trace_close();
+    trace_fork_count += 1;
+    _TRACE_NUM(_TRACE_SET_DATA, trace_fork_count);
+
+    // stop tracing
+    temp_trace_ptr = _trace_ptr;
+    temp_trace_if_byte = _trace_if_byte;
+    temp_trace_if_count = _trace_if_count;
+    temp_trace_fd = _trace_fd;
+    _trace_ptr = &dummy;
+    _trace_ptr_count = 0;
+    _trace_fd = 0;
 }
 
 void _trace_after_fork(int i) {
-    char final_fname[200];
-    snprintf(final_fname, 200, "%s-%dfork-%d.trace", _trace_fname, _trace_fork_count, i);
-    // printf("Trace to: %s\n", final_fname);
+    if (i < 0) {
+        return;
+    } else if (i > 0) {
+        // resume tracing
+        _trace_ptr = temp_trace_ptr;
+        _trace_if_byte = temp_trace_if_byte;
+        _trace_if_count = temp_trace_if_count;
+        _trace_ptr_count = 1;
+        _trace_fd = temp_trace_fd;
+        return;
+    }
+    temp_trace_ptr = &dummy;
+    temp_trace_fd = 0;
+    char fname_suffix[20];
+    snprintf(fname_suffix, 20, "-fork-%d.trace", trace_fork_count);
+    strncat(trace_fname, fname_suffix, 20);
+    //dprintf(2, "Trace to: %s\n", trace_fname);
 
-    int fd = open(final_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    int lowfd = open(trace_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE | O_CLOEXEC, S_IRUSR | S_IWUSR);
+    int fd = dup2(lowfd, lowfd + 42);
+    close(lowfd);
 
     if(ftruncate(fd, 1l << 36) < 0) {
         perror("ftruncate");
@@ -107,6 +141,10 @@ void _trace_after_fork(int i) {
     }
     if (madvise(trace_page_ptr, 1l << 36, MADV_SEQUENTIAL) <  0) {
         perror("madvise");
+        return;
+    }
+    if (madvise(trace_page_ptr, 1l << 36, MADV_DONTFORK) <  0) {
+        perror("madvise 2");
         return;
     }
     // now the tracing can start (guarded by _trace_fd > 0)
