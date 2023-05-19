@@ -19,6 +19,9 @@ int _trace_fd = 0;
 unsigned char _trace_if_byte = _TRACE_SET_IE;
 int _trace_if_count = 0;
 
+int _trace_fork_count = 0;
+char _trace_forked_fname[200];
+
 #ifndef _TRACE_USE_POSIX_WRITE
 // taken from musl (arch/x86_64/syscall_arch.h)
 static __inline long __syscall3(long n, long a1, long a2, long a3)
@@ -66,15 +69,19 @@ void _trace_open(const char *fname) {
     }
     // Make the file name time dependent
     char timed_fname[200];
-    char nano_fname[200];
+    char final_fname[200];
+    char nano_string[20];
     struct timespec now;
     if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
         return;
     }
     strftime(timed_fname, 200, fname, gmtime(&now.tv_sec));
-    snprintf(nano_fname, 200, timed_fname, now.tv_nsec);
+    snprintf(nano_string, 20, "%lx%%s", now.tv_nsec);
+    snprintf(_trace_forked_fname, 200, timed_fname, nano_string);
+    snprintf(final_fname, 200, _trace_forked_fname, "");
+    //printf("Trace to: %s\n", final_fname);
 
-    int lowfd = open(nano_fname, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    int lowfd = open(final_fname, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
 
     // The posix standard specifies that open always returns the lowest-numbered unused fd.
     // It is possbile that the traced software relies on that behavior and expects a particalur fd number
@@ -84,6 +91,27 @@ void _trace_open(const char *fname) {
     close(lowfd);
 
     atexit(_trace_close);
+
+    // now the tracing can start (guarded by _trace_fd > 0)
+    _trace_fd = fd;
+    _trace_buf_pos = 0;
+    _trace_if_count = 0;
+    _trace_if_byte = _TRACE_SET_IE;
+}
+
+void _trace_before_fork(void) {
+    _trace_fork_count += 1;
+    _TRACE_NUM(_TRACE_SET_DATA, _trace_fork_count);
+    _trace_close();
+}
+
+void _trace_after_fork(int i) {
+    char final_fname[200];
+    char fork_name[20];
+    snprintf(fork_name, 20, "-%d-fork-%d", _trace_fork_count, i);
+    snprintf(final_fname, 200, _trace_forked_fname, fork_name);
+
+    int fd = open(final_fname, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
 
     // now the tracing can start (guarded by _trace_fd > 0)
     _trace_fd = fd;
