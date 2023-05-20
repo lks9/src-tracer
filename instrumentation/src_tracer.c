@@ -122,6 +122,8 @@ int _trace_after_fork(int pid) {
         _trace_ptr_count = 1;
         trace_fd = temp_trace_fd;
         temp_trace_fd = 0;
+
+        _TRACE_NUM(_TRACE_SET_DATA, pid < 0 ? -1 : 1);
         return pid;
     }
     // we are in a fork
@@ -161,6 +163,8 @@ int _trace_after_fork(int pid) {
     _trace_if_byte = _TRACE_SET_IE;
     _trace_ptr = trace_page_ptr;
     _trace_ptr_count = 1;
+
+    _TRACE_NUM(_TRACE_SET_DATA, pid);
     return pid;
 }
 
@@ -197,6 +201,8 @@ void _retrace_return(void) {}
 
 long long int _retrace_int;
 void _retrace_wrote_int(void) {}
+
+int _retrace_fork_count;
 
 // ghost code
 void _retrace_ghost_start(void) {}

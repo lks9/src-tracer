@@ -165,6 +165,8 @@ extern void _retrace_return(void);
 extern long long int _retrace_int;
 extern void _retrace_wrote_int(void);
 
+extern int _retrace_fork_count;
+
 #define _RETRACE_FUN_CALL(num) ;{ \
     _retrace_fun_num = (num); \
     _retrace_fun_call(); \
@@ -276,7 +278,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _TRACE_OPEN(fname)  ;_trace_open((fname));
 #define _TRACE_CLOSE        ;_trace_close();
 
-#define _FORK(fork_stmt)    (_trace_before_fork(), _trace_after_fork(fork_stmt))
+#define _FORK(fork_stmt)    (_trace_before_fork(), \
+                             _trace_after_fork(fork_stmt))
 
 #define _GHOST(code)        /* nothing here */
 
@@ -329,6 +332,9 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _TRACE_OPEN(fname)  /* nothing here */
 #define _TRACE_CLOSE        /* nothing here */
+
+#define _FORK(fork_stmt)    (_retrace_num(_retrace_fork_count), \
+                             _retrace_num((fork_stmt) < 0 ? -1 : 1))
 
 #define _GHOST(code)        code
 
