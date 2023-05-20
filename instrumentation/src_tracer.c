@@ -155,7 +155,7 @@ int _trace_after_fork(int pid) {
     if (pid != 0) {
         // we are in the parent
         // resume tracing
-        for (int k = 0; i < TRACE_BUF_SIZE; k++) {
+        for (int k = 0; k < TRACE_BUF_SIZE; k++) {
             _trace_buf[k] = temp_trace_buf[k];
         }
         _trace_buf_pos = temp_trace_buf_pos;
@@ -163,6 +163,8 @@ int _trace_after_fork(int pid) {
         _trace_if_count = temp_trace_if_count;
         trace_fd = temp_trace_fd;
         temp_trace_fd = 0;
+
+        _TRACE_NUM(_TRACE_SET_DATA, pid < 0 ? -1 : 1);
         return pid;
     }
     // we are in a fork
@@ -182,6 +184,8 @@ int _trace_after_fork(int pid) {
     _trace_buf_pos = 0;
     _trace_if_count = 0;
     _trace_if_byte = _TRACE_SET_IE;
+
+    _TRACE_NUM(_TRACE_SET_DATA, pid);
     return pid;
 }
 
@@ -216,6 +220,8 @@ void _retrace_return(void) {}
 
 long long int _retrace_int;
 void _retrace_wrote_int(void) {}
+
+int _retrace_fork_count;
 
 // ghost code
 void _retrace_ghost_start(void) {}
