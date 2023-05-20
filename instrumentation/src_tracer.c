@@ -147,12 +147,12 @@ void _trace_before_fork(void) {
     _trace_buf_pos = 0;
 }
 
-void _trace_after_fork(int i) {
+int _trace_after_fork(int pid) {
     if (temp_trace_fd <= 0) {
         // tracing has already been aborted!
-        return;
+        return pid;
     }
-    if (i != 0) {
+    if (pid != 0) {
         // we are in the parent
         // resume tracing
         for (int k = 0; i < TRACE_BUF_SIZE; k++) {
@@ -163,7 +163,7 @@ void _trace_after_fork(int i) {
         _trace_if_count = temp_trace_if_count;
         trace_fd = temp_trace_fd;
         temp_trace_fd = 0;
-        return;
+        return pid;
     }
     // we are in a fork
     close(temp_trace_fd);
@@ -182,6 +182,7 @@ void _trace_after_fork(int i) {
     _trace_buf_pos = 0;
     _trace_if_count = 0;
     _trace_if_byte = _TRACE_SET_IE;
+    return pid;
 }
 
 void _trace_close(void) {
