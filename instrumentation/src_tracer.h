@@ -31,7 +31,7 @@ extern "C" {
 extern void _trace_open(const char *fname);
 extern void _trace_close(void);
 extern void _trace_before_fork(void);
-extern void _trace_after_fork(int);
+extern int _trace_after_fork(int pid);
 
 extern unsigned char _trace_if_byte;
 extern int _trace_if_count;
@@ -276,6 +276,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _TRACE_OPEN(fname)  ;_trace_open((fname));
 #define _TRACE_CLOSE        ;_trace_close();
 
+#define _FORK(fork_stmt)    (_trace_before_fork(), _trace_after_fork(fork_stmt))
+
 #define _GHOST(code)        /* nothing here */
 
 
@@ -347,6 +349,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _TRACE_OPEN(fname)  /* nothing here */
 #define _TRACE_CLOSE        /* nothing here */
+
+#define _FORK(fork_stmt)    fork_stmt
 
 #define _GHOST(code)        /* nothing here */
 

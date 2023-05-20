@@ -108,12 +108,12 @@ void _trace_before_fork(void) {
     trace_fd = 0;
 }
 
-void _trace_after_fork(int i) {
+int _trace_after_fork(int pid) {
     if (temp_trace_fd <= 0) {
         // tracing has already been aborted!
-        return;
+        return pid;
     }
-    if (i != 0) {
+    if (pid != 0) {
         // we are in the parent
         // resume tracing
         _trace_ptr = temp_trace_ptr;
@@ -122,7 +122,7 @@ void _trace_after_fork(int i) {
         _trace_ptr_count = 1;
         trace_fd = temp_trace_fd;
         temp_trace_fd = 0;
-        return;
+        return pid;
     }
     // we are in a fork
     close(temp_trace_fd);
@@ -138,22 +138,22 @@ void _trace_after_fork(int i) {
 
     if(ftruncate(fd, 1l << 36) < 0) {
         perror("ftruncate");
-        return;
+        return pid;
     }
     // reserve memory for the trace buffer
     trace_page_ptr = mmap(NULL, 1l << 36, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (trace_page_ptr == MAP_FAILED) {
         trace_page_ptr = NULL;
         perror("mmap");
-        return;
+        return pid;
     }
     if (madvise(trace_page_ptr, 1l << 36, MADV_SEQUENTIAL) <  0) {
         perror("madvise");
-        return;
+        return pid;
     }
     if (madvise(trace_page_ptr, 1l << 36, MADV_DONTFORK) <  0) {
         perror("madvise 2");
-        return;
+        return pid;
     }
     // now the tracing can start (guarded by trace_fd > 0)
     trace_fd = fd;
@@ -161,6 +161,7 @@ void _trace_after_fork(int i) {
     _trace_if_byte = _TRACE_SET_IE;
     _trace_ptr = trace_page_ptr;
     _trace_ptr_count = 1;
+    return pid;
 }
 
 void _trace_close(void) {
