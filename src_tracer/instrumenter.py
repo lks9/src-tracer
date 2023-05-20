@@ -8,7 +8,7 @@ from clang.cindex import Index, CursorKind, StorageClass
 class Instrumenter:
 
     def __init__(self, connection, trace_store_dir, case_instrument=False, boolop_instrument=False,
-                 return_instrument=True, inline_instrument=False):
+                 return_instrument=True, inline_instrument=False, main_instrument=True):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
@@ -21,6 +21,7 @@ class Instrumenter:
         self.boolop_instrument = boolop_instrument
         self.return_instrument = return_instrument
         self.inline_instrument = inline_instrument
+        self.main_instrument = main_instrument
 
         self.ifs = []
         self.loops = []
@@ -162,7 +163,7 @@ class Instrumenter:
             self.add_annotation(b"_FUNC_RETURN ", node.extent.end, -1)
 
         # special treatment for main function
-        if node.spelling == "main":
+        if self.main_instrument and node.spelling == "main":
             # print('Log trace to ' + self.trace_store_dir)
             try:
                 (orig_fname, _) = self.orig_file_and_line(node.extent.start)

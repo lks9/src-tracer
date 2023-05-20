@@ -22,6 +22,8 @@ ap.add_argument("--short-circuit", action='store_true',
                 help="instrument short circuit operators (experimental)")
 ap.add_argument("--inline", action='store_true',
                 help="instrument inline function calls and returns")
+ap.add_argument("--no-main", action='store_true',
+                help="do not instrument the main function to start tracing")
 args = ap.parse_args()
 
 # trace store dir
@@ -43,6 +45,7 @@ except sqlite3.OperationalError:
 
 # do the instrumentation
 instrumenter = Instrumenter(connection, store_dir, case_instrument=args.cases, boolop_instrument=args.short_circuit,
-                            return_instrument=not args.no_return, inline_instrument=args.inline)
+                            return_instrument=not args.no_return, inline_instrument=args.inline,
+                            main_instrument=not args.no_main)
 instrumenter.parse(args.filename)
 instrumenter.annotate_all(args.filename)
