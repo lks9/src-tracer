@@ -91,7 +91,7 @@ if [ "$1" = "-E" ]; then
         cp "${outfile}" "${outfile}.tmp.c"
 
         # do the instrumentation
-        python3 "${SRC_TRACER_DIR}/instrumenter.py" "${outfile}.tmp.c" "${SRC_TRACER_STORE_DIR}" || exit $?
+        python3 "${SRC_TRACER_DIR}/instrumenter.py" --cases --no-return "${outfile}.tmp.c" "${SRC_TRACER_STORE_DIR}" || exit $?
 
         # rerun preprocessor to resolve instrumentation macros
         cpp ${SRC_TRACER} "${outfile}.tmp.c" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/instrumentation/"

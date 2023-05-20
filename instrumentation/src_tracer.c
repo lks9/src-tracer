@@ -17,8 +17,6 @@
 #define O_LARGEFILE 0
 #endif
 
-int _trace_fd = 0;
-
 unsigned char _trace_if_byte = _TRACE_SET_IE;
 int _trace_if_count = 0;
 
@@ -27,16 +25,17 @@ char *_trace_ptr = &dummy;
 bool _trace_ptr_count = 0;
 static void *trace_page_ptr;
 
+static char trace_fname[200];
+static int trace_fd = 0;
+
+static int trace_fork_count = 0;
 static char *temp_trace_ptr;
 static unsigned char temp_trace_if_byte;
 static int temp_trace_if_count;
 static int temp_trace_fd;
 
-static int trace_fork_count = 0;
-static char trace_fname[200];
-
 void _trace_open(const char *fname) {
-    if (_trace_fd > 0) {
+    if (trace_fd > 0) {
         // already opened
         return;
     }
@@ -48,7 +47,7 @@ void _trace_open(const char *fname) {
     }
     strftime(timed_fname, 160, fname, gmtime(&now.tv_sec));
     snprintf(trace_fname, 170, timed_fname, now.tv_nsec);
-    //dprintf(2, "Trace to: %s\n", trace_fname);
+    //printf("Trace to: %s\n", trace_fname);
 
     int lowfd = open(trace_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
 
@@ -83,8 +82,8 @@ void _trace_open(const char *fname) {
 
     atexit(_trace_close);
 
-    // now the tracing can start (guarded by _trace_fd > 0)
-    _trace_fd = fd;
+    // now the tracing can start (guarded by trace_fd > 0)
+    trace_fd = fd;
     _trace_if_count = 0;
     _trace_if_byte = _TRACE_SET_IE;
     _trace_ptr = trace_page_ptr;
@@ -92,6 +91,10 @@ void _trace_open(const char *fname) {
 }
 
 void _trace_before_fork(void) {
+    if (trace_fd <= 0) {
+        // tracing has already been aborted!
+        return;
+    }
     trace_fork_count += 1;
     _TRACE_NUM(_TRACE_SET_DATA, trace_fork_count);
 
@@ -99,30 +102,35 @@ void _trace_before_fork(void) {
     temp_trace_ptr = _trace_ptr;
     temp_trace_if_byte = _trace_if_byte;
     temp_trace_if_count = _trace_if_count;
-    temp_trace_fd = _trace_fd;
+    temp_trace_fd = trace_fd;
     _trace_ptr = &dummy;
     _trace_ptr_count = 0;
-    _trace_fd = 0;
+    trace_fd = 0;
 }
 
 void _trace_after_fork(int i) {
-    if (i < 0) {
+    if (temp_trace_fd <= 0) {
+        // tracing has already been aborted!
         return;
-    } else if (i > 0) {
+    }
+    if (i != 0) {
+        // we are in the parent
         // resume tracing
         _trace_ptr = temp_trace_ptr;
         _trace_if_byte = temp_trace_if_byte;
         _trace_if_count = temp_trace_if_count;
         _trace_ptr_count = 1;
-        _trace_fd = temp_trace_fd;
+        trace_fd = temp_trace_fd;
+        temp_trace_fd = 0;
         return;
     }
-    temp_trace_ptr = &dummy;
+    // we are in a fork
+    close(temp_trace_fd);
     temp_trace_fd = 0;
     char fname_suffix[20];
     snprintf(fname_suffix, 20, "-fork-%d.trace", trace_fork_count);
     strncat(trace_fname, fname_suffix, 20);
-    //dprintf(2, "Trace to: %s\n", trace_fname);
+    //printf("Trace to: %s\n", trace_fname);
 
     int lowfd = open(trace_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
     int fd = fcntl(lowfd, F_DUPFD_CLOEXEC, lowfd + 42);
@@ -147,8 +155,8 @@ void _trace_after_fork(int i) {
         perror("madvise 2");
         return;
     }
-    // now the tracing can start (guarded by _trace_fd > 0)
-    _trace_fd = fd;
+    // now the tracing can start (guarded by trace_fd > 0)
+    trace_fd = fd;
     _trace_if_count = 0;
     _trace_if_byte = _TRACE_SET_IE;
     _trace_ptr = trace_page_ptr;
@@ -156,7 +164,7 @@ void _trace_after_fork(int i) {
 }
 
 void _trace_close(void) {
-    if (_trace_fd <= 0) {
+    if (trace_fd <= 0) {
         // already closed or never successfully opened
         return;
     }
@@ -165,11 +173,12 @@ void _trace_close(void) {
         _TRACE_PUT(_trace_if_byte);
     }
     // stop tracing
-    int fd = _trace_fd;
-    _trace_fd = 0;
+    int fd = trace_fd;
+    trace_fd = 0;
     ssize_t written = (char*)_trace_ptr - (char*)trace_page_ptr;
     _trace_ptr = &dummy;
     _trace_ptr_count = 0;
+
     // now we call a library function without being traced
     ftruncate(fd, written);
     munmap(trace_page_ptr, 1l << 36);

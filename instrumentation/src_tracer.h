@@ -58,6 +58,9 @@ extern bool _trace_ptr_count;
  #define _TRACE_SET_RETURN        0b01010000
 #define _TRACE_TEST_IE_COUNT      0b10000111
 
+#define likely(x)       __builtin_expect((x),1)
+#define unlikely(x)     __builtin_expect((x),0)
+
 #define _TRACE_PUT(c) ;{ \
     _trace_ptr[0] = (c); \
     _trace_ptr = &_trace_ptr[_trace_ptr_count]; \
