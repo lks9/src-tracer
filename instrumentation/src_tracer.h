@@ -72,9 +72,9 @@ extern int _trace_buf_pos;
 #define _TRACE_PUT(c) ;{ \
     _trace_buf[_trace_buf_pos] = (c); \
     _trace_buf_pos += 1; \
-    _trace_buf_pos %= TRACE_BUF_SIZE; \
-    if (_trace_buf_pos == 0) { \
+    if (_trace_buf_pos == TRACE_BUF_SIZE) { \
         _trace_write(_trace_buf); \
+        _trace_buf_pos = 0; \
     } \
 }
 

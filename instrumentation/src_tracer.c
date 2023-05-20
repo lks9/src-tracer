@@ -175,6 +175,7 @@ void _trace_after_fork(int i) {
 
     int lowfd = open(trace_fname, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
     int fd = fcntl(lowfd, F_DUPFD_CLOEXEC, lowfd + 42);
+    close(lowfd);
 
     // now the tracing can start (guarded by trace_fd > 0)
     trace_fd = fd;
