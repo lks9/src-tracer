@@ -15,10 +15,20 @@
 #define O_LARGEFILE 0
 #endif
 
-int _trace_fd = 0;
-
 unsigned char _trace_if_byte = _TRACE_SET_IE;
 int _trace_if_count = 0;
+unsigned char _trace_buf[TRACE_BUF_SIZE];
+int _trace_buf_pos = 0;
+
+static int trace_fd = 0;
+static char trace_fname[160];
+
+static int trace_fork_count = 0;
+static unsigned char temp_trace_buf[TRACE_BUF_SIZE];
+static int temp_trace_buf_pos;
+static unsigned char temp_trace_if_byte;
+static int temp_trace_if_count;
+static int temp_trace_fd;
 
 #ifndef _TRACE_USE_POSIX_WRITE
 // taken from musl (arch/x86_64/syscall_arch.h)
@@ -33,44 +43,59 @@ static __inline long __syscall3(long n, long a1, long a2, long a3)
 // end musl code
 #endif
 
-unsigned char _trace_buf[TRACE_BUF_SIZE];
-int _trace_buf_pos = 0;
-
-static char trace_fname[160];
-
-static int trace_fork_count = 0;
-static char temp_trace_buf[TRACE_BUF_SIZE];
-static int temp_trace_buf_pos;
-static unsigned char temp_trace_if_byte;
-static int temp_trace_if_count;
-static int temp_trace_fd;
-
-void _trace_write(const void *buf, int count) {
-    const char *ptr = buf;
-    while (_trace_fd > 0) {
+void _trace_write(const void *buf) {
+    if (trace_fd <= 0) return;
 #ifdef _TRACE_USE_POSIX_WRITE
-        ssize_t written = write(_trace_fd, ptr, count);
+    ssize_t written = write(trace_fd, buf, TRACE_BUF_SIZE);
 #else
-        // Use __syscall3 to avoid recursive calls
-        long written = __syscall3(SYS_write, (long)_trace_fd, (long)ptr, (long)count);
+    // Use __syscall3 to avoid recursive calls
+    long written = __syscall3(SYS_write, (long)trace_fd, (long)buf, (long)TRACE_BUF_SIZE);
 #endif
-        if (written < 0) {
-            // some write error occured
-            // abort trace recording
-            int fd = _trace_fd;
-            _trace_fd = 0;
-            close(fd);
-            return;
-        } else if (written == count) {
-            return;
-        }
-        ptr = &ptr[written];
-        count -= written;
+    if (likely(written == TRACE_BUF_SIZE)) {
+        return;
     }
+    // some write error occured
+    // abort trace recording
+    int fd = trace_fd;
+    trace_fd = 0;
+    close(fd);
+    return;
+}
+
+#ifndef EFFICIENT_TEXT_TRACE
+void _trace_write_text(const void *buf, unsigned long count) {
+    if (trace_fd <= 0) return;
+#ifdef _TRACE_USE_POSIX_WRITE
+    ssize_t written = write(trace_fd, buf, count);
+#else
+    // Use __syscall3 to avoid recursive calls
+    long written = __syscall3(SYS_write, (long)trace_fd, (long)buf, (long)count);
+#endif
+    if (likely(written == count)) {
+        return;
+    }
+    // some write error occured
+    // abort trace recording
+    int fd = trace_fd;
+    trace_fd = 0;
+    close(fd);
+    return;
+}
+#endif
+
+static void trace_write_rest(void) {
+    if (trace_fd <= 0) return;
+#ifdef _TRACE_USE_POSIX_WRITE
+    write(trace_fd, _trace_buf, _trace_buf_pos);
+#else
+    // Use __syscall3 to avoid recursive calls
+    __syscall3(SYS_write, (long)trace_fd, (long)_trace_buf, (long)_trace_buf_pos);
+#endif
+    // don't care about write errors anymore, will be closed soon!
 }
 
 void _trace_open(const char *fname) {
-    if (_trace_fd > 0) {
+    if (trace_fd > 0) {
         // already opened
         return;
     }
@@ -95,14 +120,18 @@ void _trace_open(const char *fname) {
 
     atexit(_trace_close);
 
-    // now the tracing can start (guarded by _trace_fd > 0)
-    _trace_fd = fd;
+    // now the tracing can start (guarded by trace_fd > 0)
+    trace_fd = fd;
     _trace_buf_pos = 0;
     _trace_if_count = 0;
     _trace_if_byte = _TRACE_SET_IE;
 }
 
 void _trace_before_fork(void) {
+    if (trace_fd <= 0) {
+        // tracing has already been aborted!
+        return;
+    }
     trace_fork_count += 1;
     _TRACE_NUM(_TRACE_SET_DATA, trace_fork_count);
 
@@ -111,16 +140,20 @@ void _trace_before_fork(void) {
         temp_trace_buf[k] = _trace_buf[k];
     }
     temp_trace_buf_pos = _trace_buf_pos;
-    temp_trace_fd = _trace_fd;
+    temp_trace_fd = trace_fd;
     temp_trace_if_byte = _trace_if_byte;
     temp_trace_if_count = _trace_if_count;
-    _trace_fd = 0;
+    trace_fd = 0;
+    _trace_buf_pos = 0;
 }
 
 void _trace_after_fork(int i) {
-    if (i < 0) {
+    if (temp_trace_fd <= 0) {
+        // tracing has already been aborted!
         return;
-    } else if (i > 0) {
+    }
+    if (i != 0) {
+        // we are in the parent
         // resume tracing
         for (int k = 0; i < TRACE_BUF_SIZE; k++) {
             _trace_buf[k] = temp_trace_buf[k];
@@ -128,9 +161,13 @@ void _trace_after_fork(int i) {
         _trace_buf_pos = temp_trace_buf_pos;
         _trace_if_byte = temp_trace_if_byte;
         _trace_if_count = temp_trace_if_count;
-        _trace_fd = temp_trace_fd;
+        trace_fd = temp_trace_fd;
+        temp_trace_fd = 0;
         return;
     }
+    // we are in a fork
+    close(temp_trace_fd);
+    temp_trace_fd = 0;
     char fname_suffix[20];
     snprintf(fname_suffix, 20, "-fork-%d.trace", trace_fork_count);
     strncat(trace_fname, fname_suffix, 20);
@@ -139,15 +176,15 @@ void _trace_after_fork(int i) {
     int lowfd = open(trace_fname, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
     int fd = fcntl(lowfd, F_DUPFD_CLOEXEC, lowfd + 42);
 
-    // now the tracing can start (guarded by _trace_fd > 0)
-    _trace_fd = fd;
+    // now the tracing can start (guarded by trace_fd > 0)
+    trace_fd = fd;
     _trace_buf_pos = 0;
     _trace_if_count = 0;
     _trace_if_byte = _TRACE_SET_IE;
 }
 
 void _trace_close(void) {
-    if (_trace_fd <= 0) {
+    if (trace_fd <= 0) {
         // already closed or never successfully opened
         return;
     }
@@ -156,11 +193,12 @@ void _trace_close(void) {
         _TRACE_PUT(_trace_if_byte);
     }
     if (_trace_buf_pos != 0) {
-        _trace_write(_trace_buf, _trace_buf_pos);
+        trace_write_rest();
     }
     // stop tracing
-    int fd = _trace_fd;
-    _trace_fd = 0;
+    int fd = trace_fd;
+    trace_fd = 0;
+    _trace_buf_pos = 0;
     // now we call a library function without being traced
     close(fd);
 }

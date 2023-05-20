@@ -31,7 +31,10 @@ extern "C" {
 #define bool _Bool
 #endif
 
-extern void _trace_write(const void* buf, int count);
+extern void _trace_write(const void *buf);
+#ifndef EFFICIENT_TEXT_TRACE
+extern void _trace_write_text(const void *buf, unsigned long count);
+#endif
 
 extern void _trace_open(const char *fname);
 extern void _trace_close(void);
@@ -63,12 +66,15 @@ extern int _trace_buf_pos;
  #define _TRACE_SET_RETURN        0b01010000
 #define _TRACE_TEST_IE_COUNT      0b10000111
 
+#define likely(x)       __builtin_expect((x),1)
+#define unlikely(x)     __builtin_expect((x),0)
+
 #define _TRACE_PUT(c) ;{ \
     _trace_buf[_trace_buf_pos] = (c); \
     _trace_buf_pos += 1; \
-    if (_trace_buf_pos == TRACE_BUF_SIZE) { \
-        _trace_write(_trace_buf, TRACE_BUF_SIZE); \
-        _trace_buf_pos = 0; \
+    _trace_buf_pos %= TRACE_BUF_SIZE; \
+    if (_trace_buf_pos == 0) { \
+        _trace_write(_trace_buf); \
     } \
 }
 
@@ -77,7 +83,7 @@ extern int _trace_buf_pos;
 #else
 #define _TRACE_PUT_TEXT(c) ;{ \
     unsigned char buf[1] = { (c) }; \
-    _trace_write(buf, 1); \
+    _trace_write_text(buf, 1); \
 }
 #endif
 
@@ -145,7 +151,7 @@ extern int _trace_buf_pos;
     for (int i = 0; i < count; i++) { \
         buf[count-i] = NIBBLE_TO_HEX((num), i); \
     } \
-    _trace_write(buf, 1+count); \
+    _trace_write_text(buf, 1+count); \
 }
 #endif
 
