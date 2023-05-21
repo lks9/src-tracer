@@ -28,16 +28,23 @@ extern "C" {
 #define bool _Bool
 #endif
 
+struct _trace_ctx {
+    char *ptr;
+    char *_page_ptr;
+    int fd;
+    int fork_count;
+    int try_count;
+    int if_count;
+    char if_byte;
+    bool active;
+};
+
+extern struct _trace_ctx _trace;
+
 extern void _trace_open(const char *fname);
 extern void _trace_close(void);
 extern void _trace_before_fork(void);
 extern int _trace_after_fork(int pid);
-
-extern unsigned char _trace_if_byte;
-extern int _trace_if_count;
-
-extern char *_trace_ptr;
-extern bool _trace_ptr_count;
 
 #define _TRACE_TEST_IE            0b10000000
  #define _TRACE_SET_IE            0b10000000
@@ -61,42 +68,44 @@ extern bool _trace_ptr_count;
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
 
-#define _TRACE_PUT(c) ;{ \
-    _trace_ptr[0] = (c); \
-    _trace_ptr = &_trace_ptr[_trace_ptr_count]; \
-}
+#define _TRACE_PUT(c) ; \
+    if (_trace.active) { \
+        _trace.ptr[0] = (c); \
+        _trace.ptr += 1; \
+    }
 
 #define _TRACE_PUT_TEXT     _TRACE_PUT
 
-#define _TRACE_IE(if_true) ;{ \
-    _trace_if_byte |= (if_true) << _trace_if_count; \
-    _trace_if_count += 1; \
-    if (_trace_if_count == 7) { \
-        _TRACE_PUT(_trace_if_byte); \
-        _trace_if_count = 0; \
-        _trace_if_byte = _TRACE_SET_IE; \
-    } \
-}
+#define _TRACE_IE(if_true) ; \
+    if (_trace.active) { \
+        _trace.if_byte |= (if_true) << _trace.if_count; \
+        _trace.if_count += 1; \
+        if (_trace.if_count == 7) { \
+            _TRACE_PUT(_trace.if_byte); \
+            _trace.if_count = 0; \
+            _trace.if_byte = _TRACE_SET_IE; \
+        } \
+    }
 
 #define _TRACE_NUM(type, num) ;{ \
     unsigned long long _trace_n = (num); \
     if (_trace_n == 0) { \
-        _TRACE_PUT((type) | _trace_if_count | _TRACE_SET_LEN_0); \
+        _TRACE_PUT((type) | _trace.if_count | _TRACE_SET_LEN_0); \
     } else if (_trace_n == (_trace_n & 0xff)) { \
-        _TRACE_PUT((type) | _trace_if_count | _TRACE_SET_LEN_8); \
+        _TRACE_PUT((type) | _trace.if_count | _TRACE_SET_LEN_8); \
         _TRACE_PUT((_trace_n >> 0) & 0xff); \
     } else if (_trace_n == (_trace_n & 0xffff)) { \
-        _TRACE_PUT((type) | _trace_if_count | _TRACE_SET_LEN_16); \
+        _TRACE_PUT((type) | _trace.if_count | _TRACE_SET_LEN_16); \
         _TRACE_PUT((_trace_n >> 0) & 0xff); \
         _TRACE_PUT((_trace_n >> 8) & 0xff); \
     } else if (_trace_n == (_trace_n & 0xffffffff)) { \
-        _TRACE_PUT((type) | _trace_if_count | _TRACE_SET_LEN_32); \
+        _TRACE_PUT((type) | _trace.if_count | _TRACE_SET_LEN_32); \
         _TRACE_PUT((_trace_n >> 0) & 0xff); \
         _TRACE_PUT((_trace_n >> 8) & 0xff); \
         _TRACE_PUT((_trace_n >> 16) & 0xff); \
         _TRACE_PUT((_trace_n >> 24) & 0xff); \
     } else { \
-        _TRACE_PUT((type) | _trace_if_count | _TRACE_SET_LEN_64); \
+        _TRACE_PUT((type) | _trace.if_count | _TRACE_SET_LEN_64); \
         _TRACE_PUT((_trace_n >> 0) & 0xff); \
         _TRACE_PUT((_trace_n >> 8) & 0xff); \
         _TRACE_PUT((_trace_n >> 16) & 0xff); \
@@ -124,7 +133,7 @@ extern bool _trace_ptr_count;
 }
 
 #define _TRACE_RETURN() \
-    _TRACE_PUT(_TRACE_SET_RETURN | _trace_if_count)
+    _TRACE_PUT(_TRACE_SET_RETURN | _trace.if_count)
 
 // same as the macro version
 // but returns num

@@ -17,25 +17,25 @@
 #define O_LARGEFILE 0
 #endif
 
-unsigned char _trace_if_byte = _TRACE_SET_IE;
-int _trace_if_count = 0;
+static char dummy[16];
 
-static char dummy;
-char *_trace_ptr = &dummy;
-bool _trace_ptr_count = 0;
-static void *trace_page_ptr;
+struct _trace_ctx _trace = {
+    .ptr = dummy,
+    ._page_ptr = NULL,
+    .fd = 0,
+    .fork_count = 0,
+    .try_count = 0,
+    .if_count = 0,
+    .if_byte = _TRACE_SET_IE,
+    .active = 0,
+};
+
+static struct _trace_ctx temp_trace;
 
 static char trace_fname[200];
-static int trace_fd = 0;
-
-static int trace_fork_count = 0;
-static char *temp_trace_ptr;
-static unsigned char temp_trace_if_byte;
-static int temp_trace_if_count;
-static int temp_trace_fd;
 
 void _trace_open(const char *fname) {
-    if (trace_fd > 0) {
+    if (_trace.fd > 0) {
         // already opened
         return;
     }
@@ -63,74 +63,75 @@ void _trace_open(const char *fname) {
         return;
     }
     // reserve memory for the trace buffer
-    trace_page_ptr = mmap(NULL, 1l << 36, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (trace_page_ptr == MAP_FAILED) {
-        trace_page_ptr = NULL;
+    _trace._page_ptr = mmap(NULL, 1l << 36, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (_trace._page_ptr == MAP_FAILED) {
+        _trace._page_ptr = NULL;
         perror("mmap");
         return;
     }
-    if (madvise(trace_page_ptr, 1l << 36, MADV_SEQUENTIAL) <  0) {
+    if (madvise(_trace._page_ptr, 1l << 36, MADV_SEQUENTIAL) <  0) {
         perror("madvise");
         return;
     }
-    if (madvise(trace_page_ptr, 1l << 36, MADV_DONTFORK) <  0) {
+    if (madvise(_trace._page_ptr, 1l << 36, MADV_DONTFORK) <  0) {
         perror("madvise 2");
         return;
     }
     // map empty block at the end
-    //mmap(trace_page_ptr + (1l << 38), 4096, PROT_NONE, MAP_FIXED | MAP_ANON, -1, 0);
+    //mmap(_trace._page_ptr + (1l << 38), 4096, PROT_NONE, MAP_FIXED | MAP_ANON, -1, 0);
 
     atexit(_trace_close);
 
-    // now the tracing can start (guarded by trace_fd > 0)
-    trace_fd = fd;
-    _trace_if_count = 0;
-    _trace_if_byte = _TRACE_SET_IE;
-    _trace_ptr = trace_page_ptr;
-    _trace_ptr_count = 1;
+    // now the tracing can start (guarded by _trace.fd > 0)
+    _trace.fd = fd;
+    _trace.if_count = 0;
+    _trace.if_byte = _TRACE_SET_IE;
+    _trace.ptr = _trace._page_ptr;
+    _trace.active = 1;
 }
 
 void _trace_before_fork(void) {
-    if (trace_fd <= 0) {
+    if (_trace.fd <= 0) {
         // tracing has already been aborted!
         return;
     }
-    trace_fork_count += 1;
-    _TRACE_NUM(_TRACE_SET_DATA, trace_fork_count);
+    _trace.fork_count += 1;
+    _TRACE_NUM(_TRACE_SET_DATA, _trace.fork_count);
 
     // stop tracing
-    temp_trace_ptr = _trace_ptr;
-    temp_trace_if_byte = _trace_if_byte;
-    temp_trace_if_count = _trace_if_count;
-    temp_trace_fd = trace_fd;
-    _trace_ptr = &dummy;
-    _trace_ptr_count = 0;
-    trace_fd = 0;
+    temp_trace.ptr = _trace.ptr;
+    temp_trace.fd = _trace.fd;
+    temp_trace.if_count = _trace.if_count;
+    temp_trace.if_byte = _trace.if_byte;
+    temp_trace.active = _trace.active;
+    _trace.ptr = dummy;
+    _trace.fd = 0;
+    _trace.active = 0;
 }
 
 int _trace_after_fork(int pid) {
-    if (temp_trace_fd <= 0) {
+    if (temp_trace.fd <= 0) {
         // tracing has already been aborted!
         return pid;
     }
     if (pid != 0) {
         // we are in the parent
         // resume tracing
-        _trace_ptr = temp_trace_ptr;
-        _trace_if_byte = temp_trace_if_byte;
-        _trace_if_count = temp_trace_if_count;
-        _trace_ptr_count = 1;
-        trace_fd = temp_trace_fd;
-        temp_trace_fd = 0;
+        _trace.ptr = temp_trace.ptr;
+        _trace.fd = temp_trace.fd;
+        _trace.if_count = temp_trace.if_count;
+        _trace.if_byte = temp_trace.if_byte;
+        _trace.active = temp_trace.active;
+        temp_trace.fd = 0;
 
         _TRACE_NUM(_TRACE_SET_DATA, pid < 0 ? -1 : 1);
         return pid;
     }
     // we are in a fork
-    close(temp_trace_fd);
-    temp_trace_fd = 0;
+    close(temp_trace.fd);
+    temp_trace.fd = 0;
     char fname_suffix[20];
-    snprintf(fname_suffix, 20, "-fork-%d.trace", trace_fork_count);
+    snprintf(fname_suffix, 20, "-fork-%d.trace", _trace.fork_count);
     strncat(trace_fname, fname_suffix, 20);
     //printf("Trace to: %s\n", trace_fname);
 
@@ -143,50 +144,51 @@ int _trace_after_fork(int pid) {
         return pid;
     }
     // reserve memory for the trace buffer
-    trace_page_ptr = mmap(NULL, 1l << 36, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (trace_page_ptr == MAP_FAILED) {
-        trace_page_ptr = NULL;
+    _trace._page_ptr = mmap(NULL, 1l << 36, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (_trace._page_ptr == MAP_FAILED) {
+        _trace._page_ptr = NULL;
         perror("mmap");
         return pid;
     }
-    if (madvise(trace_page_ptr, 1l << 36, MADV_SEQUENTIAL) <  0) {
+    if (madvise(_trace._page_ptr, 1l << 36, MADV_SEQUENTIAL) <  0) {
         perror("madvise");
         return pid;
     }
-    if (madvise(trace_page_ptr, 1l << 36, MADV_DONTFORK) <  0) {
+    if (madvise(_trace._page_ptr, 1l << 36, MADV_DONTFORK) <  0) {
         perror("madvise 2");
         return pid;
     }
-    // now the tracing can start (guarded by trace_fd > 0)
-    trace_fd = fd;
-    _trace_if_count = 0;
-    _trace_if_byte = _TRACE_SET_IE;
-    _trace_ptr = trace_page_ptr;
-    _trace_ptr_count = 1;
+    // now the tracing can start (guarded by _trace.fd > 0)
+    _trace.ptr = _trace._page_ptr;
+    _trace.fd = fd;
+    _trace.if_count = 0;
+    _trace.if_byte = _TRACE_SET_IE;
+    _trace.active = 1;
 
     _TRACE_NUM(_TRACE_SET_DATA, pid);
     return pid;
 }
 
 void _trace_close(void) {
-    if (trace_fd <= 0) {
+    if (_trace.fd <= 0) {
         // already closed or never successfully opened
         return;
     }
-    if (_trace_if_count != 0) {
+    if (_trace.if_count != 0) {
         _TRACE_NUM(_TRACE_SET_FUNC, 0);
-        _TRACE_PUT(_trace_if_byte);
+        _TRACE_PUT(_trace.if_byte);
     }
+    int fd = _trace.fd;
+    ssize_t written = (char*)_trace.ptr - (char*)_trace._page_ptr;
+
     // stop tracing
-    int fd = trace_fd;
-    trace_fd = 0;
-    ssize_t written = (char*)_trace_ptr - (char*)trace_page_ptr;
-    _trace_ptr = &dummy;
-    _trace_ptr_count = 0;
+    _trace.ptr = dummy;
+    _trace.fd = 0;
+    _trace.active = 0;
 
     // now we call a library function without being traced
     ftruncate(fd, written);
-    munmap(trace_page_ptr, 1l << 36);
+    munmap(_trace._page_ptr, 1l << 36);
     close(fd);
 }
 
