@@ -27,6 +27,8 @@ ap.add_argument("--pretty", type=int, default=5,
     help="5: pretty (default), 5+4: indent, 5+3: function names, 1 compact, 0: no newline, -1: informative list")
 ap.add_argument("--show-pos", action='store_true',
                 help="for each element show its count offset in the trace")
+ap.add_argument("--extra-indent", type=int, default=0,
+                help="print extra indent")
 args = ap.parse_args()
 
 # create connection to database
@@ -51,7 +53,7 @@ if args.pretty in (0,1) and args.show_pos:
 trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count, count_elems=args.count_elems)
 
 previous_newline = True
-indent = 0
+indent = args.extra_indent
 count = 0
 
 def print_indent():
@@ -91,16 +93,22 @@ def print_extra(s):
         print_newline()
 
 if args.pretty == -1:
-    for elem in trace:
+    for elem in trace.full_iter(trace._trace):
         print(elem)
     sys.exit()
 
 for elem in trace:
-    if elem.letter == 'R':
+    if elem.letter == 'T' or elem.letter == 'N':
+        print_with_count(f"{elem.letter}")
+    elif elem.letter == 'R':
         indent -= 1
         print_extra(elem.pretty(show_pos=args.show_pos))
+    elif elem.letter == 'A':
+        # anonymous function call
+        print_extra(elem.pretty(show_pos=args.show_pos))
+        indent += 1
     elif elem.bs == b'':
-        print_with_count(f"{elem.letter}")
+        print_extra(elem.pretty(show_pos=args.show_pos))
     else:
         num = int.from_bytes(elem.bs, "little")
         if elem.letter == 'F':
@@ -108,7 +116,10 @@ for elem in trace:
                 name = Util.get_name(cursor, num)
                 # All upper case letters in the trace are treated as elem,
                 # so we have to print name.lower() instead of name
-                print_extra(elem.pretty(show_pos=args.show_pos, name=name.lower()))
+                if name:
+                    print_extra(elem.pretty(show_pos=args.show_pos, name=name.lower()))
+                else:
+                    print_extra(elem.pretty(show_pos=args.show_pos))
             else:
                 print_extra(elem.pretty(show_pos=args.show_pos))
             indent += 1

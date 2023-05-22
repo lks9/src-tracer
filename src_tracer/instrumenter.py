@@ -8,7 +8,7 @@ from clang.cindex import Index, CursorKind, StorageClass
 class Instrumenter:
 
     def __init__(self, connection, trace_store_dir, case_instrument=False, boolop_instrument=False,
-                 return_instrument=True, inline_instrument=False, main_instrument=True):
+                 return_instrument=True, inline_instrument=False, main_instrument=True, anon_instrument=False):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
@@ -22,6 +22,7 @@ class Instrumenter:
         self.return_instrument = return_instrument
         self.inline_instrument = inline_instrument
         self.main_instrument = main_instrument
+        self.anon_instrument = anon_instrument
 
         self.ifs = []
         self.loops = []
@@ -149,11 +150,14 @@ class Instrumenter:
                 body = child
         if not body:
             return
-        func_num = self.func_num(node)
         if not self.check_location(body.extent.start, [b"{"]):
             print("Check location failed for function " + node.spelling)
             return
-        self.add_annotation(b" _FUNC(" + bytes(hex(func_num), "utf-8") + b") ", body.extent.start, 1)
+        if self.anon_instrument:
+            self.add_annotation(b" _FUNC(0) ", body.extent.start, 1)
+        else:
+            func_num = self.func_num(node)
+            self.add_annotation(b" _FUNC(" + bytes(hex(func_num), "utf-8") + b") ", body.extent.start, 1)
 
         # handle returns
         if self.return_instrument:
