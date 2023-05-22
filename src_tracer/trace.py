@@ -2,23 +2,31 @@ import re
 
 TEST_IE          = 0b10000000
 PUT_IE           = 0b10000000
-TEST_FUNC        = 0b10001000
+
+TEST_FUNC_DATA   = 0b10001000
 PUT_FUNC         = 0b00000000
-TEST_DATA        = 0b10001000
 PUT_DATA         = 0b00001000
-TEST_LEN         = 0b11110000
-PUT_LEN_0        = 0b00000000
-PUT_LEN_8        = 0b00010000
-PUT_LEN_16       = 0b00100000
-PUT_LEN_32       = 0b00110000
-PUT_LEN_64       = 0b01000000
-PUT_LEN_reserved = 0b01010000
-PUT_LEN_PREFIX   = 0b01100000
-PUT_LEN_STRING   = 0b01110000
-TEST_RETURN      = 0b11111000
-PUT_RETURN       = 0b01010000
-TEST_END         = 0b11111000
-PUT_END          = 0b00000000
+
+TEST_LEN         = 0b11111000
+
+PUT_FUNC_END     = 0b00000000
+PUT_FUNC_LEN_8   = 0b00010000
+PUT_FUNC_LEN_16  = 0b00100000
+PUT_FUNC_LEN_32  = 0b00110000
+PUT_FUNC_LEN_24  = 0b01000000
+PUT_FUNC_RETURN  = 0b01010000
+PUT_FUNC_ANON    = 0b01100000
+PUT_FUNC_reserved= 0b01110000
+
+PUT_LEN_0        = 0b00001000
+PUT_LEN_8        = 0b00011000
+PUT_LEN_16       = 0b00101000
+PUT_LEN_32       = 0b00111000
+PUT_LEN_64       = 0b01001000
+PUT_LEN_reserved = 0b01011000
+PUT_LEN_PREFIX   = 0b01101000
+PUT_LEN_STRING   = 0b01111000
+
 TEST_IE_COUNT    = 0b10000111
 
 bit_length = {
@@ -27,15 +35,31 @@ bit_length = {
     PUT_LEN_16: 16,
     PUT_LEN_32: 32,
     PUT_LEN_64: 64,
+
+    PUT_FUNC_END: 0,
+    PUT_FUNC_RETURN: 0,
+    PUT_FUNC_ANON: 0,
+    PUT_FUNC_LEN_8: 8,
+    PUT_FUNC_LEN_16: 16,
+    PUT_FUNC_LEN_24: 32,
+    PUT_FUNC_LEN_32: 32,
 }
+
 byte_length = {
     PUT_LEN_0: 0,
     PUT_LEN_8: 1,
     PUT_LEN_16: 2,
     PUT_LEN_32: 4,
     PUT_LEN_64: 8,
-}
 
+    PUT_FUNC_END: 0,
+    PUT_FUNC_RETURN: 0,
+    PUT_FUNC_ANON: 0,
+    PUT_FUNC_LEN_8: 1,
+    PUT_FUNC_LEN_16: 2,
+    PUT_FUNC_LEN_24: 3,
+    PUT_FUNC_LEN_32: 4,
+}
 
 def letter(b, count=0):
     if b & TEST_IE == PUT_IE:
@@ -43,19 +67,21 @@ def letter(b, count=0):
             return 'T'
         else:
             return 'N'
-    elif b & TEST_DATA == PUT_DATA:
-        if b & TEST_LEN == PUT_LEN_STRING:
+    elif b & TEST_FUNC_DATA == PUT_DATA:
+        l = b & TEST_LEN
+        if l == PUT_LEN_STRING:
             return 'B'
-        elif b & TEST_LEN != PUT_LEN_reserved:
+        elif l != PUT_LEN_reserved:
             return 'D'
-    elif b & TEST_FUNC == PUT_FUNC:
-        if b & TEST_END == PUT_END:
+    elif b & TEST_FUNC_DATA == PUT_FUNC:
+        l = b & TEST_LEN
+        if l == PUT_FUNC_END:
             return 'E'
-        elif b & TEST_RETURN == PUT_RETURN:
+        elif l == PUT_FUNC_RETURN:
             return 'R'
-        elif b & TEST_LEN == PUT_LEN_STRING:
-            return 'S'
-        elif b & TEST_LEN != PUT_LEN_reserved:
+        elif l == PUT_FUNC_ANON:
+            return 'A'
+        elif l != PUT_FUNC_reserved:
             return 'F'
     raise ValueError(f"There is no letter for {bin(b)}")
 
@@ -253,7 +279,7 @@ class TraceCompact(Trace):
                 continue
 
             len_bits = b & TEST_LEN
-            if b & TEST_RETURN == PUT_RETURN:
+            if len_bits == PUT_FUNC_RETURN:
                 length = 0
             elif len_bits == PUT_LEN_STRING:
                 m = re.match(rb'[^\0]*\0', trace[i:])
@@ -281,7 +307,7 @@ class TraceCompact(Trace):
             i += 1
             if b & TEST_IE == PUT_IE:
                 continue
-            elif b & TEST_RETURN == PUT_RETURN:
+            elif b & TEST_LEN == PUT_FUNC_RETURN:
                 continue
 
             len_bits = b & TEST_LEN
@@ -294,7 +320,7 @@ class TraceCompact(Trace):
             else:
                 length = byte_length[len_bits]
 
-            if b & TEST_FUNC == PUT_FUNC:
+            if b & TEST_FUNC_DATA == PUT_FUNC:
                 bs = self._trace[i:i+length]
                 yield TraceElem(letter(b), bs, pos)
 

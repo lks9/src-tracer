@@ -173,7 +173,7 @@ class SourceTraceReplayer:
             return self.else_addr
         elif letter == 'R':
             return self.return_addr
-        elif letter == 'F':
+        elif letter == 'F' or letter == 'A':
             return self.fun_call_addr
         elif letter == 'D':
             return self.wrote_int_addr
