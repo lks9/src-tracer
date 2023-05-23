@@ -8,7 +8,8 @@ from clang.cindex import Index, CursorKind, StorageClass
 class Instrumenter:
 
     def __init__(self, connection, trace_store_dir, case_instrument=False, boolop_instrument=False,
-                 return_instrument=True, inline_instrument=False, main_instrument=True, anon_instrument=False):
+                 return_instrument=True, inline_instrument=False, main_instrument=True, anon_instrument=False,
+                 function_instrument=True):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
@@ -23,6 +24,7 @@ class Instrumenter:
         self.inline_instrument = inline_instrument
         self.main_instrument = main_instrument
         self.anon_instrument = anon_instrument
+        self.function_instrument = function_instrument
 
         self.ifs = []
         self.loops = []
@@ -153,11 +155,12 @@ class Instrumenter:
         if not self.check_location(body.extent.start, [b"{"]):
             print("Check location failed for function " + node.spelling)
             return
-        if self.anon_instrument:
-            self.add_annotation(b" _FUNC(0) ", body.extent.start, 1)
-        else:
-            func_num = self.func_num(node)
-            self.add_annotation(b" _FUNC(" + bytes(hex(func_num), "utf-8") + b") ", body.extent.start, 1)
+        if self.function_instrument:
+            if self.anon_instrument:
+                self.add_annotation(b" _FUNC(0) ", body.extent.start, 1)
+            else:
+                func_num = self.func_num(node)
+                self.add_annotation(b" _FUNC(" + bytes(hex(func_num), "utf-8") + b") ", body.extent.start, 1)
 
         # handle returns
         if self.return_instrument:
@@ -168,6 +171,10 @@ class Instrumenter:
 
         # special treatment for main function
         if self.main_instrument and node.spelling == "main":
+            if not self.function_instrument:
+                # well, we need something to start...
+                self.add_annotation(b" _FUNC(0) ", body.extent.start, 1)
+
             # print('Log trace to ' + self.trace_store_dir)
             try:
                 (orig_fname, _) = self.orig_file_and_line(node.extent.start)
