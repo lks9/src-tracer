@@ -26,6 +26,8 @@ ap.add_argument("--no-main", action='store_true',
                 help="do not instrument the main function to start tracing")
 ap.add_argument("--anon", action='store_true',
                 help="instrument all functions without a number")
+ap.add_argument("--no-functions", action='store_true',
+                help="do not instrument functions at all")
 args = ap.parse_args()
 
 # trace store dir
@@ -48,6 +50,7 @@ except sqlite3.OperationalError:
 # do the instrumentation
 instrumenter = Instrumenter(connection, store_dir, case_instrument=args.cases, boolop_instrument=args.short_circuit,
                             return_instrument=not args.no_return, inline_instrument=args.inline,
-                            main_instrument=not args.no_main, anon_instrument=args.anon)
+                            main_instrument=not args.no_main, anon_instrument=args.anon,
+                            function_instrument=not args.no_functions)
 instrumenter.parse(args.filename)
 instrumenter.annotate_all(args.filename)
