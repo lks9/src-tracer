@@ -145,12 +145,10 @@ class SourceTraceReplayer:
     def make_globals_symbolic(self, state):
         for obj in self.p.loader.all_elf_objects:
             for section in obj.sections:
-                if section.name == ".data":
-                    data_bvs = claripy.BVS(".data", 8*(section.max_addr - section.min_addr))
-                    state.memory.store(section.min_addr, data_bvs)
-                elif section.name == ".bss":
-                    bss_bvs = claripy.BVS(".bss", 8*(section.max_addr - section.min_addr))
-                    state.memory.store(section.min_addr, bss_bvs)
+                if section.name == ".data" or section.name == ".bss":
+                    for i in range(section.max_addr- section.min_addr):
+                        data = state.solver.BVS("data" + str(i) + section.name, 8)
+                        state.memory.store(section.min_addr + i, data)
         if self.is_retrace_addr:
             state.mem[self.is_retrace_addr].bool = True
         if self.assert_idx_addr:
