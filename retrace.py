@@ -68,7 +68,10 @@ else:
 DEFAULT_ADD_OPS = {"COPY_STATES",
                    "ANY_FILE_MIGHT_EXIST",
                    "SYMBOL_FILL_UNCONSTRAINED_MEMORY",
-                   "SYMBOL_FILL_UNCONSTRAINED_REGISTERS"}
+                   "SYMBOL_FILL_UNCONSTRAINED_REGISTERS",
+                   "CONSERVATIVE_READ_STRATEGY",
+                   "CONSERVATIVE_WRITE_STRATEGY",
+                   }
 DEFAULT_REMOVE_OPS = {"ALL_FILES_EXIST"}
 
 # Some useful options:
@@ -98,8 +101,10 @@ elif args.drop is not None:
     dropping = True
     merge_after = args.drop
 
+assertion_checks = False
 if args.assertions:
     assertions = args.assertions
+    assert_checks = True
 else:
     assertions = []
 
@@ -110,11 +115,12 @@ else:
 
 trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count, count_elems=args.count_elems)
 source_tracer = SourceTraceReplayer(args.binary_name, auto_load_libs=False)
+#logging.getLogger("").setLevel(logging.DEBUG)
 (simgr, state) = source_tracer.follow_trace(trace, args.fname, cursor, add_options=add, remove_options=remove,
                                             merging=args.merge, assertions=assertions, assumptions=assume)
 
 # assertion checks
-if args.assertions != [] or args.assume != []:
+if assertion_checks:
     for state in simgr.deadended:
         print()
         res = source_tracer.check_all_assertions(state)
