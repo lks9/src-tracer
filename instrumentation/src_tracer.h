@@ -204,14 +204,14 @@ static inline __attribute__((always_inline)) bool _text_trace_condition(bool con
 extern void _retrace_if(void);
 extern void _retrace_else(void);
 
-extern int _retrace_fun_num;
+extern volatile int _retrace_fun_num;
 extern void _retrace_fun_call(void);
 extern void _retrace_return(void);
 
-extern long long int _retrace_int;
+extern volatile long long int _retrace_int;
 extern void _retrace_wrote_int(void);
 
-extern int _retrace_fork_count;
+extern volatile int _retrace_fork_count;
 
 #define _RETRACE_FUN_CALL(num) ;{ \
     _retrace_fun_num = (num); \
@@ -239,7 +239,7 @@ static inline __attribute__((always_inline)) bool _retrace_condition(bool cond) 
 }
 
 // for both tracing and retracing
-extern bool _is_retrace_mode;
+extern volatile bool _is_retrace_mode;
 
 #define _IS_RETRACE(a,b)    ; \
     if (_is_retrace_mode) { \

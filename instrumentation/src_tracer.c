@@ -197,39 +197,39 @@ void _trace_close(void) {
 void _retrace_if(void) {}
 void _retrace_else(void) {}
 
-int _retrace_fun_num;
+volatile int _retrace_fun_num;
 void _retrace_fun_call(void) {}
 void _retrace_return(void) {}
 
-long long int _retrace_int;
+volatile long long int _retrace_int;
 void _retrace_wrote_int(void) {}
 
-int _retrace_fork_count;
+volatile int _retrace_fork_count;
 
 // ghost code
 void _retrace_ghost_start(void) {}
 void _retrace_ghost_end(void) {}
 // true for combined trace/retrace mode
-bool _retrace_in_ghost = true;
+volatile bool _retrace_in_ghost = true;
 
-char *_retrace_assert_names[ASSERT_BUF_SIZE];
-bool  _retrace_asserts[ASSERT_BUF_SIZE];
-int   _retrace_assert_idx;
+char *volatile _retrace_assert_names[ASSERT_BUF_SIZE];
+volatile bool  _retrace_asserts[ASSERT_BUF_SIZE];
+volatile int   _retrace_assert_idx;
 void  _retrace_assert_passed(void) {}
 
-char *_retrace_assume_name;
-bool  _retrace_assume;
+char *volatile _retrace_assume_name;
+volatile bool  _retrace_assume;
 void  _retrace_assume_passed(void) {}
 
 void _retrace_prop_start(void) {}
-bool _retrace_prop_is_assert;
-bool _retrace_prop_is_assume;
+volatile bool _retrace_prop_is_assert;
+volatile bool _retrace_prop_is_assume;
 void _retrace_prop_passed(void) {}
 
-char *_retrace_dump_names[GHOST_DUMP_BUF_SIZE];
-void *_retrace_dumps[GHOST_DUMP_BUF_SIZE];
-int   _retrace_dump_idx;
+char *volatile _retrace_dump_names[GHOST_DUMP_BUF_SIZE];
+void *volatile _retrace_dumps[GHOST_DUMP_BUF_SIZE];
+volatile int   _retrace_dump_idx;
 void  _retrace_dump_passed(void) {}
 
 // for both tracing and retracing
-bool _is_retrace_mode = false;
+volatile bool _is_retrace_mode = false;

@@ -104,25 +104,25 @@
 // extern variables and functions
 extern void _retrace_ghost_start(void);
 extern void _retrace_ghost_end(void);
-extern bool _retrace_in_ghost;
+extern volatile bool _retrace_in_ghost;
 
-extern char *_retrace_assert_names[ASSERT_BUF_SIZE];
-extern bool  _retrace_asserts[ASSERT_BUF_SIZE];
-extern int   _retrace_assert_idx;
+extern char *volatile _retrace_assert_names[ASSERT_BUF_SIZE];
+extern volatile bool  _retrace_asserts[ASSERT_BUF_SIZE];
+extern volatile int   _retrace_assert_idx;
 extern void  _retrace_assert_passed(void);
 
-extern char *_retrace_assume_name;
-extern bool  _retrace_assume;
+extern char *volatile _retrace_assume_name;
+extern volatile bool  _retrace_assume;
 extern void  _retrace_assume_passed(void);
 
 extern void _retrace_prop_start(void);
-extern bool _retrace_prop_is_assert;
-extern bool _retrace_prop_is_assume;
+extern volatile bool _retrace_prop_is_assert;
+extern volatile bool _retrace_prop_is_assume;
 extern void _retrace_prop_passed(void);
 
-extern char *_retrace_dump_names[GHOST_DUMP_BUF_SIZE];
-extern void *_retrace_dumps[GHOST_DUMP_BUF_SIZE];
-extern int   _retrace_dump_idx;
+extern char *volatile _retrace_dump_names[GHOST_DUMP_BUF_SIZE];
+extern void *volatile _retrace_dumps[GHOST_DUMP_BUF_SIZE];
+extern volatile int   _retrace_dump_idx;
 extern void  _retrace_dump_passed(void);
 
 // helper macros
