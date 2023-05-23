@@ -268,6 +268,22 @@ class SourceTraceReplayer:
             log.debug(f"Merging {count} states in '{stash}'")
             simgr.merge(stash=stash)
 
+    def try_solve_unconstrained(self, elem, simgr, cursor, to_stash='active'):
+        if elem.letter == 'F' and cursor:
+            fun_num = int.from_bytes(elem.bs, "little")
+            try:
+                fun_name = Util.get_name(cursor, fun_num)
+                fun_addr = self.addr(fun_name)
+                for ustate in simgr.unconstrained:
+                    ustate.solver.add(ustate.ip == fun_addr)
+                log.debug("Solved! Unconstrained state(s) constrained to the next function's address.")
+                simgr.move(from_stash='unconstrained', to_stash=to_stash)
+                return True
+            except Exception:
+                pass
+        log.warning("Unconstrained state(s) and constraining not possible.")
+        return False
+
     def follow_trace(self, trace: Trace, func_name: str, cursor=None, merging=False, assumptions=[],
                      assertions=[], finish_dead=True, **kwargs):
         # function name not given?
@@ -313,20 +329,16 @@ class SourceTraceReplayer:
             # PART 2: find next element
             find = self.find(elem)
             avoid = self.reals.difference(find)
-            while simgr.active != []:
+            while simgr.active != [] or simgr.unconstrained != []:
                 while simgr.active != []:
                     simgr.explore(find=find, avoid=avoid, find_stash='traced')
 
                 # PART 2.5: handle unconstrained
-                if simgr.unconstrained != [] and elem.letter == 'F' and cursor:
-                    fun_num = int.from_bytes(elem.bs, "little")
-                    fun_name = Util.get_name(cursor, fun_num)
-                    fun_addr = self.addr(fun_name)
-                    for ustate in simgr.unconstrained:
-                        ustate.solver.add(ustate.ip == fun_addr)
-                    self.merge(simgr, 'unconstrained', merging)
-                    log.debug("State was unconstrained, so constrained to the address of the next function.")
-                    simgr.move(from_stash='unconstrained', to_stash='active')
+                if simgr.unconstrained != []:
+                    self.try_solve_unconstrained(elem, simgr, cursor)
+                    # to break out of PART 2 loop if try_solve failed
+                    simgr.move(from_stash='unconstrained', to_stash='deadended')
+                    # final check is in PART 3
 
             # PART 3: nothing found?
             if simgr.traced == []:
@@ -376,6 +388,9 @@ class SourceTraceReplayer:
                 if simgr.ghost != []:
                     self.handle_ghost(simgr, debug, merging, assumptions, assertions)
             simgr.move(from_stash='reals', to_stash='active')
+
+            # we could get unconstrained instead of deadended
+            simgr.move(from_stash='unconstrained', to_stash='deadended')
 
             return (simgr, simgr.deadended[0])
 
