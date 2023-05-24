@@ -300,19 +300,27 @@ class SourceTraceReplayer:
 
         debug = log.isEnabledFor(logging.DEBUG)
 
+        # create all stashes we will use to avoid any AttributeError
+        simgr.populate('active', [])
+        simgr.populate('traced', [])
+        simgr.populate('ghost', [])
+        simgr.populate('ghost_handle', [])
+        simgr.populate('ghost_end', [])
+        simgr.populate('reals', [])
+        simgr.populate('avoid', [])
+        simgr.populate('unsat', [])
+        simgr.populate('unconstrained', [])
+        simgr.populate('deadended', [])
+
         # do the actual tracing
         for elem in trace:
 
             # PART 0: clean up from previous iteration
-            try:
-                # step once to be sure that we don't stay in the current state
-                # (for correct treatment of "T" or "N" elements, "TT" should match if_addr in two different states)
-                simgr.step('traced')
-                # start over with active
-                simgr.move(from_stash='traced', to_stash='active')
-            except AttributeError:
-                # no stash 'traced'...
-                pass
+            # step once to be sure that we don't stay in the current state
+            # (for correct treatment of "T" or "N" elements, "TT" should match if_addr in two different states)
+            simgr.step('traced')
+            # start over with active
+            simgr.move(from_stash='traced', to_stash='active')
 
             if simgr.active:
                 state = simgr.active[0]
