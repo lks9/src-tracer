@@ -4,13 +4,12 @@ import sys
 import os
 import sqlite3
 import re
-import monkeyhex
+#import monkeyhex
 import concurrent.futures
 import mmap
 
 from src_tracer.trace import Trace
 from src_tracer.util import Util
-
 
 if len(sys.argv) >= 3:
     func_name = sys.argv[1]
@@ -51,6 +50,7 @@ exp = exp[:-1] + b")"
 pat_text = re.compile(exp_text)
 pat = re.compile(exp)
 
+
 def search_file(filename):
     size = os.stat(filename).st_size
     with open(filename, 'rb') as f:
@@ -65,6 +65,8 @@ def search_file(filename):
             print(f"{filename} --seek {x.start()}")
     trace.close()
 
-filenames = sys.argv[2:]
-with concurrent.futures.ProcessPoolExecutor() as pool:
-    pool.map(search_file, filenames)
+
+if __name__ == '__main__':
+	filenames = sys.argv[2:]
+	with concurrent.futures.ProcessPoolExecutor() as pool:
+	    pool.map(search_file, filenames)
