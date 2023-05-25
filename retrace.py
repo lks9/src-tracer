@@ -43,6 +43,8 @@ ap.add_argument("--add-options", nargs="*", default=[],
                 help="list of angr state options to add")
 ap.add_argument("--remove-options", nargs="*", default=[],
                 help="list of angr state options to remove")
+ap.add_argument("--mode",
+                help="angr state option  mode")
 ap.add_argument("--merge", action='store_true',
                 help="merge states whenever possible")
 args = ap.parse_args()
@@ -75,7 +77,7 @@ DEFAULT_ADD_OPS = {"COPY_STATES",
 DEFAULT_REMOVE_OPS = {"ALL_FILES_EXIST"}
 
 # Some useful options:
-#   CONSERVATIVE_READ_STRATEGY, CONSERVATIVE_WRITE_STRATEGY (for more reliable retracing)
+#   CONSERVATIVE_READ_STRATEGY CONSERVATIVE_WRITE_STRATEGY (for more reliable retracing, enabled by default)
 #   AVOID_MULTIVALUED_READS AVOID_MULTIVALUED_WRITES plus --merge 1 (for fast retracing, angr "fastpath" mode)
 #   BYPASS_UNSUPPORTED_... (retrace even when unsupported in angr)
 #   remove COPY_STATES
@@ -116,7 +118,8 @@ else:
 trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count, count_elems=args.count_elems)
 source_tracer = SourceTraceReplayer(args.binary_name, auto_load_libs=False)
 #logging.getLogger("").setLevel(logging.DEBUG)
-(simgr, state) = source_tracer.follow_trace(trace, args.fname, cursor, add_options=add, remove_options=remove,
+(simgr, state) = source_tracer.follow_trace(trace, args.fname, cursor,
+                                            add_options=add, remove_options=remove, mode=args.mode,
                                             merging=args.merge, assertions=assertions, assumptions=assume)
 
 # assertion checks

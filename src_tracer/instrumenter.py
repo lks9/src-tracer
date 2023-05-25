@@ -9,7 +9,7 @@ class Instrumenter:
 
     def __init__(self, connection, trace_store_dir, case_instrument=False, boolop_instrument=False,
                  return_instrument=True, inline_instrument=False, main_instrument=True, anon_instrument=False,
-                 function_instrument=True):
+                 function_instrument=True, inner_instrument=True):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
@@ -25,6 +25,7 @@ class Instrumenter:
         self.main_instrument = main_instrument
         self.anon_instrument = anon_instrument
         self.function_instrument = function_instrument
+        self.inner_instrument = inner_instrument
 
         self.ifs = []
         self.loops = []
@@ -479,6 +480,8 @@ class Instrumenter:
                     pass
                 else:
                     self.visit_function(node)
+            elif not self.inner_instrument:
+                pass
             elif node.kind == CursorKind.IF_STMT:
                 self.visit_if(node)
             elif node.kind == CursorKind.BINARY_OPERATOR:
