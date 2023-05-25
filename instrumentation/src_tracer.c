@@ -194,42 +194,49 @@ void _trace_close(void) {
 
 
 // for retracing
-void _retrace_if(void) {}
-void _retrace_else(void) {}
+
+// use volatile to forbid optimizing the variable accesses away
+
+// use barrier() to forbid reordering those functions
+#define barrier() __asm__ __volatile__("": : :"memory")
+
+
+void _retrace_if(void) { barrier(); }
+void _retrace_else(void) { barrier(); }
 
 volatile int _retrace_fun_num;
-void _retrace_fun_call(void) {}
-void _retrace_return(void) {}
+void _retrace_fun_call(void) { barrier(); }
+void _retrace_return(void) { barrier(); }
 
 volatile long long int _retrace_int;
-void _retrace_wrote_int(void) {}
+void _retrace_wrote_int(void) { barrier(); }
 
 volatile int _retrace_fork_count;
 
 // ghost code
-void _retrace_ghost_start(void) {}
-void _retrace_ghost_end(void) {}
+void _retrace_ghost_start(void) { barrier(); }
+void _retrace_ghost_end(void) { barrier(); }
 // true for combined trace/retrace mode
 volatile bool _retrace_in_ghost = true;
 
 char *volatile _retrace_assert_names[ASSERT_BUF_SIZE];
 volatile bool  _retrace_asserts[ASSERT_BUF_SIZE];
 volatile int   _retrace_assert_idx;
-void  _retrace_assert_passed(void) {}
+void  _retrace_assert_passed(void) { barrier(); }
 
 char *volatile _retrace_assume_name;
 volatile bool  _retrace_assume;
-void  _retrace_assume_passed(void) {}
+void  _retrace_assume_passed(void) { barrier(); }
 
-void _retrace_prop_start(void) {}
+void _retrace_prop_start(void) { barrier(); }
 volatile bool _retrace_prop_is_assert;
 volatile bool _retrace_prop_is_assume;
-void _retrace_prop_passed(void) {}
+void _retrace_prop_passed(void) { barrier(); }
 
 char *volatile _retrace_dump_names[GHOST_DUMP_BUF_SIZE];
 void *volatile _retrace_dumps[GHOST_DUMP_BUF_SIZE];
 volatile int   _retrace_dump_idx;
-void  _retrace_dump_passed(void) {}
+void  _retrace_dump_passed(void) { barrier(); }
 
 // for both tracing and retracing
 volatile bool _is_retrace_mode = false;
