@@ -20,6 +20,8 @@ ap.add_argument("--cases", action='store_true',
                 help="instrument all switch cases instead of switch number (experimental)")
 ap.add_argument("--short-circuit", action='store_true',
                 help="instrument short circuit operators (experimental)")
+ap.add_argument("--no-inner", action='store_true',
+                help="do not instrument any control structrure including if, else, while, for")
 ap.add_argument("--inline", action='store_true',
                 help="instrument inline function calls and returns")
 ap.add_argument("--no-main", action='store_true',
@@ -51,6 +53,6 @@ except sqlite3.OperationalError:
 instrumenter = Instrumenter(connection, store_dir, case_instrument=args.cases, boolop_instrument=args.short_circuit,
                             return_instrument=not args.no_return, inline_instrument=args.inline,
                             main_instrument=not args.no_main, anon_instrument=args.anon,
-                            function_instrument=not args.no_functions)
+                            function_instrument=not args.no_functions, inner_instrument=not args.no_inner)
 instrumenter.parse(args.filename)
 instrumenter.annotate_all(args.filename)
