@@ -1,14 +1,15 @@
 import re
 import os
+import sys
 import sqlite3
 
-from clang.cindex import Index, CursorKind, StorageClass
+from clang.cindex import Index, CursorKind, StorageClass, TypeKind
 
 
 class Instrumenter:
 
     def __init__(self, connection, trace_store_dir, case_instrument=False, boolop_instrument=False,
-                 return_instrument=True, inline_instrument=False, main_instrument=True, anon_instrument=False,
+                 inline_instrument=False, main_instrument=True, anon_instrument=False,
                  function_instrument=True, inner_instrument=True):
         """
         Instrument a C compilation unit (pre-processed C source code).
@@ -20,7 +21,7 @@ class Instrumenter:
 
         self.case_instrument = case_instrument
         self.boolop_instrument = boolop_instrument
-        self.return_instrument = return_instrument
+        #self.return_instrument = return_instrument
         self.inline_instrument = inline_instrument
         self.main_instrument = main_instrument
         self.anon_instrument = anon_instrument
@@ -42,7 +43,7 @@ class Instrumenter:
                             file    TEXT,
                             line    INT,
                             name    TEXT,
-                            PRIMARY KEY (file, line, name)
+                            PRIMARY KEY (file, name)
                         )
                             ''')
         cursor.close()
@@ -82,54 +83,41 @@ class Instrumenter:
                 filename = (m.group(2)).decode("utf-8")
         return (filename, line_no)
 
-    def func_num(self, node):
+    def func_num(self, node, create=True, match_file=True):
         (file, line) = self.orig_file_and_line(node.extent.start)
         name = node.spelling
-        pre_file = self.filename(node.extent.start)
-        offset = node.extent.start.offset
+        if create:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute('''
+                    INSERT INTO function_list
+                    VALUES(?,?,?)
+                    ON CONFLICT DO NOTHING
+                    ''', (file, line, name))
+            except sqlite3.OperationalError:
+                # perhaps the insert was successful from another process?
+                pass
+            cursor.close()
+            self.connection.commit()
         cursor = self.connection.cursor()
-        try:
-            cursor.execute('''
-                INSERT INTO function_list
-                VALUES(?,?,?)
-                ON CONFLICT DO NOTHING
-                ''', (file, line, name))
-        except sqlite3.OperationalError:
-            # perhaps the insert was successful from another process?
-            pass
-        cursor.close()
-        self.connection.commit()
-        #cursor = self.connection.cursor()
-        #func_num_manu = cursor.execute('''
-        #        SELECT num
-        #        FROM manual_lookup
-        #        WHERE pre_file=? and offset=?
-        #        ''', (pre_file, offset)).fetchone()
-        #cursor.close()
-        #self.connection.commit()
-        cursor = self.connection.cursor()
-        func_num_auto = cursor.execute('''
+        if match_file:
+            func_num_auto = cursor.execute('''
                 SELECT rowid
                 FROM function_list
-                WHERE line=? and file=? and name=?
-                ''', (line, file, name)).fetchone()
+                WHERE file=? and name=?
+                ''', (file, name)).fetchone()
+        else:
+             func_num_auto = cursor.execute('''
+                SELECT rowid
+                FROM function_list
+                WHERE name=?
+                ''', (name)).fetchone()
         cursor.close()
         self.connection.commit()
-        num = func_num_auto[0]
-        #if func_num_manu is None:
-        #    cursor = self.connection.cursor()
-        #    try:
-        #        cursor.execute('''
-        #            INSERT INTO manual_lookup
-        #            VALUES(?,?,?)
-        #            ON CONFLICT DO NOTHING
-        #            ''', (num, pre_file, offset))
-        #    except sqlite3.OperationalError:
-        #        # don't care
-        #        pass
-        #    cursor.close()
-        #    self.connection.commit()
-        return num
+        try:
+            return func_num_auto[0]
+        except:
+            return None
 
     def add_annotation(self, annotation, location, add_offset=0):
         offset = location.offset + add_offset
@@ -146,6 +134,32 @@ class Instrumenter:
         else:
             self.annotations[filename][offset] = annotation + self.annotations[filename][offset]
 
+    def visit_signature(self, node):
+        if not self.func_num(node, create=False, match_file=False):
+            # the function is not (yet) instrumented
+            print("could not annotate signature for " + node.spelling, file=sys.stderr)
+            return
+        semi_off = self.find_next_semi(node.extent.end)
+        content = self.get_content(node.extent.start, node.extent.end, end_off=semi_off)
+        if b"..." in content:
+            # do not create _original for varargs
+            return
+        name = bytes(node.spelling, "utf-8")
+        try:
+                (orig_fname, line) = self.orig_file_and_line(node.extent.start)
+                cpp_startmarker = b"\n# " + bytes(str(line), "utf-8") + b' "' + bytes(orig_fname, "utf-8") + b'" 3 4\n'
+                cpp_linemarker    = b"# " + bytes(str(line), "utf-8") + b' "' + bytes(orig_fname, "utf-8") + b'"\n'
+        except:
+                orig_fname = ""
+                cpp_startmarker = b'\n'
+                cpp_linemarker = b""
+        self.add_annotation(cpp_startmarker
+                            + b"#undef " + name + b"\n"
+                            + content + b"\n"
+                            + b"#define " + name + b"(...) " + name + b"_original(__VA_ARGS__)\n"
+                            + cpp_linemarker,
+                            node.extent.start)
+
     def visit_function(self, node):
         body = None
         for child in node.get_children():
@@ -154,41 +168,109 @@ class Instrumenter:
         if not body:
             return
         if not self.check_location(body.extent.start, [b"{"]):
-            print("Check location failed for function " + node.spelling)
+            print("Check location failed for function " + node.spelling, file=sys.stderr)
             return
         if self.function_instrument:
-            if self.anon_instrument:
-                self.add_annotation(b" _FUNC(0) ", body.extent.start, 1)
+            name = bytes(node.spelling, "utf-8")
+
+            signature = self.get_content(node.extent.start, body.extent.start)
+
+            if b'...' in signature:
+                # do not create _original for varargs
+                if self.anon_instrument:
+                    self.add_annotation(b" _FUNC(0) ", body.extent.start, 1)
+                else:
+                    func_num = self.func_num(node)
+                    self.add_annotation(b" _FUNC(" + bytes(hex(func_num), "utf-8") + b") ", body.extent.start, 1)
+
             else:
-                func_num = self.func_num(node)
-                self.add_annotation(b" _FUNC(" + bytes(hex(func_num), "utf-8") + b") ", body.extent.start, 1)
+                try:
+                    (orig_fname, line) = self.orig_file_and_line(node.extent.start)
+                    cpp_startmarker = b"\n# " + bytes(str(line), "utf-8") + b' "' + bytes(orig_fname, "utf-8") + b'" 3 4\n'
+                    cpp_linemarker    = b"# " + bytes(str(line), "utf-8") + b' "' + bytes(orig_fname, "utf-8") + b'"\n'
+                except:
+                    orig_fname = ""
+                    cpp_startmarker = b'\n'
+                    cpp_linemarker = b""
+                try:
+                    (end_fname, line_end) = self.orig_file_and_line(node.extent.end)
+                    cpp_middle_marker = b"\n# " + bytes(str(line_end), "utf-8") + b' "' + bytes(end_fname, "utf-8") + b'" 3 4\n'
+                    cpp_line_end        = b"# " + bytes(str(line_end), "utf-8") + b' "' + bytes(end_fname, "utf-8") + b'"\n'
+                except:
+                    cpp_middle_marker = b'\n'
+                    cpp_line_end = b""
+
+
+                self.add_annotation(cpp_startmarker
+                                    + b"#undef " + name + b"\n"
+                                    + signature + b";\n"
+                                    + b"#define " + name + b"(...) " + name + b"_original(__VA_ARGS__)\n"
+                                    + cpp_linemarker,
+                                    node.extent.start)
+
+                token_end = None
+                for token in node.get_tokens():
+                    if token.cursor.kind == CursorKind.PARM_DECL:
+                        break
+                    if token.spelling == node.spelling and token.extent.end.offset <= body.extent.start.offset:
+                        token_end = token.extent.end
+                if token_end is not None:
+                    self.add_annotation(b"_original", token_end)
+
+                if self.anon_instrument:
+                    func_macro = b"_FUNC(0)"
+                else:
+                    func_num = self.func_num(node)
+                    func_macro = b"_FUNC(" + bytes(hex(func_num), "utf-8") + b")"
+
+                call_function = name + b"_original("
+                has_params = False
+                for child in node.get_children():
+                    if child.kind == CursorKind.PARM_DECL:
+                        has_params = True
+                        call_function += bytes(child.spelling, "utf-8") + b", "
+                if has_params:
+                    call_function = call_function[:-2]
+                call_function += b")"
+
+                # special treatment for main function
+                main_addition = b""
+                if self.main_instrument and node.spelling == "main":
+                    # print('Log trace to ' + self.trace_store_dir)
+                    trace_fname = "%F-%H%M%S-%%lx-" + os.path.basename(orig_fname) + ".trace"
+                    trace_path = os.path.join(os.path.abspath(self.trace_store_dir), trace_fname)
+                    main_addition = b'\n    _TRACE_OPEN("' + bytes(trace_path, "utf8") + b'")\n    '
+
+                    if not self.function_instrument:
+                        # well, we need something to start...
+                        main_addition += b" _FUNC(0) "
+
+
+                mby_return = b""
+                if node.type.get_result().kind != TypeKind.VOID:
+                    mby_return = b"return "
+
+                new_function = cpp_middle_marker \
+                            + b"#undef " + name + b"\n" \
+                            + signature + b"{ " + main_addition + func_macro + b"\n" \
+                            + b"#define " + name + b"(...) " + name + b"_original(__VA_ARGS__)\n" \
+                            + b"    " + mby_return + call_function + b";\n" \
+                            + b"}\n" \
+                            + cpp_line_end
+
+                self.add_annotation(new_function, node.extent.end)
 
         # handle returns
-        if self.return_instrument:
-            for descendant in node.walk_preorder():
-                if descendant.kind == CursorKind.RETURN_STMT:
-                    self.add_annotation(b"_FUNC_RETURN ", descendant.extent.start)
-            self.add_annotation(b"_FUNC_RETURN ", node.extent.end, -1)
+        #if self.return_instrument:
+        #    for descendant in node.walk_preorder():
+        #        if descendant.kind == CursorKind.RETURN_STMT:
+        #            self.add_annotation(b"_FUNC_RETURN ", descendant.extent.start)
+        #    self.add_annotation(b"_FUNC_RETURN ", node.extent.end, -1)
 
-        # special treatment for main function
-        if self.main_instrument and node.spelling == "main":
-            if not self.function_instrument:
-                # well, we need something to start...
-                self.add_annotation(b" _FUNC(0) ", body.extent.start, 1)
-
-            # print('Log trace to ' + self.trace_store_dir)
-            try:
-                (orig_fname, _) = self.orig_file_and_line(node.extent.start)
-            except:
-                orig_fname = ""
-            trace_fname = "%F-%H%M%S-%%lx-" + os.path.basename(orig_fname) + ".trace"
-            trace_path = os.path.join(os.path.abspath(self.trace_store_dir), trace_fname)
-            self.prepent_annotation(b' _TRACE_OPEN("' + bytes(trace_path, "utf8") + b'") ', body.extent.start, 1)
-
-    def get_content(self, start, end):
+    def get_content(self, start, end, start_off=0, end_off=0):
         filename = self.filename(start)
         content = self.annotations[filename]["content"]
-        return content[start.offset: end.offset]
+        return content[start.offset + start_off: end.offset + end_off]
 
     def find_next_semi(self, location):
         filename = self.filename(location)
@@ -281,7 +363,7 @@ class Instrumenter:
     def visit_if(self, node):
         self.ifs.append(node)
         if not self.check_location(node.extent.start, [b"if"]):
-            print("Check location failed for if")
+            print("Check location failed for if", file=sys.stderr)
             return
         children = [c for c in node.get_children()]
 
@@ -290,7 +372,7 @@ class Instrumenter:
             children.pop(1)
 
         if len(children) < 2 or len(children) > 3:
-            print(self.get_content(node.extent.start, node.extent.end))
+            print(self.get_content(node.extent.start, node.extent.end), file=sys.stderr)
             raise Exception
 
         if_body = children[1]
@@ -354,7 +436,7 @@ class Instrumenter:
         loop_id = bytes(hex(len(self.loops)), "utf-8")
         self.loops.append(node)
         if not self.check_location(node.extent.start, [b"for", b"while", b"do"]):
-            print("Check location failed for loop")
+            print("Check location failed for loop", file=sys.stderr)
             return
         body = None
         for child in node.get_children():
@@ -400,7 +482,7 @@ class Instrumenter:
                 colon_off = self.find_next_colon(number_end)
                 self.add_annotation(b" _CASE(" + case_id + b", " + switch_id + b") ", number_end, colon_off+1)
             except IndexError:
-                print(b"Failed to annotate _CASE(" + case_id + b", " + switch_id + b") ")
+                print(b"Failed to annotate _CASE(" + case_id + b", " + switch_id + b") ", file=sys.stderr)
             self.switch_case_count += 1
 
         for child in node.get_children():
@@ -411,7 +493,7 @@ class Instrumenter:
         self.switchis.append(node)
         children = [c for c in node.get_children()]
         if not self.check_location(node.extent.start, [b"switch"]) or len(children) != 2:
-            print("Check location failed for switch")
+            print("Check location failed for switch", file=sys.stderr)
             return
 
         if self.case_instrument:
@@ -457,7 +539,7 @@ class Instrumenter:
                                 # skip the last ' ' because there already is a ws
                                 ann = ann[:-1]
                         except TypeError:
-                            print(char, prevchar, ann)
+                            print(char, prevchar, ann, file=sys.stderr)
                         f.write(ann)
                     f.write(char)
                     prevchar = char
@@ -473,10 +555,11 @@ class Instrumenter:
                 if "_trace" in node.spelling or "_retrace" in node.spelling:
                     return
                 # no instrumentation of C++ constant functions
-                if self.check_const_method(node):
-                    return
+                #if self.check_const_method(node):
+                #    return
                 function_scope = True
-                if not self.inline_instrument and self.check_inline_method(node):
+                #if not self.inline_instrument and self.check_inline_method(node):
+                if False:
                     pass
                 else:
                     self.visit_function(node)

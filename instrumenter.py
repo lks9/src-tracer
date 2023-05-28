@@ -15,7 +15,7 @@ ap.add_argument("store_dir", nargs='?',
 ap.add_argument("--database",
                 help="custom database path")
 ap.add_argument("--no-return", action='store_true',
-                help="do not instrument returns")
+                help="do not instrument returns (default in this version)")
 ap.add_argument("--cases", action='store_true',
                 help="instrument all switch cases instead of switch number (experimental)")
 ap.add_argument("--short-circuit", action='store_true',
@@ -23,7 +23,7 @@ ap.add_argument("--short-circuit", action='store_true',
 ap.add_argument("--no-inner", action='store_true',
                 help="do not instrument any control structrure including if, else, while, for")
 ap.add_argument("--inline", action='store_true',
-                help="instrument inline function calls and returns")
+                help="instrument inline function calls")
 ap.add_argument("--no-main", action='store_true',
                 help="do not instrument the main function to start tracing")
 ap.add_argument("--anon", action='store_true',
@@ -51,7 +51,7 @@ except sqlite3.OperationalError:
 
 # do the instrumentation
 instrumenter = Instrumenter(connection, store_dir, case_instrument=args.cases, boolop_instrument=args.short_circuit,
-                            return_instrument=not args.no_return, inline_instrument=args.inline,
+                            inline_instrument=args.inline,
                             main_instrument=not args.no_main, anon_instrument=args.anon,
                             function_instrument=not args.no_functions, inner_instrument=not args.no_inner)
 instrumenter.parse(args.filename)
