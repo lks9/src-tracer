@@ -25,12 +25,11 @@ struct _trace_ctx _trace = {
     .fd = 0,
     .fork_count = 0,
     .try_count = 0,
-    .if_count = 0,
-    .if_byte = _TRACE_SET_IE,
     .active = 0,
 };
 
 static struct _trace_ctx temp_trace;
+static int temp_trace_if_byte;
 
 static char trace_fname[200];
 
@@ -84,8 +83,7 @@ void _trace_open(const char *fname) {
 
     // now the tracing can start (guarded by _trace.fd > 0)
     _trace.fd = fd;
-    _trace.if_count = 0;
-    _trace.if_byte = _TRACE_SET_IE;
+    _trace_if_byte = _TRACE_IF_BYTE_INIT;
     _trace.ptr = _trace._page_ptr;
     _trace.active = 1;
 }
@@ -101,12 +99,12 @@ void _trace_before_fork(void) {
     // stop tracing
     temp_trace.ptr = _trace.ptr;
     temp_trace.fd = _trace.fd;
-    temp_trace.if_count = _trace.if_count;
-    temp_trace.if_byte = _trace.if_byte;
+    temp_trace_if_byte = _trace_if_byte;
     temp_trace.active = _trace.active;
     _trace.ptr = dummy;
     _trace.fd = 0;
     _trace.active = 0;
+    _trace_if_byte = 0;
 }
 
 int _trace_after_fork(int pid) {
@@ -119,8 +117,7 @@ int _trace_after_fork(int pid) {
         // resume tracing
         _trace.ptr = temp_trace.ptr;
         _trace.fd = temp_trace.fd;
-        _trace.if_count = temp_trace.if_count;
-        _trace.if_byte = temp_trace.if_byte;
+        _trace_if_byte = temp_trace_if_byte;
         _trace.active = temp_trace.active;
         temp_trace.fd = 0;
 
@@ -161,8 +158,7 @@ int _trace_after_fork(int pid) {
     // now the tracing can start (guarded by _trace.fd > 0)
     _trace.ptr = _trace._page_ptr;
     _trace.fd = fd;
-    _trace.if_count = 0;
-    _trace.if_byte = _TRACE_SET_IE;
+    _trace_if_byte = _TRACE_IF_BYTE_INIT;
     _trace.active = 1;
 
     _TRACE_NUM(pid);
@@ -174,10 +170,8 @@ void _trace_close(void) {
         // already closed or never successfully opened
         return;
     }
-    if (_trace.if_count != 0) {
-        _TRACE_END();
-        _TRACE_PUT(_trace.if_byte);
-    }
+    _TRACE_END();
+    _TRACE_PUT((char)(_trace_if_byte >> 8));
     int fd = _trace.fd;
     ssize_t written = (char*)_trace.ptr - (char*)_trace._page_ptr;
 
@@ -185,6 +179,7 @@ void _trace_close(void) {
     _trace.ptr = dummy;
     _trace.fd = 0;
     _trace.active = 0;
+    _trace_if_byte = 0;
 
     // now we call a library function without being traced
     ftruncate(fd, written);

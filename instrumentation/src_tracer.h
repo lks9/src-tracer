@@ -34,10 +34,11 @@ struct _trace_ctx {
     int fd;
     int fork_count;
     int try_count;
-    int if_count;
-    char if_byte;
     bool active;
 };
+
+#define _TRACE_IF_BYTE_INIT       ((1 << 0) | (1 << 8))
+register int _trace_if_byte __asm__ ("r12");
 
 extern struct _trace_ctx _trace;
 
@@ -86,34 +87,41 @@ extern int _trace_after_fork(int pid);
 
 #define _TRACE_PUT_TEXT     _TRACE_PUT
 
-#define _TRACE_IE(if_true) ; \
-    if (_trace.active) { \
-        _trace.if_byte |= (if_true) << _trace.if_count; \
-        _trace.if_count += 1; \
-        if (_trace.if_count == 7) { \
-            _TRACE_PUT(_trace.if_byte); \
-            _trace.if_count = 0; \
-            _trace.if_byte = _TRACE_SET_IE; \
+#define _TRACE_IE(if_true) ;{ \
+        _trace_if_byte <<= 1; \
+        _trace_if_byte |= (if_true) << 8; \
+        if (_trace_if_byte & (1 << 7)) { \
+            _TRACE_PUT((char)(_trace_if_byte >> 8)); \
+            _trace_if_byte = _TRACE_IF_BYTE_INIT; \
         } \
     }
 
+#define _SHIFT_TO_NUM(shift) \
+    ( ((shift & 0b10101010) ? 1 : 0) \
+    | ((shift & 0b11001100) ? 2 : 0) \
+    | ((shift & 0b11110000) ? 4 : 0) \
+    )
+
+#define _IF_COUNT \
+    _SHIFT_TO_NUM(_trace_if_byte)
+
 #define _TRACE_FUNC(num) ;{ \
     if ((num) == 0) { \
-        _TRACE_PUT(_TRACE_SET_FUNC | _trace.if_count | _TRACE_SET_FUNC_ANON); \
+        _TRACE_PUT(_TRACE_SET_FUNC | _IF_COUNT | _TRACE_SET_FUNC_ANON); \
     } else if ((num) == ((num) & 0xff)) { \
-        _TRACE_PUT(_TRACE_SET_FUNC | _trace.if_count | _TRACE_SET_FUNC_LEN_8); \
+        _TRACE_PUT(_TRACE_SET_FUNC | _IF_COUNT | _TRACE_SET_FUNC_LEN_8); \
         _TRACE_PUT(((num) >> 0) & 0xff); \
     } else if ((num) == ((num) & 0xffff)) { \
-        _TRACE_PUT(_TRACE_SET_FUNC | _trace.if_count | _TRACE_SET_FUNC_LEN_16); \
+        _TRACE_PUT(_TRACE_SET_FUNC | _IF_COUNT | _TRACE_SET_FUNC_LEN_16); \
         _TRACE_PUT(((num) >> 0) & 0xff); \
         _TRACE_PUT(((num) >> 8) & 0xff); \
     } else if ((num) == ((num) & 0xffffff)) { \
-        _TRACE_PUT(_TRACE_SET_FUNC | _trace.if_count | _TRACE_SET_FUNC_LEN_24); \
+        _TRACE_PUT(_TRACE_SET_FUNC | _IF_COUNT | _TRACE_SET_FUNC_LEN_24); \
         _TRACE_PUT(((num) >> 0) & 0xff); \
         _TRACE_PUT(((num) >> 8) & 0xff); \
         _TRACE_PUT(((num) >> 16) & 0xff); \
     } else if ((num) == ((num) & 0xffffffff)) { \
-        _TRACE_PUT(_TRACE_SET_FUNC | _trace.if_count | _TRACE_SET_FUNC_LEN_32); \
+        _TRACE_PUT(_TRACE_SET_FUNC | _IF_COUNT | _TRACE_SET_FUNC_LEN_32); \
         _TRACE_PUT(((num) >> 0) & 0xff); \
         _TRACE_PUT(((num) >> 8) & 0xff); \
         _TRACE_PUT(((num) >> 16) & 0xff); \
@@ -124,22 +132,22 @@ extern int _trace_after_fork(int pid);
 #define _TRACE_NUM(num) ;{ \
     unsigned long long _trace_n = (num); \
     if (_trace_n == 0) { \
-        _TRACE_PUT(_TRACE_SET_DATA | _trace.if_count | _TRACE_SET_LEN_0); \
+        _TRACE_PUT(_TRACE_SET_DATA | _IF_COUNT | _TRACE_SET_LEN_0); \
     } else if (_trace_n == (_trace_n & 0xff)) { \
-        _TRACE_PUT(_TRACE_SET_DATA | _trace.if_count | _TRACE_SET_LEN_8); \
+        _TRACE_PUT(_TRACE_SET_DATA | _IF_COUNT | _TRACE_SET_LEN_8); \
         _TRACE_PUT((_trace_n >> 0) & 0xff); \
     } else if (_trace_n == (_trace_n & 0xffff)) { \
-        _TRACE_PUT(_TRACE_SET_DATA | _trace.if_count | _TRACE_SET_LEN_16); \
+        _TRACE_PUT(_TRACE_SET_DATA | _IF_COUNT | _TRACE_SET_LEN_16); \
         _TRACE_PUT((_trace_n >> 0) & 0xff); \
         _TRACE_PUT((_trace_n >> 8) & 0xff); \
     } else if (_trace_n == (_trace_n & 0xffffffff)) { \
-        _TRACE_PUT(_TRACE_SET_DATA | _trace.if_count | _TRACE_SET_LEN_32); \
+        _TRACE_PUT(_TRACE_SET_DATA | _IF_COUNT | _TRACE_SET_LEN_32); \
         _TRACE_PUT((_trace_n >> 0) & 0xff); \
         _TRACE_PUT((_trace_n >> 8) & 0xff); \
         _TRACE_PUT((_trace_n >> 16) & 0xff); \
         _TRACE_PUT((_trace_n >> 24) & 0xff); \
     } else { \
-        _TRACE_PUT(_TRACE_SET_DATA | _trace.if_count | _TRACE_SET_LEN_64); \
+        _TRACE_PUT(_TRACE_SET_DATA | _IF_COUNT | _TRACE_SET_LEN_64); \
         _TRACE_PUT((_trace_n >> 0) & 0xff); \
         _TRACE_PUT((_trace_n >> 8) & 0xff); \
         _TRACE_PUT((_trace_n >> 16) & 0xff); \
@@ -167,10 +175,10 @@ extern int _trace_after_fork(int pid);
 }
 
 #define _TRACE_RETURN() \
-    _TRACE_PUT(_TRACE_SET_FUNC_RETURN | _trace.if_count)
+    _TRACE_PUT(_TRACE_SET_FUNC_RETURN | _IF_COUNT)
 
 #define _TRACE_END() \
-    _TRACE_PUT(_TRACE_SET_FUNC_END | _trace.if_count)
+    _TRACE_PUT(_TRACE_SET_FUNC_END | _IF_COUNT)
 
 // same as the macro version
 // but returns num
