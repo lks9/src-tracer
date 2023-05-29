@@ -37,8 +37,8 @@ struct _trace_ctx {
     bool active;
 };
 
-#define _TRACE_IF_BYTE_INIT       ((1 << 0) | (1 << 8))
-register int _trace_if_byte __asm__ ("r12");
+#define _TRACE_IF_BYTE_INIT       ((1 << 14))
+register short int _trace_if_byte __asm__ ("r12");
 
 extern struct _trace_ctx _trace;
 
@@ -88,18 +88,18 @@ extern int _trace_after_fork(int pid);
 #define _TRACE_PUT_TEXT     _TRACE_PUT
 
 #define _TRACE_IE(if_true) ;{ \
-        _trace_if_byte <<= 1; \
-        _trace_if_byte |= (if_true) << 8; \
+        _trace_if_byte >>= 1; \
+        _trace_if_byte |= ((short)(if_true)) << 6; \
         if (_trace_if_byte & (1 << 7)) { \
-            _TRACE_PUT((char)(_trace_if_byte >> 8)); \
+            _TRACE_PUT((char)(_trace_if_byte)); \
             _trace_if_byte = _TRACE_IF_BYTE_INIT; \
         } \
     }
 
 #define _SHIFT_TO_NUM(shift) \
-    ( ((shift & 0b10101010) ? 1 : 0) \
-    | ((shift & 0b11001100) ? 2 : 0) \
-    | ((shift & 0b11110000) ? 4 : 0) \
+    ( ((shift & 0b0010101010000000) ? 1 : 0) \
+    | ((shift & 0b0001100110000000) ? 2 : 0) \
+    | ((shift & 0b0000011110000000) ? 4 : 0) \
     )
 
 #define _IF_COUNT \
