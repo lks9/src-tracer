@@ -37,8 +37,8 @@ struct _trace_ctx {
     bool active;
 };
 
-#define _TRACE_IF_BYTE_INIT       0x8008
-register short int _trace_if_byte __asm__ ("r12");
+#define _TRACE_IF_REG_INIT        (1 << 0xf)
+register int _trace_if_reg __asm__ ("r12");
 
 extern struct _trace_ctx _trace;
 
@@ -82,22 +82,26 @@ extern int _trace_after_fork(int pid);
 #define _TRACE_PUT(c) ; \
     if (_trace.active) { \
         _trace.ptr[0] = (c); \
-        _trace.ptr += 1; \
+        _trace.ptr = &_trace.ptr[1]; \
     }
 
 #define _TRACE_PUT_TEXT     _TRACE_PUT
 
+#define _IF_COUNT \
+    ((char)_trace_if_reg)
+
+#define _IF_BYTE \
+    ((char)(_trace_if_reg >> 0x8))
+
 #define _TRACE_IE(if_true) ;{ \
-        _trace_if_byte |= ((short)(if_true)) << (_trace_if_byte & 0xf); \
-        _trace_if_byte += 1; \
-        if ((_trace_if_byte & 0xf) == 0xf) { \
-            _TRACE_PUT((char)(_trace_if_byte >> 8)); \
-            _trace_if_byte = _TRACE_IF_BYTE_INIT; \
+        _trace_if_reg |= (((int)(if_true)) << 0x8) << _IF_COUNT; \
+        _trace_if_reg += 1; \
+        if (_IF_COUNT == 7 && _trace.active) { \
+            _trace.ptr[0] = _IF_BYTE; \
+            _trace.ptr = &_trace.ptr[1]; \
+            _trace_if_reg = _TRACE_IF_REG_INIT; \
         } \
     }
-
-#define _IF_COUNT \
-    (_trace_if_byte & 0x7)
 
 #define _TRACE_FUNC(num) ;{ \
     if ((num) == 0) { \
