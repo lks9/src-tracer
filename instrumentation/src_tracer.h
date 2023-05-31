@@ -191,10 +191,19 @@ static inline __attribute__((always_inline)) long long int _trace_num_text(char 
     return num;
 }
 
+#define _MAYBE_CONDITION(cond, trace_cond) \
+    __builtin_choose_expr(__builtin_constant_p(cond), (cond), (trace_cond))
+
+#define _TRACE_CONDITION(cond) \
+    _MAYBE_CONDITION(cond, _trace_condition(cond))
+
 static inline __attribute__((always_inline)) bool _trace_condition(bool cond) {
     _TRACE_IE(cond);
     return cond;
 }
+
+#define _TEXT_TRACE_CONDITION(cond) \
+    _MAYBE_CONDITION(cond, _text_trace_condition(cond))
 
 static inline __attribute__((always_inline)) bool _text_trace_condition(bool cond) {
     if (cond) {
@@ -235,6 +244,9 @@ static inline __attribute__((always_inline)) long long int _retrace_num(long lon
     return num;
 }
 
+#define _RETRACE_CONDITION(cond) \
+    _MAYBE_CONDITION(cond, _retrace_condition(cond))
+
 static inline __attribute__((always_inline)) bool _retrace_condition(bool cond) {
     if (cond) {
         _retrace_if();
@@ -253,6 +265,9 @@ extern volatile bool _is_retrace_mode;
     } else { \
         b; \
     }
+
+#define _IS_RETRACE_CONDITION(cond) \
+    _MAYBE_CONDITION(cond, _is_retrace_condition(cond))
 
 static inline __attribute__((always_inline)) bool _is_retrace_condition(bool cond) {
     if (cond) {
@@ -286,7 +301,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _IF                 _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
 #define _ELSE               _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
-#define _CONDITION(cond)    _is_retrace_condition(cond)
+#define _CONDITION(cond)    _IS_RETRACE_CONDITION(cond)
 #define _FUNC(num)          _IS_RETRACE(_RETRACE_FUN_CALL(num), _TRACE_FUNC(num))
 #define _FUNC_RETURN        _IS_RETRACE(_retrace_return(), _TRACE_RETURN())
 // non-macro version for switch
@@ -312,7 +327,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _IF                 _TRACE_IE(1)
 #define _ELSE               _TRACE_IE(0)
-#define _CONDITION(cond)    _trace_condition(cond)
+#define _CONDITION(cond)    _TRACE_CONDITION(cond)
 #define _FUNC(num)          _TRACE_FUNC(num)
 #define _FUNC_RETURN        _TRACE_RETURN()
 // non-macro version for switch
@@ -341,7 +356,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _IF                 ;_TRACE_PUT_TEXT('T');
 #define _ELSE               ;_TRACE_PUT_TEXT('N');
-#define _CONDITION(cond)    _text_trace_condition(cond)
+#define _CONDITION(cond)    _TEXT_TRACE_CONDITION(cond)
 #define _FUNC(num)          ;_TRACE_NUM_TEXT('F', ((unsigned int)(num)));
 #define _FUNC_RETURN        ;_TRACE_PUT_TEXT('R');
 // non-macro version for switch
@@ -367,7 +382,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _IF                 ;_retrace_if();
 #define _ELSE               ;_retrace_else();
-#define _CONDITION(cond)    _retrace_condition(cond)
+#define _CONDITION(cond)    _RETRACE_CONDITION(cond)
 #define _FUNC(num)          _RETRACE_FUN_CALL(num)
 #define _FUNC_RETURN        ;_retrace_return();
 // non-macro version for switch
