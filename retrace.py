@@ -71,13 +71,12 @@ DEFAULT_ADD_OPS = {"COPY_STATES",
                    "ANY_FILE_MIGHT_EXIST",
                    "SYMBOL_FILL_UNCONSTRAINED_MEMORY",
                    "SYMBOL_FILL_UNCONSTRAINED_REGISTERS",
-                   "CONSERVATIVE_READ_STRATEGY",
                    "CONSERVATIVE_WRITE_STRATEGY",
                    }
 DEFAULT_REMOVE_OPS = {"ALL_FILES_EXIST"}
 
 # Some useful options:
-#   CONSERVATIVE_READ_STRATEGY CONSERVATIVE_WRITE_STRATEGY (for more reliable retracing, enabled by default)
+#   CONSERVATIVE_WRITE_STRATEGY (seems to be needed so enabled by default)
 #   AVOID_MULTIVALUED_READS AVOID_MULTIVALUED_WRITES plus --merge 1 (for fast retracing, angr "fastpath" mode)
 #   BYPASS_UNSUPPORTED_... (retrace even when unsupported in angr)
 #   remove COPY_STATES
@@ -104,9 +103,9 @@ elif args.drop is not None:
     merge_after = args.drop
 
 assertion_checks = False
-if args.assertions:
+if args.assertions is not None:
     assertions = args.assertions
-    assert_checks = True
+    assertion_checks = True
 else:
     assertions = []
 

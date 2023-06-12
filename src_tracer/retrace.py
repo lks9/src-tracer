@@ -211,15 +211,6 @@ class SourceTraceReplayer:
             simgr.move(from_stash='ghost_handle', to_stash='ghost_end',
                        filter_func=lambda s: s.solver.eval(s.ip) == self.ghost_end_addr)
 
-            if debug:
-                for state in simgr.assertions:
-                    index = state.mem[self.assert_idx_addr].int.concrete
-                    label = state.mem[self.assert_names_addr + 8*index].deref.string.concrete.decode()
-                    log.debug(f'Assertion "{label}" with index {index}')
-                for state in simgr.assume:
-                    label = state.mem[self.assume_name_addr].deref.string.concrete.decode()
-                    log.debug(f'Assumption "{label}"')
-
             # handle propositions
             for state in simgr.propose:
                 index = state.mem[self.assert_idx_addr].int.concrete
@@ -244,6 +235,16 @@ class SourceTraceReplayer:
             for state in simgr.assume:
                 mem_assume = state.mem[self.assume_addr].bool.resolved
                 state.solver.add(mem_assume)
+
+            if debug:
+                for state in simgr.assertions:
+                    index = state.mem[self.assert_idx_addr].int.concrete
+                    label = state.mem[self.assert_names_addr + 8*index].deref.string.concrete.decode()
+                    log.debug(f'Assertion "{label}" with index {index}')
+                for state in simgr.assume:
+                    if state.satisfiable():
+                        label = state.mem[self.assume_name_addr].deref.string.concrete.decode()
+                        log.debug(f'Assumption "{label}"')
 
             simgr.step(stash='assertions')
             simgr.move(from_stash='assertions', to_stash='ghost')
