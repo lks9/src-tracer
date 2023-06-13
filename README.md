@@ -34,20 +34,6 @@ Any software which is written in C/C++, with the source code available.
    ```
 * TODO
 
-## Instrumentation
-
-1. Add to each source file
-   ```C
-   #include "src_tracer.h"
-   ```
-2. Add macros to the respective code blocks. A list of all macros is given below.
-3. Add `_TRACE_OPEN(fname)` and optionally `_TRACE_CLOSE` to the main function.
-
-For an example instrumentation, run the `instrumenter.py` on
-the original `checksum.c` (instructions below).
-The `instrumenter.py` also creates a sqlite database to store all functions together with their
-`num` as `cflow_functions.db`.
-
 ## Example `checksum.c`
 
 * First run the pre-processor
