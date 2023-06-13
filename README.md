@@ -48,49 +48,6 @@ the original `checksum.c` (instructions below).
 The `instrumenter.py` also creates a sqlite database to store all functions together with their
 `num` as `cflow_functions.db`.
 
-### Assertion Checking
-
-You can add assertions anywhere to the sources, either to the original files
-or after the instrumentation process. Assertions have the form:
-
-```
-_RETRACE_ASSERT("some name", bool_expr);
-```
-
-Assertions are checked when retracing and are ignored otherwise.
-
-
-### Trace Format
-
-The instrumentation consists of macros added to the source code.
-Each element consists of one capital letter + an optional hex `num` in lower case.
-Elements are written sequentially without any separator.
-
-| Macro                | Emits       | Explanation                                             |
-|----------------------|-------------|---------------------------------------------------------|
-| `_FUNC(num)`         | `F` + `num` | Function call, use `num` to distinguish functions       |
-| `_RETURN`            | `R`         | Function return                                         |
-| `_SWITCH(num)`       | `D` + `num` | Jump to case indicated with `num` in a switch-clause    |
-| `_CONDITION(b)`      | `T`/`N`     | Left value of short circuit operation `&&`, `\|\|` or `?:`|
-| `_IF`                | `T`         | The if-branch of an if-clause is taken                  |
-| `_ELSE`              | `N`         | The else-branch of an if-clause is taken                |
-| `_LOOP_START(id)`    |             | Beginning of a loop (for, while etc.)                   |
-| `_LOOP_BODY(id)`     | `T`         | Begin of a loop iteration                               |
-| `_LOOP_END(id)`      | `N`         | End of a loop                                           |
-| `_TRACE_OPEN(fname)` |             | Initialize, write trace to file named `fname`           |
-| `_TRACE_CLOSE`       | `E`         | End of the trace                                        |
-
-An example trace is `F2NF1TTNT`, which includes sub-traces, for example `F1TTN` or `TTN`.
-
-Note that function number `0` is reserved, and `F0` simply markes the end of a trace
-(as emmitted by `_TRACE_CLOSE`).
-
-There was another variant which emitted `I` or `E` for if-clauses, and
-`L` + (inner loop) + `P` + `num` for loops. A `P` + `num` can take logarithmically less
-space then a sequence of `T` and `N`. However, we observed that the number
-of loop iterations for most loops is not high enough to make it significant.
-Moreover, a sequence of `T` and `N` can be stored more efficient in the binary trace format.
-
 ## Example `checksum.c`
 
 * First run the pre-processor
