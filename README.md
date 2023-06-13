@@ -26,7 +26,7 @@ Any software which is written in C/C++, with the source code available.
 * python3
 * [angr](https://angr.io) for symbolic execution (`pip install angr`)
 
-## Installation
+## Setup
 
 * Run make
    ```
