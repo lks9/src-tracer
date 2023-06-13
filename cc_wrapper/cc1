@@ -79,7 +79,7 @@ if [ "$1" = "-E" ]; then
         # echo "no file to annotate"
         # just call gcc (or the preprocessor)
         exec $(${COLLECT_GCC} --print-prog-name=cc1) $@
-    elif [ $(grep -c "#include <src_tracer/_after_instrument.h>" "${infile}") -gt 0 ]; then
+    elif [ $(grep -c "src_tracer/_after_instrument.h" "${infile}") -gt 0 ]; then
         # echo "skipping ${infile} (already annotated)"
         # just call gcc (or the preprocessor)
         exec $(${COLLECT_GCC} --print-prog-name=cc1) $@
