@@ -64,7 +64,7 @@ class Instrumenter:
             with open(filename, "rb") as f:
                 content = f.read()
             self.annotations[filename] = {"content": content}
-            self.annotations[filename][0] = b'#include "src_tracer.h"\n'
+            self.annotations[filename][0] = b'#include <src_tracer/_after_instrument.h>\n'
         return filename
 
     def orig_file_and_line(self, location):
@@ -439,7 +439,7 @@ class Instrumenter:
             annotation = self.annotations[filename]
             content = annotation["content"]
             # overwrite
-            if (b'#include "src_tracer.h"' in content):
+            if (b'#include <src_tracer/_after_instrument.h>' in content):
                 # print("Skipping " + filename + " (already annotated)")
                 return False
             # print("Overwriting " + filename + "...")

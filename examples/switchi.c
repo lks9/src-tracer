@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "src_tracer_ghost.h"
+#include <src_tracer/ghost.h>
 void foo(void) {}
 
 int main(int argc, char **argv) {

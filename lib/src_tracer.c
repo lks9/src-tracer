@@ -1,5 +1,5 @@
-#include "src_tracer.h"
-#include "src_tracer_ghost.h"
+#include <src_tracer/_after_instrument.h>
+#include <src_tracer/ghost.h>
 
 #include <stdbool.h>
 #include <sys/types.h>

@@ -6,7 +6,7 @@
 # export SRC_TRACER_DIR=.........
 # export SRC_TRACER_STORE_DIR=...
 # export CC="gcc"
-# export CFLAGS="-Wno-error -L${SRC_TRACER_DIR}/instrumentation -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
+# export CFLAGS="-Wno-error -L${SRC_TRACER_DIR}/lib -I${SRC_TRACER_DIR}/include -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
 #    (you might also add "-O3" and "-save-temps" to CFLAGS)
 # export LIBS="-lsrc_tracer"
 # export SRC_TRACER=
@@ -79,7 +79,7 @@ if [ "$1" = "-E" ]; then
         # echo "no file to annotate"
         # just call gcc (or the preprocessor)
         exec $(${COLLECT_GCC} --print-prog-name=cc1) $@
-    elif [ $(grep -c "src_tracer" "${infile}") -gt 0 ]; then
+    elif [ $(grep -c "#include <src_tracer/_after_instrument.h>" "${infile}") -gt 0 ]; then
         # echo "skipping ${infile} (already annotated)"
         # just call gcc (or the preprocessor)
         exec $(${COLLECT_GCC} --print-prog-name=cc1) $@
@@ -94,7 +94,7 @@ if [ "$1" = "-E" ]; then
         python3 "${SRC_TRACER_DIR}/instrumenter.py" --cases --no-return "${outfile}.tmp.c" "${SRC_TRACER_STORE_DIR}" || exit $?
 
         # rerun preprocessor to resolve instrumentation macros
-        cpp ${SRC_TRACER} "${outfile}.tmp.c" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/instrumentation/"
+        cpp ${SRC_TRACER} "${outfile}.tmp.c" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/include/"
         cp "${outfile}.tmp.i" "${outfile}"
     fi
 elif [ "$1" = "-fpreprocessed" ]; then
