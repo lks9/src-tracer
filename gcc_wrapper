@@ -1,6 +1,6 @@
 #!/bin/sh
 
-CC_WRAPPER_DIR=$(realpath "$0")
+CURRENT_FILE_PATH=$(realpath "$0")
 export SRC_TRACER_DIR=$(dirname "${CURRENT_FILE_PATH}")
 
 EXTRA_CFLAGS=" -Wno-error -no-integrated-cpp -I${SRC_TRACER_DIR}/include -B${SRC_TRACER_DIR}/cc_wrapper -L${SRC_TRACER_DIR}/lib"
