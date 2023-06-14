@@ -126,9 +126,6 @@ in `.config`:
   ```
   CFLAGS += $(call cc-option,-Wdeclaration-after-statement,)
   ```
-  Note that the instrumentation might fail at any point due to
-  a known issue [#30](https://github.com/lks9/src-tracer/issues/30).
-  As workaround simply start `make` again until it succeeds.
 
 * Once we compiled it successfully, you don't need the stripped version.
   So just rename:
