@@ -188,12 +188,6 @@ in `.config`:
 You can do it manually as for the `checksum.c` example.
 
 For a more automatic way that works well with make scripts, make use of `cc_wrapper/`.
-As a prerequesite, you also need `libsrc_tracer.a`. Build `libsrc_tracer.a` using `make` in the `instrumentation` folder:
-
-```
-  cd instrumentation
-  make
-```
 
 ### Recording
 * Set some envirenmental variables. There are some variations, for example you might also add `-save-temps` to `CFLAGS`.
@@ -213,9 +207,8 @@ As a prerequesite, you also need `libsrc_tracer.a`. Build `libsrc_tracer.a` usin
 * Then build your project with make, gcc, whatever
 
 ### Retracing
-* Copy the `cflow_functions.json` from the recording step.
 * Same envirenmental variables as before. Only if you want to change some variables (e.g. `CFLAGS` with `-g`) make sure
-to set `SRC_TRACER_INSTRUMENT=` (as empty string) before you `./configure` your project again.
+to set `SRC_TRACER=` (as empty string) before you `./configure` your project again.
 * Before the actual compilation:
 ```
   export SRC_TRACER="-D_RETRACE_MODE"
