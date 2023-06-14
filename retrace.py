@@ -71,12 +71,13 @@ DEFAULT_ADD_OPS = {"COPY_STATES",
                    "ANY_FILE_MIGHT_EXIST",
                    "SYMBOL_FILL_UNCONSTRAINED_MEMORY",
                    "SYMBOL_FILL_UNCONSTRAINED_REGISTERS",
+                   "CONSERVATIVE_READ_STRATEGY",
                    "CONSERVATIVE_WRITE_STRATEGY",
                    }
 DEFAULT_REMOVE_OPS = {"ALL_FILES_EXIST"}
 
 # Some useful options:
-#   CONSERVATIVE_WRITE_STRATEGY (seems to be needed so enabled by default)
+#   CONSERVATIVE_{READ/WRITE}_STRATEGY (seems to be needed so enabled by default)
 #   AVOID_MULTIVALUED_READS AVOID_MULTIVALUED_WRITES plus --merge 1 (for fast retracing, angr "fastpath" mode)
 #   BYPASS_UNSUPPORTED_... (retrace even when unsupported in angr)
 #   remove COPY_STATES
