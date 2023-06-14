@@ -191,28 +191,28 @@ For a more automatic way that works well with make scripts, make use of `cc_wrap
 
 ### Recording
 * Set some envirenmental variables. There are some variations, for example you might also add `-save-temps` to `CFLAGS`.
-```
+  ```
   export SRC_TRACER_DIR=.........
   export CC="gcc"
   export CFLAGS="-Wno-error -L${SRC_TRACER_DIR}/lib -I${SRC_TRACER_DIR}/include -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
   export LIBS="-lsrc_tracer"
   export SRC_TRACER=""
-```
+  ```
 * Now you can ./configure your project...
 * You can copy the build directory here, if you want to reuse the configuration for retracing.
 * Before the actual compilation:
-```
+  ```
   export SRC_TRACER="-D_TRACE_MODE"
-```
+  ```
 * Then build your project with make, gcc, whatever
 
 ### Retracing
 * Same envirenmental variables as before. Only if you want to change some variables (e.g. `CFLAGS` with `-g`) make sure
 to set `SRC_TRACER=` (as empty string) before you `./configure` your project again.
 * Before the actual compilation:
-```
+  ```
   export SRC_TRACER="-D_RETRACE_MODE"
-```
+  ```
 * Then build your project with make, gcc, whatever
 
 It can be a bit tricky to get the binary linking correctly,
