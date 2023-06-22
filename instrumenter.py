@@ -41,7 +41,10 @@ else:
 
 # create connection to database
 try:
-    database = Database(store_dir)
+    if args.database is None:
+        database = Database(store_dir)
+    else:
+        database = Database(store_dir=None, path=args.database)
 except sqlite3.OperationalError:
     error = "the given path is not correct, make sure the dir exists beforehand"
     raise Exception(error)
