@@ -126,3 +126,6 @@ for elem in trace:
 
 if not previous_newline:
     print_newline()
+
+if database:
+    database.close_connection()
