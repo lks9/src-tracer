@@ -5,11 +5,10 @@ COUNT_MAX = 75
 
 import sys
 import os
-import sqlite3
 import argparse
 
 from src_tracer.trace import Trace
-from src_tracer.util import Util
+from src_tracer.database import Database
 
 # arguments
 ap = argparse.ArgumentParser()
@@ -34,17 +33,16 @@ args = ap.parse_args()
 # create connection to database
 if args.pretty in (5,3):
     if args.database is None:
-        database_path = os.path.dirname(args.trace_file)
-        database = os.path.join(database_path, 'cflow_functions.db')
+        database_dir = os.path.dirname(args.trace_file)
+        database_path = os.path.join(database_dir, 'function_database.db')
     else:
-        database = args.database
-    if not os.path.exists(database):
+        database_path = args.database
+    if not os.path.exists(database_path):
         error = f"Could not open database from {database}, try --pretty 4 or --database"
         raise Exception(error)
-    connection = sqlite3.connect(database)
-    cursor = connection.cursor()
+    database = Database(store_dir=None, path=database_path)
 else:
-    cursor = None
+    database = None
 
 if args.pretty in (0,1) and args.show_pos:
     error = "--show_pos is only available for pretty > 1"
@@ -113,7 +111,7 @@ for elem in trace:
         num = int.from_bytes(elem.bs, "little")
         if elem.letter == 'F':
             if args.pretty in (5,3):
-                name = Util.get_name(cursor, num)
+                name = database.get_name(num)
                 # All upper case letters in the trace are treated as elem,
                 # so we have to print name.lower() instead of name
                 if name:
