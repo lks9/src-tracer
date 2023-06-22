@@ -29,10 +29,13 @@ Any software which is written in C/C++, with the source code available.
 ## Setup
 
 * Run make
-   ```
-   make
-   ```
-* TODO
+  ```
+  make
+  ```
+* Install the python package
+  ```
+  pip install .
+  ```
 
 ## Example `checksum.c`
 
