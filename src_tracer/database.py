@@ -14,6 +14,12 @@ class Database:
         else:
             db_path = os.path.join(store_dir, name)
             self.connection = sqlite3.connect(db_path)
+        self._init_db()
+
+    def _init_db(self):
+        self._create_table('function_list',
+                        [('file', 'TEXT'), ('line', 'INT'), ('name', 'TEXT')],
+                        ['file', 'name'])
 
     def get_name(self, func_num):
         cursor = self.connection.cursor()
@@ -32,7 +38,7 @@ class Database:
         cursor.close()
         return func_nums
 
-    def create_table(self, table_name: str, colum_name_type: List[Tuple[str, str]], key: List[str]):
+    def _create_table(self, table_name: str, colum_name_type: List[Tuple[str, str]], key: List[str]):
         cursor = self.connection.cursor()
         columns = ", ".join([" ".join(col) for col in colum_name_type])
         key_str = ", ".join(key)
@@ -42,16 +48,13 @@ class Database:
                        ''')
         cursor.close()
 
-    def insert_to_table(self, table_name: str, value: List[Tuple[str, ]]):
+    def insert_to_table(self, file, line, name, pre_file=None, offset=None):
         cursor = self.connection.cursor()
-        column_names = ",".join([col[0] for col in value])
-        column_value = tuple([col[1] for col in value])
-        value_query = ",".join("?" * len(value))
-        sql = f'''INSERT INTO {table_name}
-                ({column_names})
-                VALUES({value_query})
+        sql = f'''INSERT INTO function_list
+                (file, line, name)
+                VALUES(?, ?, ?)
                 ON CONFLICT DO NOTHING'''
-        cursor.execute(sql, column_value)
+        cursor.execute(sql, (file, line, name))
         cursor.close()
         self.connection.commit()
 

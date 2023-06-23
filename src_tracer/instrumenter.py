@@ -15,9 +15,7 @@ class Instrumenter:
         :param case_instrument: instrument each switch case, not the switch (experimental)
         """
         self.database = database
-        self._init_db()
         self.trace_store_dir = trace_store_dir
-
         self.case_instrument = case_instrument
         self.boolop_instrument = boolop_instrument
         self.return_instrument = return_instrument
@@ -34,10 +32,6 @@ class Instrumenter:
 
         self.annotations = {}
 
-    def _init_db(self):
-        self.database.create_table('function_list',
-                                   [('file', 'TEXT'), ('line', 'INT'), ('name', 'TEXT')],
-                                    ['file', 'name'])
 
     def filename(self, location):
         filename = location.file.name
@@ -69,8 +63,7 @@ class Instrumenter:
         pre_file = self.filename(node.extent.start)
         offset = node.extent.start.offset
         try:
-            self.database.insert_to_table('function_list',
-                                          [('file', file), ('line', line), ('name', name)])
+            self.database.insert_to_table(file, line, name)
         except sqlite3.OperationalError:
             # perhaps the insert was successful from another process?
             pass
