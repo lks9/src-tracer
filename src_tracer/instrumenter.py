@@ -67,7 +67,7 @@ class Instrumenter:
         except sqlite3.OperationalError:
             # perhaps the insert was successful from another process?
             pass
-        num = self.database.get_number(line, file, name)
+        num = self.database.get_number(file, name)
         return num
 
     def add_annotation(self, annotation, location, add_offset=0):

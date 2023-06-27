@@ -58,13 +58,13 @@ class Database:
         cursor.close()
         self.connection.commit()
 
-    def get_number(self, line, file, name):
+    def get_number(self, file, name):
         cursor = self.connection.cursor()
         func_num = cursor.execute('''
                                   SELECT rowid
                                   FROM function_list
-                                  WHERE line=? and file=? and name=?
-                                  ''', (line, file, name)).fetchone()
+                                  WHERE file=? and name=?
+                                  ''', (file, name)).fetchone()
         cursor.close()
         return func_num[0]
 
