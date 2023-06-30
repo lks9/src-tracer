@@ -5,6 +5,7 @@ import sqlite3
 import argparse
 
 from src_tracer.instrumenter import Instrumenter
+from src_tracer.database import Database
 
 # arguments
 ap = argparse.ArgumentParser()
@@ -39,20 +40,20 @@ else:
     store_dir = os.path.dirname(args.filename)
 
 # create connection to database
-if args.database is None:
-    database = os.path.join(store_dir, 'cflow_functions.db')
-else:
-    database = args.database
 try:
-    connection = sqlite3.connect(database)
+    if args.database is None:
+        database = Database(store_dir)
+    else:
+        database = Database(store_dir=None, path=args.database)
 except sqlite3.OperationalError:
     error = "the given path is not correct, make sure the dir exists beforehand"
     raise Exception(error)
 
 # do the instrumentation
-instrumenter = Instrumenter(connection, store_dir, case_instrument=args.cases, boolop_instrument=args.short_circuit,
+instrumenter = Instrumenter(database, store_dir, case_instrument=args.cases, boolop_instrument=args.short_circuit,
                             return_instrument=not args.no_return, inline_instrument=args.inline,
                             main_instrument=not args.no_main, anon_instrument=args.anon,
                             function_instrument=not args.no_functions, inner_instrument=not args.no_inner)
 instrumenter.parse(args.filename)
 instrumenter.annotate_all(args.filename)
+database.close_connection()

@@ -7,17 +7,15 @@ from clang.cindex import Index, CursorKind, StorageClass
 
 class Instrumenter:
 
-    def __init__(self, connection, trace_store_dir, case_instrument=False, boolop_instrument=False,
+    def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
                  return_instrument=True, inline_instrument=False, main_instrument=True, anon_instrument=False,
                  function_instrument=True, inner_instrument=True):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
         """
-        self.connection = connection
-        self._init_db()
+        self.database = database
         self.trace_store_dir = trace_store_dir
-
         self.case_instrument = case_instrument
         self.boolop_instrument = boolop_instrument
         self.return_instrument = return_instrument
@@ -34,29 +32,6 @@ class Instrumenter:
 
         self.annotations = {}
 
-    def _init_db(self):
-        cursor = self.connection.cursor()
-        cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS function_list
-                        (
-                            file    TEXT,
-                            line    INT,
-                            name    TEXT,
-                            PRIMARY KEY (file, line, name)
-                        )
-                            ''')
-        cursor.close()
-        cursor = self.connection.cursor()
-        cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS manual_lookup
-                        (
-                            num      INT,
-                            pre_file TEXT,
-                            offset   INT,
-                            PRIMARY KEY (pre_file, offset)
-                        )
-                            ''')
-        cursor.close()
 
     def filename(self, location):
         filename = location.file.name
@@ -87,48 +62,12 @@ class Instrumenter:
         name = node.spelling
         pre_file = self.filename(node.extent.start)
         offset = node.extent.start.offset
-        cursor = self.connection.cursor()
         try:
-            cursor.execute('''
-                INSERT INTO function_list
-                VALUES(?,?,?)
-                ON CONFLICT DO NOTHING
-                ''', (file, line, name))
+            self.database.insert_to_table(file, line, name)
         except sqlite3.OperationalError:
             # perhaps the insert was successful from another process?
             pass
-        cursor.close()
-        self.connection.commit()
-        #cursor = self.connection.cursor()
-        #func_num_manu = cursor.execute('''
-        #        SELECT num
-        #        FROM manual_lookup
-        #        WHERE pre_file=? and offset=?
-        #        ''', (pre_file, offset)).fetchone()
-        #cursor.close()
-        #self.connection.commit()
-        cursor = self.connection.cursor()
-        func_num_auto = cursor.execute('''
-                SELECT rowid
-                FROM function_list
-                WHERE line=? and file=? and name=?
-                ''', (line, file, name)).fetchone()
-        cursor.close()
-        self.connection.commit()
-        num = func_num_auto[0]
-        #if func_num_manu is None:
-        #    cursor = self.connection.cursor()
-        #    try:
-        #        cursor.execute('''
-        #            INSERT INTO manual_lookup
-        #            VALUES(?,?,?)
-        #            ON CONFLICT DO NOTHING
-        #            ''', (num, pre_file, offset))
-        #    except sqlite3.OperationalError:
-        #        # don't care
-        #        pass
-        #    cursor.close()
-        #    self.connection.commit()
+        num = self.database.get_number(file, name)
         return num
 
     def add_annotation(self, annotation, location, add_offset=0):

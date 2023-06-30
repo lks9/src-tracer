@@ -121,7 +121,7 @@ extern int _trace_after_fork(int pid);
     } \
 }
 
-#define _TRACE_NUM(num) ;{ \
+#define _TRACE_NUM(num) ({ \
     unsigned long long _trace_n = (num); \
     if (_trace_n == 0) { \
         _TRACE_PUT(_TRACE_SET_DATA | _trace.if_count | _TRACE_SET_LEN_0); \
@@ -149,7 +149,8 @@ extern int _trace_after_fork(int pid);
         _TRACE_PUT((_trace_n >> 48) & 0xff); \
         _TRACE_PUT((_trace_n >> 56) & 0xff); \
     } \
-}
+    _trace_n; /* result (GNU extenstion) */ \
+})
 
 #define NIBBLE_TO_HEX_(n)   (((n) >= 0xa) ? (n) - 0xa + 'a' : (n) + '0')
 #define NIBBLE_TO_HEX(n,i)  NIBBLE_TO_HEX_(((n) >> ((i)*4)) & 0xf)
@@ -157,14 +158,15 @@ extern int _trace_after_fork(int pid);
 // Shift twice, otherwise we might run into undefined behavior!
 #define NIBBLE_COUNT(n,c)   (((n) >> (c)*3 >> (c)) != 0)
 
-#define _TRACE_NUM_TEXT(type, num) ;{ \
+#define _TRACE_NUM_TEXT(type, num) ({ \
     int count; \
     _TRACE_PUT(type); \
-    for (count = 0; NIBBLE_COUNT((num), count); count++) {}  \
+    for (count = 0; NIBBLE_COUNT(_temp_num, count); count++) {}  \
     for (int i = count-1; i >= 0; i--) { \
-        _TRACE_PUT(NIBBLE_TO_HEX((num), i)); \
+        _TRACE_PUT(NIBBLE_TO_HEX(_temp_num, i)); \
     } \
-}
+    _temp_num; /* result (GNU extension) */ \
+})
 
 #define _TRACE_RETURN() \
     _TRACE_PUT(_TRACE_SET_FUNC_RETURN | _trace.if_count)
@@ -172,32 +174,21 @@ extern int _trace_after_fork(int pid);
 #define _TRACE_END() \
     _TRACE_PUT(_TRACE_SET_FUNC_END | _trace.if_count)
 
-// same as the macro version
-// but returns num
-// can be used inside switch conditions
-static inline __attribute__((always_inline)) long long int _trace_num(long long int num) {
-    _TRACE_NUM(num);
-    return num;
-}
+#define _TRACE_CONDITION(cond) ({ \
+    auto _temp_cond = (cond); \
+    _TRACE_IE(_temp_cond); \
+    _temp_cond; /* result (GNU extension) */ \
+})
 
-static inline __attribute__((always_inline)) long long int _trace_num_text(char type, long long int num) {
-    _TRACE_NUM_TEXT(type, num);
-    return num;
-}
-
-static inline __attribute__((always_inline)) bool _trace_condition(bool cond) {
-    _TRACE_IE(cond);
-    return cond;
-}
-
-static inline __attribute__((always_inline)) bool _text_trace_condition(bool cond) {
-    if (cond) {
-        _TRACE_PUT_TEXT('T');
-    } else {
-        _TRACE_PUT_TEXT('N');
-    }
-    return cond;
-}
+#define _TEXT_TRACE_CONDITION(cond) ({ \
+    auto _temp_cond = cond; \
+    if (_temp_cond) { \
+        _TRACE_PUT_TEXT('T'); \
+    } else { \
+        _TRACE_PUT_TEXT('N'); \
+    } \
+    _temp_cond; /* result (GNU extension) */ \
+})
 
 
 // for retracing
@@ -306,11 +297,11 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _IF                 _TRACE_IE(1)
 #define _ELSE               _TRACE_IE(0)
-#define _CONDITION(cond)    _trace_condition(cond)
+#define _CONDITION(cond)    (_TRACE_CONDITION(cond))
 #define _FUNC(num)          _TRACE_FUNC(num)
 #define _FUNC_RETURN        _TRACE_RETURN()
 // non-macro version for switch
-#define _SWITCH(num)        _trace_num(num)
+#define _SWITCH(num)        (_TRACE_NUM(num))
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id)      ;if (_cflow_switch_##id) { \
@@ -335,11 +326,11 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _IF                 ;_TRACE_PUT_TEXT('T');
 #define _ELSE               ;_TRACE_PUT_TEXT('N');
-#define _CONDITION(cond)    _text_trace_condition(cond)
+#define _CONDITION(cond)    (_TEXT_TRACE_CONDITION(cond))
 #define _FUNC(num)          ;_TRACE_NUM_TEXT('F', ((unsigned int)(num)));
 #define _FUNC_RETURN        ;_TRACE_PUT_TEXT('R');
 // non-macro version for switch
-#define _SWITCH(num)        _trace_num_text('D', ((unsigned int)(num)))
+#define _SWITCH(num)        (_TRACE_NUM_TEXT('D', ((unsigned int)(num))))
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id)      ;if (_cflow_switch_##id) { \
