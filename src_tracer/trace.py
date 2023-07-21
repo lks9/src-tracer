@@ -1,3 +1,5 @@
+import mmap
+import os
 import re
 
 TEST_IE          = 0b10000000
@@ -125,22 +127,26 @@ class Trace:
         If file ends with '.txt', a text trace is assumed, otherwise a compact binary trace.
         """
         if filename[-4:] == '.txt':
+            size = os.stat(filename).st_size
             with open(filename, 'r') as f:
-                f.seek(seek_bytes)
-                trace_str = f.read(count_bytes)
-                if count_bytes >= 0:
-                    trace_tail = f.read()
-                else:
-                    trace_tail = ""
-                    count_elems = 0
+                with mmap.mmap(f.fileno(), size, access=mmap.ACCESS_READ) as trace:
+                    trace.seek(seek_bytes)
+                    trace_str = trace.read(count_bytes)
+                    if count_bytes >= 0:
+                        trace_tail = trace.read()
+                    else:
+                        trace_tail = ""
+                        count_elems = 0
             return TraceText(trace_str, seek_elems=seek_elems, count_elems=count_elems, trace_tail=trace_tail)
         else:
+            size = os.stat(filename).st_size
             with open(filename, 'rb') as f:
-                f.seek(seek_bytes)
-                trace_bytes = f.read()
-                if count_bytes < 0:
-                    count_bytes = len(trace_bytes)
-                    count_elems = 0
+                with mmap.mmap(f.fileno(), size, access=mmap.ACCESS_READ) as trace:
+                    trace.seek(seek_bytes)
+                    trace_bytes = trace.read()
+                    if count_bytes < 0:
+                        count_bytes = len(trace_bytes)
+                        count_elems = 0
             return TraceCompact(trace_bytes, seek_elems=seek_elems, count_bytes=count_bytes, count_elems=count_elems)
 
     def __str__(self):
