@@ -57,7 +57,7 @@ if args.fname is None:
     else:
         database_path = args.database
     if not os.path.exists(database_path):
-        error = f"Could not open database from {database}, try --fname or --database"
+        error = f"Could not open database from {database_path}, try --fname or --database"
         raise Exception(error)
     database = Database(store_dir=None, path=database_path)
 
