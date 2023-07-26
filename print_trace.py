@@ -129,3 +129,5 @@ if not previous_newline:
 
 if database:
     database.close_connection()
+if trace:
+    trace.trace_close()

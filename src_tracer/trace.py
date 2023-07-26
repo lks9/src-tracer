@@ -129,25 +129,21 @@ class Trace:
         if filename[-4:] == '.txt':
             size = os.stat(filename).st_size
             with open(filename, 'r') as f:
-                with mmap.mmap(f.fileno(), size, access=mmap.ACCESS_READ) as trace:
-                    trace.seek(seek_bytes)
-                    trace_str = trace.read(count_bytes)
-                    if count_bytes >= 0:
-                        trace_tail = trace.read()
-                    else:
-                        trace_tail = ""
-                        count_elems = 0
-            return TraceText(trace_str, seek_elems=seek_elems, count_elems=count_elems, trace_tail=trace_tail)
+                trace = mmap.mmap(f.fileno(), size, access=mmap.ACCESS_READ)
+                if count_bytes >= 0:
+                    trace_tail = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ, offset= seek_bytes + count_bytes)
+                else:
+                    trace_tail = b""
+                    count_elems = 0
+            return TraceText(trace, seek_elems=seek_elems, count_elems=count_elems, trace_tail=trace_tail)
         else:
             size = os.stat(filename).st_size
             with open(filename, 'rb') as f:
-                with mmap.mmap(f.fileno(), size, access=mmap.ACCESS_READ) as trace:
-                    trace.seek(seek_bytes)
-                    trace_bytes = trace.read()
-                    if count_bytes < 0:
-                        count_bytes = len(trace_bytes)
-                        count_elems = 0
-            return TraceCompact(trace_bytes, seek_elems=seek_elems, count_bytes=count_bytes, count_elems=count_elems)
+                trace = mmap.mmap(f.fileno(), size, access=mmap.ACCESS_READ)
+                if count_bytes < 0:
+                    count_bytes = len(trace)
+                    count_elems = 0
+            return TraceCompact(trace, seek_elems=seek_elems, count_bytes=count_bytes, count_elems=count_elems)
 
     def __str__(self):
         res = ''
@@ -205,9 +201,11 @@ class TraceText(Trace):
         """
         Iterate over all elements, ignoring seek and count.
         """
-        for m in re.finditer(r"[A-Z][0-9a-z]*", trace_str):
-            letter = trace_str[m.start():m.start()+1]
+        pat = re.compile(b"[A-Z][0-9a-z]*")
+        for m in pat.finditer(trace_str):
+            letter = trace_str[m.start():m.start()+1].decode()
             hexstring = trace_str[m.start()+1:m.end()]
+            hexstring = hexstring.decode()
             if hexstring == '':
                 yield TraceElem(letter, b'', m.start())
             else:
@@ -222,6 +220,11 @@ class TraceText(Trace):
     # overwrite for complexity reasons
     def __str__(self):
         return self._trace_str
+    
+    def trace_close(self):
+        self._trace_str.close()
+        if self._trace_tail != b"":
+            self._trace_tail.close()
 
 
 class TraceCompact(Trace):
@@ -230,7 +233,7 @@ class TraceCompact(Trace):
         self.seek_elems = seek_elems
         self.count_elems = count_elems
         # self._count_bytes is assumed to be read only after init
-        if count_bytes < 0:
+        if count_bytes <= 0:
             self._count_bytes = len(self._trace)
         else:
             self._count_bytes = count_bytes
@@ -331,3 +334,6 @@ class TraceCompact(Trace):
                 yield TraceElem(letter(b), bs, pos)
 
             i += length
+    
+    def trace_close(self):
+        self._trace.close()
