@@ -233,7 +233,7 @@ class TraceCompact(Trace):
         self.seek_elems = seek_elems
         self.count_elems = count_elems
         # self._count_bytes is assumed to be read only after init
-        if count_bytes <= 0:
+        if count_bytes < 0:
             self._count_bytes = len(self._trace)
         else:
             self._count_bytes = count_bytes
