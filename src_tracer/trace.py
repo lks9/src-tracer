@@ -210,7 +210,9 @@ class TraceText(Trace):
         Iterate over all elements, ignoring seek and count.
         """
         pat = re.compile(b"[A-Z][0-9a-z]*")
-        for m in pat.finditer(trace_str[start_byte:]):
+        if start_byte != 0:
+            trace_str = trace_str[start_byte:]
+        for m in pat.finditer(trace_str):
             letter = trace_str[start_byte + m.start():start_byte + m.start()+1].decode()
             hexstring = trace_str[start_byte + m.start()+1:start_byte + m.end()].decode()
             if hexstring == '':
