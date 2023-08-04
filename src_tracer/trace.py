@@ -210,21 +210,26 @@ class TraceText(Trace):
         Iterate over all elements, ignoring seek and count.
         """
         pat = re.compile(b"[A-Z][0-9a-z]*")
-        if start_byte != 0:
-            trace_str = trace_str[start_byte:]
-        for m in pat.finditer(trace_str):
-            letter = trace_str[start_byte + m.start():start_byte + m.start()+1].decode()
-            hexstring = trace_str[start_byte + m.start()+1:start_byte + m.end()].decode()
-            if hexstring == '':
-                yield TraceElem(letter, b'', m.start())
-            else:
-                if len(hexstring) % 2 == 1:
-                    hexstring = "0" + hexstring
-                # reverse the byte order to save as little endian
-                ba = bytearray.fromhex(hexstring)
-                ba.reverse()
-                bs = bytes(ba)
-                yield TraceElem(letter, bs, m.start())
+        
+        bufferRange = mmap.ALLOCATIONGRANULARITY
+        relative_start = start_byte
+        buffer = trace_str[relative_start: relative_start + bufferRange]
+        while buffer != b'':
+            for m in pat.finditer(buffer):
+                letter = trace_str[relative_start + m.start():relative_start + m.start()+1].decode()
+                hexstring = trace_str[relative_start + m.start()+1:relative_start + m.end()].decode()
+                if hexstring == '':
+                    yield TraceElem(letter, b'', relative_start - start_byte + m.start())
+                else:
+                    if len(hexstring) % 2 == 1:
+                        hexstring = "0" + hexstring
+                    # reverse the byte order to save as little endian
+                    ba = bytearray.fromhex(hexstring)
+                    ba.reverse()
+                    bs = bytes(ba)
+                    yield TraceElem(letter, bs, relative_start - start_byte + m.start())
+            relative_start += bufferRange
+            buffer = trace_str[relative_start: relative_start + bufferRange]
 
     # overwrite for complexity reasons
     def __str__(self):
