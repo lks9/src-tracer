@@ -126,7 +126,8 @@ class Trace:
         Read and and create a trace object from a file.
         If file ends with '.txt', a text trace is assumed, otherwise a compact binary trace.
         """
-        # find the nearest multiple of pagesize from the seek_bytes
+        # find the nearest multiple of pagesize from the seek_bytes,
+        # due to mmap can only skip multiple of pagesize during setup
         offset = mmap.ALLOCATIONGRANULARITY * (seek_bytes // mmap.ALLOCATIONGRANULARITY)
         # start byte from the start of trace that exclude the first nearest multiple of pagesize
         start_byte = seek_bytes - offset
@@ -211,6 +212,7 @@ class TraceText(Trace):
         """
         pat = re.compile(b"[A-Z][0-9a-z]*")
         
+        # create a buffer in order to process big txt file
         bufferRange = mmap.ALLOCATIONGRANULARITY
         relative_start = start_byte
         buffer = trace_str[relative_start: relative_start + bufferRange]
