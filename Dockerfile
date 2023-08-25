@@ -50,6 +50,5 @@ RUN     cd src-tracer/ && make
 
 RUN     abuild-keygen -a -i -n
 
-
-CMD     source /home/src_tracer_user/angr-venv/bin/activate && /bin/sh
+CMD     source angr-venv/bin/activate && /bin/sh
 
