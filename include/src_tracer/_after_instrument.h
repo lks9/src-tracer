@@ -107,17 +107,17 @@ extern int _trace_buf_pos;
 }
 #endif
 
-#define _TRACE_IF \
+#define _TRACE_IF() \
     _TRACE_PUT('T')
-#define _TRACE_ELSE \
+#define _TRACE_ELSE() \
     _TRACE_PUT('N')
 
 #define _TRACE_IE(if_true) ;{ \
     if (if_true) { \
-        _TRACE_IF \
+        _TRACE_IF(); \
     } else { \
-        _TRACE_ELSE \
-    }\
+        _TRACE_ELSE(); \
+    } \
 }
 
 // functions numbers are now big endian for better conversion
@@ -288,9 +288,9 @@ extern volatile bool _is_retrace_mode;
 
 static inline __attribute__((always_inline)) bool _is_retrace_condition(bool cond) {
     if (cond) {
-        _IS_RETRACE(_retrace_if(), _TRACE_IF);
+        _IS_RETRACE(_retrace_if(), _TRACE_IF());
     } else {
-        _IS_RETRACE(_retrace_else(), _TRACE_ELSE);
+        _IS_RETRACE(_retrace_else(), _TRACE_ELSE());
     }
     return cond;
 }
@@ -316,8 +316,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #if defined _TRACE_MODE && defined _RETRACE_MODE
 /* combined trace/retrace mode, experimental */
 
-#define _IF                 _IS_RETRACE(_retrace_if(), _TRACE_IF)
-#define _ELSE               _IS_RETRACE(_retrace_else(), _TRACE_ELSE)
+#define _IF                 _IS_RETRACE(_retrace_if(), _TRACE_IF())
+#define _ELSE               _IS_RETRACE(_retrace_else(), _TRACE_ELSE())
 #define _CONDITION(cond)    _is_retrace_condition(cond)
 #define _FUNC(num)          _IS_RETRACE(_RETRACE_FUN_CALL(num), _TRACE_FUNC(num))
 #define _FUNC_RETURN        _IS_RETRACE(_retrace_return(), _TRACE_RETURN())
@@ -330,8 +330,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
-#define _LOOP_BODY(id)      _IS_RETRACE(_retrace_if(), _TRACE_IF)
-#define _LOOP_END(id)       _IS_RETRACE(_retrace_else(), _TRACE_ELSE)
+#define _LOOP_BODY(id)      _IS_RETRACE(_retrace_if(), _TRACE_IF())
+#define _LOOP_END(id)       _IS_RETRACE(_retrace_else(), _TRACE_ELSE())
 
 #define _TRACE_OPEN(fname)  _IS_RETRACE( ,_trace_open((fname)))
 #define _TRACE_CLOSE        _IS_RETRACE( ,_trace_close())
@@ -342,8 +342,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #elif defined _TRACE_MODE
 /* trace mode */
 
-#define _IF                 _TRACE_IF
-#define _ELSE               _TRACE_ELSE
+#define _IF                 _TRACE_IF()
+#define _ELSE               _TRACE_ELSE()
 #define _CONDITION(cond)    _trace_condition(cond)
 #define _FUNC(num)          _TRACE_FUNC(num)
 #define _FUNC_RETURN        _TRACE_RETURN()
@@ -356,8 +356,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
-#define _LOOP_BODY(id)      _TRACE_IF
-#define _LOOP_END(id)       _TRACE_ELSE
+#define _LOOP_BODY(id)      _TRACE_IF()
+#define _LOOP_END(id)       _TRACE_ELSE()
 
 #define _TRACE_OPEN(fname)  ;_trace_open((fname));
 #define _TRACE_CLOSE        ;_trace_close();
