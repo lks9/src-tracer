@@ -161,7 +161,7 @@ int _trace_after_fork(int pid) {
     close(temp_trace_fd);
     temp_trace_fd = 0;
     char fname_suffix[20];
-    snprintf(fname_suffix, 20, "-fork-%d.trace", trace_fork_count);
+    snprintf(fname_suffix, 20, "-fork-%d.ctrace", trace_fork_count);
     strncat(trace_fname, fname_suffix, 20);
     //printf("Trace to: %s\n", trace_fname);
 
