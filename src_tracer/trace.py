@@ -128,30 +128,30 @@ class Trace:
         """
         # find the nearest multiple of pagesize from the seek_bytes,
         # due to mmap can only skip multiple of pagesize during setup
-        offset = mmap.ALLOCATIONGRANULARITY * (seek_bytes // mmap.ALLOCATIONGRANULARITY)
+        page_count = mmap.ALLOCATIONGRANULARITY * (seek_bytes // mmap.ALLOCATIONGRANULARITY)
         # start byte from the start of trace that exclude the first nearest multiple of pagesize
-        start_byte = seek_bytes - offset
+        seek_in_page = seek_bytes - page_count
         size = os.stat(filename).st_size
 
         if filename[-4:] == '.txt':
             with open(filename, 'r') as f:
-                trace = mmap.mmap(f.fileno(), size - offset, access=mmap.ACCESS_READ, offset = offset)
+                trace = mmap.mmap(f.fileno(), size - page_count, access=mmap.ACCESS_READ, offset = page_count)
                 if count_bytes >= 0:
                     offset_tail = mmap.ALLOCATIONGRANULARITY * ((seek_bytes + count_bytes) // mmap.ALLOCATIONGRANULARITY)
-                    start_byte_tail = seek_bytes + count_bytes - offset_tail
+                    tail_seek_in_page = seek_bytes + count_bytes - offset_tail
                     trace_tail = mmap.mmap(f.fileno(), size - offset_tail, access=mmap.ACCESS_READ, offset = offset_tail)
                 else:
                     trace_tail = b""
-                    start_byte_tail = 0
+                    tail_seek_in_page = 0
                     count_elems = 0
-            return TraceText(trace, seek_elems=seek_elems, count_elems=count_elems, trace_tail=trace_tail, start_byte=(start_byte, start_byte_tail))
+            return TraceText(trace, seek_elems=seek_elems, count_elems=count_elems, trace_tail=trace_tail, seek_in_page=seek_in_page, tail_seek_in_page=tail_seek_in_page)
         else:
             with open(filename, 'rb') as f:  
-                trace = mmap.mmap(f.fileno(), size - offset, access=mmap.ACCESS_READ, offset = offset)
+                trace = mmap.mmap(f.fileno(), size - page_count, access=mmap.ACCESS_READ, offset = page_count)
                 if count_bytes < 0:
                     count_bytes = len(trace)
                     count_elems = 0
-            return TraceCompact(trace, seek_elems=seek_elems, count_bytes=count_bytes, count_elems=count_elems, start_byte=start_byte)
+            return TraceCompact(trace, seek_elems=seek_elems, count_bytes=count_bytes, count_elems=count_elems, start_byte=seek_in_page)
 
     def __str__(self):
         res = ''
@@ -179,24 +179,25 @@ class Trace:
 
 
 class TraceText(Trace):
-    def __init__(self, trace_str, seek_elems, count_elems, trace_tail, start_byte):
+    def __init__(self, trace_str, seek_elems, count_elems, trace_tail, seek_in_page, tail_seek_in_page):
         self._trace_str = trace_str
         self._trace_tail = trace_tail
         self.seek_elems = seek_elems
         self.count_elems = count_elems
-        self._start_byte = start_byte
+        self._seek_in_page = seek_in_page
+        self._tail_seek_in_page = tail_seek_in_page
 
     def __iter__(self):
         """
         Iterate over the elements in the trace, respecting seek and count.
         """
-        it = self.full_iter(self._trace_str, self._start_byte[0])
+        it = self.full_iter(self._trace_str, self._seek_in_page)
         for _ in range(self.seek_elems):
             next(it)
         for elem in it:
             yield elem
         count = self.count_elems
-        for elem in self.full_iter(self._trace_tail, self._start_byte[1]):
+        for elem in self.full_iter(self._trace_tail, self._tail_seek_in_page):
             if count > 0:
                 yield elem
                 count -= 1
