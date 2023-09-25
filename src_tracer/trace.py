@@ -2,6 +2,8 @@ import mmap
 import os
 import re
 
+# compact trace
+
 TEST_IE          = 0b10000000
 PUT_IE           = 0b10000000
 
@@ -63,6 +65,33 @@ byte_length = {
     PUT_FUNC_LEN_32: 4,
 }
 
+# compressable trace with _...
+
+_TEST_DATA          = 0b11110000
+_SET_DATA           = 0b11110000
+_TEST_LEN           = 0b11111111
+_SET_LEN_reserved0  = 0b11110000
+_SET_LEN_reserved1  = 0b11110001
+_SET_LEN_8          = 0b11110011
+_SET_LEN_16         = 0b11110101
+_SET_LEN_32         = 0b11110111
+_SET_LEN_64         = 0b11111001
+_SET_LEN_reserved2  = 0b11111011
+_SET_LEN_PREFIX     = 0b11111101
+_SET_LEN_reserved3  = 0b11111110
+_SET_LEN_reserved4  = 0b11111111
+
+_TEST_FUNC_6        = 0b11000000
+_SET_FUNC_6         = 0b00000000
+_TEST_FUNC_14       = 0b11000000
+_SET_FUNC_14        = 0b10000000
+_TEST_FUNC_20       = 0b11110000
+_SET_FUNC_20        = 0b11000000
+_TEST_FUNC_28       = 0b11110000
+_SET_FUNC_28        = 0b11100000
+_TEST_FUNC_36       = 0b11110000
+_SET_FUNC_36        = 0b11010000
+
 def letter(b, count=0):
     if b & TEST_IE == PUT_IE:
         if b & (1 << count):
@@ -93,19 +122,25 @@ def to_number(bs):
 
 
 class TraceElem:
-    def __init__(self, letter, bs, pos=None, ie_pos=None):
+    def __init__(self, letter, bs, pos=None, ie_pos=None, big=False):
         self.letter = letter
         self.bs = bs
         self.pos = pos
         self.ie_pos = ie_pos
+        self.big = big
 
     def __str__(self):
         return self.pretty(show_ie_pos=True)
 
     def pretty(self, show_pos=True, show_ie_pos=False, name=None):
         res = f"{self.letter}"
-        if self.bs != b'':
-            num = int.from_bytes(self.bs, "little")
+        if letter in ('S', 'B'):
+            res += f'"{self.bs.decode()}"'
+        elif self.bs != b'':
+            if self.big:
+                num = int.from_bytes(self.bs, "big")
+            else:
+                num = int.from_bytes(self.bs, "little")
             res += f"{num:x}"
         if name is not None:
             res += f" {name}"
@@ -145,13 +180,20 @@ class Trace:
                     tail_seek_in_page = 0
                     count_elems = 0
             return TraceText(trace, seek_elems, count_elems, trace_tail, seek_in_page, tail_seek_in_page)
+        elif filename[-7:] == '.ctrace':
+            with open(filename, 'rb') as f:
+                trace = mmap.mmap(f.fileno(), size - offset, access=mmap.ACCESS_READ, offset=offset)
+                if count_bytes < 0:
+                    count_bytes = len(trace)
+                    count_elems = 0
+            return TraceCompressable(trace, count_bytes, count_elems, seek_elems, seek_in_page)
         else:
             with open(filename, 'rb') as f:
                 trace = mmap.mmap(f.fileno(), size - offset, access=mmap.ACCESS_READ, offset=offset)
                 if count_bytes < 0:
                     count_bytes = len(trace)
                     count_elems = 0
-            return TraceCompact(trace, seek_elems, count_bytes, count_elems, seek_in_page)
+            return TraceCompact(trace, count_bytes, count_elems, seek_elems, seek_in_page)
 
     def __str__(self):
         res = ''
@@ -226,11 +268,8 @@ class TraceText(Trace):
                 else:
                     if len(hexstring) % 2 == 1:
                         hexstring = "0" + hexstring
-                    # reverse the byte order to save as little endian
-                    ba = bytearray.fromhex(hexstring)
-                    ba.reverse()
-                    bs = bytes(ba)
-                    yield TraceElem(letter, bs, current_position - seek_in_page + m.start())
+                    bs = bytearray.fromhex(hexstring)
+                    yield TraceElem(letter, bs, current_position - seek_in_page + m.start(), big=True)
             current_position += buffer_size
             buffer = trace_str[current_position: current_position + buffer_size]
 
@@ -242,6 +281,120 @@ class TraceText(Trace):
         self._trace_str.close()
         if self._trace_tail != b"":
             self._trace_tail.close()
+
+
+class TraceCompressable(Trace):
+    def __init__(self, trace_bytes, count_bytes, count_elems, seek_elems, seek_in_page):
+        self._trace = trace_bytes
+        self.seek_elems = seek_elems
+        self.count_elems = count_elems
+        self._seek_in_page = seek_in_page
+        # self._count_bytes is assumed to be read only after init
+        if count_bytes < 0:
+            self._count_bytes = len(self._trace) - seek_in_page
+        else:
+            self._count_bytes = count_bytes
+
+    def __iter__(self):
+        """
+        Iterate over the elements in the trace, respecting seek and count.
+        """
+        it = self.full_iter(self._trace, self._seek_in_page)
+        for _ in range(self.seek_elems):
+            next(it)
+        count = self.count_elems
+        for elem in it:
+            if elem.pos < 0:
+                continue
+            elif elem.letter == 'E':
+                break
+            elif elem.pos < self._count_bytes:
+                yield elem
+            elif count > 0:
+                yield elem
+                count -= 1
+            else:
+                break
+        if count != 0:
+            raise ValueError(f"Trace ended, could not yield {count} elements")
+
+    @staticmethod
+    def full_iter(trace, seek_in_page):
+        """
+        Iterate over all elements, ignoring seek and count of the object (seek_in_page is argument instead).
+        """
+        i = 0
+        while i < len(trace) - seek_in_page:
+            pos = i
+            b = trace[seek_in_page + i]
+            i += 1
+
+            if chr(b) in ('T', 'N', 'A', 'R', 'E'):
+                yield TraceElem(chr(b), b'', pos)
+                continue
+
+            elif chr(b) in ('S', 'B'):
+                # 0 terminated string
+                end = trace[seek_in_page+i:].index(0)
+                bs = trace[seek_in_page+i:seek_in_page+i+end]
+                i += end+1
+                yield TraceElem(chr(b), bs, pos)
+                continue
+
+            elif b & _TEST_FUNC_6  == _SET_FUNC_6:
+                bs = [b & 0x3f]
+                yield TraceElem('F', bs, pos, big=True)
+                continue
+            elif b & _TEST_FUNC_14 == _SET_FUNC_14:
+                start = seek_in_page+i
+                i += 1
+                end = seek_in_page+i
+                bs = [b & 0x3f] + trace[start:end]
+                yield TraceElem('F', bs, pos, big=True)
+                continue
+            elif b & _TEST_FUNC_20 == _SET_FUNC_20:
+                start = seek_in_page+i
+                i += 2
+                end = seek_in_page+i
+                bs = [b & 0xf] + trace[start:end]
+                yield TraceElem('F', bs, pos, big=True)
+                continue
+            elif b & _TEST_FUNC_28 == _SET_FUNC_28:
+                start = seek_in_page+i
+                i += 3
+                end = seek_in_page+i
+                bs = [b & 0xf] + trace[start:end]
+                yield TraceElem('F', bs, pos, big=True)
+                continue
+            elif b & _TEST_FUNC_36 == _SET_FUNC_36:
+                start = seek_in_page+i
+                i += 4
+                end = seek_in_page+i
+                bs = [b & 0xf] + trace[start:end]
+                yield TraceElem('F', bs, pos, big=True)
+                continue
+
+            if b & _TEST_DATA != _SET_DATA:
+                raise ValueError(f"Could not match {b:x} in trace.")
+
+            len_bits = b & _TEST_LEN
+            if len_bits == _SET_LEN_8:
+                length = 1
+            elif len_bits == _SET_LEN_16:
+                length = 2
+            elif len_bits == _SET_LEN_32:
+                length = 4
+            elif len_bits == _SET_LEN_64:
+                length = 8
+            elif len_bits == _SET_LEN_PREFIX:
+                length = trace[seek_in_page + i]
+                i += 1
+            bs = trace[seek_in_page + i:seek_in_page + i + length]
+            i += length
+            yield TraceElem('D', bs, pos)
+
+    def trace_close(self):
+        self._trace.close()
 
 
 class TraceCompact(Trace):
