@@ -1,3 +1,5 @@
+import mmap
+import os
 import re
 
 TEST_IE          = 0b10000000
@@ -124,24 +126,32 @@ class Trace:
         Read and and create a trace object from a file.
         If file ends with '.txt', a text trace is assumed, otherwise a compact binary trace.
         """
+        # find the nearest multiple of pagesize from the seek_bytes,
+        # due to mmap can only skip multiple of pagesize during setup
+        offset = mmap.ALLOCATIONGRANULARITY * (seek_bytes // mmap.ALLOCATIONGRANULARITY)
+        # start byte from the start of trace that exclude the first nearest multiple of pagesize
+        seek_in_page = seek_bytes - offset
+        size = os.stat(filename).st_size
+
         if filename[-4:] == '.txt':
             with open(filename, 'r') as f:
-                f.seek(seek_bytes)
-                trace_str = f.read(count_bytes)
+                trace = mmap.mmap(f.fileno(), size - offset, access=mmap.ACCESS_READ, offset = offset)
                 if count_bytes >= 0:
-                    trace_tail = f.read()
+                    offset_tail = mmap.ALLOCATIONGRANULARITY * ((seek_bytes + count_bytes) // mmap.ALLOCATIONGRANULARITY)
+                    tail_seek_in_page = seek_bytes + count_bytes - offset_tail
+                    trace_tail = mmap.mmap(f.fileno(), size - offset_tail, access=mmap.ACCESS_READ, offset=offset_tail)
                 else:
-                    trace_tail = ""
+                    trace_tail = b""
+                    tail_seek_in_page = 0
                     count_elems = 0
-            return TraceText(trace_str, seek_elems=seek_elems, count_elems=count_elems, trace_tail=trace_tail)
+            return TraceText(trace, seek_elems, count_elems, trace_tail, seek_in_page, tail_seek_in_page)
         else:
             with open(filename, 'rb') as f:
-                f.seek(seek_bytes)
-                trace_bytes = f.read()
+                trace = mmap.mmap(f.fileno(), size - offset, access=mmap.ACCESS_READ, offset=offset)
                 if count_bytes < 0:
-                    count_bytes = len(trace_bytes)
+                    count_bytes = len(trace)
                     count_elems = 0
-            return TraceCompact(trace_bytes, seek_elems=seek_elems, count_bytes=count_bytes, count_elems=count_elems)
+            return TraceCompact(trace, seek_elems, count_bytes, count_elems, seek_in_page)
 
     def __str__(self):
         res = ''
@@ -169,23 +179,25 @@ class Trace:
 
 
 class TraceText(Trace):
-    def __init__(self, trace_str, seek_elems, count_elems, trace_tail):
+    def __init__(self, trace_str, seek_elems, count_elems, trace_tail, seek_in_page, tail_seek_in_page):
         self._trace_str = trace_str
         self._trace_tail = trace_tail
         self.seek_elems = seek_elems
         self.count_elems = count_elems
+        self._seek_in_page = seek_in_page
+        self._tail_seek_in_page = tail_seek_in_page
 
     def __iter__(self):
         """
         Iterate over the elements in the trace, respecting seek and count.
         """
-        it = self.full_iter(self._trace_str)
+        it = self.full_iter(self._trace_str, self._seek_in_page)
         for _ in range(self.seek_elems):
             next(it)
         for elem in it:
             yield elem
         count = self.count_elems
-        for elem in self.full_iter(self._trace_tail):
+        for elem in self.full_iter(self._trace_tail, self._tail_seek_in_page):
             if count > 0:
                 yield elem
                 count -= 1
@@ -195,37 +207,52 @@ class TraceText(Trace):
             raise ValueError(f"Trace ended, could not yield {count} elements")
 
     @staticmethod
-    def full_iter(trace_str):
+    def full_iter(trace_str, seek_in_page):
         """
-        Iterate over all elements, ignoring seek and count.
+        Iterate over all elements, ignoring seek and count of the object (seek_in_page is argument instead).
         """
-        for m in re.finditer(r"[A-Z][0-9a-z]*", trace_str):
-            letter = trace_str[m.start():m.start()+1]
-            hexstring = trace_str[m.start()+1:m.end()]
-            if hexstring == '':
-                yield TraceElem(letter, b'', m.start())
-            else:
-                if len(hexstring) % 2 == 1:
-                    hexstring = "0" + hexstring
-                # reverse the byte order to save as little endian
-                ba = bytearray.fromhex(hexstring)
-                ba.reverse()
-                bs = bytes(ba)
-                yield TraceElem(letter, bs, m.start())
+        pat = re.compile(b"[A-Z][0-9a-z]*")
+
+        # create a buffer in order to process big txt file
+        buffer_size = mmap.ALLOCATIONGRANULARITY
+        current_position = seek_in_page
+        buffer = trace_str[current_position: current_position + buffer_size]
+        while buffer != b'':
+            for m in pat.finditer(buffer):
+                letter = trace_str[current_position + m.start():current_position + m.start()+1].decode()
+                hexstring = trace_str[current_position + m.start()+1:current_position + m.end()].decode()
+                if hexstring == '':
+                    yield TraceElem(letter, b'', current_position - seek_in_page + m.start())
+                else:
+                    if len(hexstring) % 2 == 1:
+                        hexstring = "0" + hexstring
+                    # reverse the byte order to save as little endian
+                    ba = bytearray.fromhex(hexstring)
+                    ba.reverse()
+                    bs = bytes(ba)
+                    yield TraceElem(letter, bs, current_position - seek_in_page + m.start())
+            current_position += buffer_size
+            buffer = trace_str[current_position: current_position + buffer_size]
 
     # overwrite for complexity reasons
     def __str__(self):
         return self._trace_str
 
+    def trace_close(self):
+        self._trace_str.close()
+        if self._trace_tail != b"":
+            self._trace_tail.close()
+
 
 class TraceCompact(Trace):
-    def __init__(self, trace_bytes, count_bytes, count_elems, seek_elems):
+    def __init__(self, trace_bytes, count_bytes, count_elems, seek_elems, seek_in_page):
         self._trace = trace_bytes
         self.seek_elems = seek_elems
         self.count_elems = count_elems
+        self._seek_in_page = seek_in_page
         # self._count_bytes is assumed to be read only after init
         if count_bytes < 0:
-            self._count_bytes = len(self._trace)
+            self._count_bytes = len(self._trace) - seek_in_page
         else:
             self._count_bytes = count_bytes
 
@@ -233,7 +260,7 @@ class TraceCompact(Trace):
         """
         Iterate over the elements in the trace, respecting seek and count.
         """
-        it = self.full_iter(self._trace)
+        it = self.full_iter(self._trace, self._seek_in_page)
         for _ in range(self.seek_elems):
             next(it)
         count = self.count_elems
@@ -253,17 +280,17 @@ class TraceCompact(Trace):
             raise ValueError(f"Trace ended, could not yield {count} elements")
 
     @staticmethod
-    def full_iter(trace):
+    def full_iter(trace, seek_in_page):
         """
-        Iterate over all elements, ignoring seek and count.
+        Iterate over all elements, ignoring seek and count of the object (seek_in_page is argument instead).
         """
         after_count = [[], [], [], [], [], [], [], []]
         i = 0
         last_pos = -1
         ie_pos = 0
-        while i < len(trace):
+        while i < len(trace) - seek_in_page:
             pos = i
-            b = trace[i]
+            b = trace[seek_in_page + i]
             i += 1
 
             if b & TEST_IE == PUT_IE:
@@ -282,14 +309,14 @@ class TraceCompact(Trace):
             if len_bits == PUT_FUNC_RETURN:
                 length = 0
             elif len_bits == PUT_LEN_STRING:
-                m = re.match(rb'[^\0]*\0', trace[i:])
+                m = re.match(rb'[^\0]*\0', trace[seek_in_page + i:])
                 length = m.end()
             elif len_bits == PUT_LEN_PREFIX:
-                length = trace[i]
+                length = trace[seek_in_page + i]
                 i += 1
             else:
                 length = byte_length[len_bits]
-            bs = trace[i:i+length]
+            bs = trace[seek_in_page + i:seek_in_page + i + length]
             i += length
             count = b & TEST_IE_COUNT
             elem = TraceElem(letter(b), bs, pos)
@@ -325,3 +352,6 @@ class TraceCompact(Trace):
                 yield TraceElem(letter(b), bs, pos)
 
             i += length
+
+    def trace_close(self):
+        self._trace.close()
