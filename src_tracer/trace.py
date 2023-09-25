@@ -151,7 +151,7 @@ class Trace:
                 if count_bytes < 0:
                     count_bytes = len(trace)
                     count_elems = 0
-            return TraceCompact(trace, seek_elems, count_bytes, count_elems, seek_in_page)
+            return TraceCompact(trace, count_bytes, count_elems, seek_elems, seek_in_page)
 
     def __str__(self):
         res = ''
