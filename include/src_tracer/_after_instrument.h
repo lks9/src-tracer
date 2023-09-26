@@ -125,21 +125,21 @@ extern int _trace_buf_pos;
     if ((num) == 0) { \
         _TRACE_PUT(_TRACE_SET_FUNC_ANON); \
     } else if ((num) == ((num) & 0x3f)) { \
-        _TRACE_PUT(_TRACE_SET_FUNC_6  | ((num) >> 0)); \
+        _TRACE_PUT(_TRACE_SET_FUNC_6  | (((num) >> 0) & 0xff)); \
     } else if ((num) == ((num) & 0x3fff)) { \
-        _TRACE_PUT(_TRACE_SET_FUNC_14 | ((num) >> 8)); \
+        _TRACE_PUT(_TRACE_SET_FUNC_14 | (((num) >> 8) & 0xff)); \
         _TRACE_PUT(((num) >> 0) & 0xff); \
     } else if ((num) == ((num) & 0xfffff)) { \
-        _TRACE_PUT(_TRACE_SET_FUNC_20 | ((num) >> 16)); \
+        _TRACE_PUT(_TRACE_SET_FUNC_20 | (((num) >> 16) & 0xff)); \
         _TRACE_PUT(((num) >> 8) & 0xff); \
         _TRACE_PUT(((num) >> 0) & 0xff); \
     } else if ((num) == ((num) & 0xfffffff)) { \
-        _TRACE_PUT(_TRACE_SET_FUNC_28 | ((num) >> 24)); \
+        _TRACE_PUT(_TRACE_SET_FUNC_28 | (((num) >> 24) & 0xff)); \
         _TRACE_PUT(((num) >> 16) & 0xff); \
         _TRACE_PUT(((num) >> 8) & 0xff); \
         _TRACE_PUT(((num) >> 0) & 0xff); \
     } else { \
-        _TRACE_PUT(_TRACE_SET_FUNC_36 /* | ((num) >> 32) */ ); \
+        _TRACE_PUT(_TRACE_SET_FUNC_36 /* | (((num) >> 32) & 0xff) */ ); \
         _TRACE_PUT(((num) >> 24) & 0xff); \
         _TRACE_PUT(((num) >> 16) & 0xff); \
         _TRACE_PUT(((num) >> 8) & 0xff); \
