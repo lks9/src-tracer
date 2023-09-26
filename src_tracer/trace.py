@@ -117,8 +117,11 @@ def letter(b, count=0):
     raise ValueError(f"There is no letter for {bin(b)}")
 
 
-def to_number(bs):
-    return int.from_bytes(bs, "little")
+def to_number(bs, big=False):
+    if big:
+        return int.from_bytes(bs, "big")
+    else:
+        return int.from_bytes(bs, "little")
 
 
 class TraceElem:
@@ -151,6 +154,10 @@ class TraceElem:
             if show_pos:
                 res += f" --count {self.pos}"
         return res
+
+    @property
+    def num(self):
+        return to_number(self.bs, self.big)
 
 
 class Trace:
@@ -342,35 +349,35 @@ class TraceCompressable(Trace):
                 continue
 
             elif b & _TEST_FUNC_6  == _SET_FUNC_6:
-                bs = [b & 0x3f]
+                bs = bytes([b & 0x3f])
                 yield TraceElem('F', bs, pos, big=True)
                 continue
             elif b & _TEST_FUNC_14 == _SET_FUNC_14:
                 start = seek_in_page+i
                 i += 1
                 end = seek_in_page+i
-                bs = [b & 0x3f] + trace[start:end]
+                bs = bytes([b & 0x3f]) + trace[start:end]
                 yield TraceElem('F', bs, pos, big=True)
                 continue
             elif b & _TEST_FUNC_20 == _SET_FUNC_20:
                 start = seek_in_page+i
                 i += 2
                 end = seek_in_page+i
-                bs = [b & 0xf] + trace[start:end]
+                bs = bytes([b & 0xf]) + trace[start:end]
                 yield TraceElem('F', bs, pos, big=True)
                 continue
             elif b & _TEST_FUNC_28 == _SET_FUNC_28:
                 start = seek_in_page+i
                 i += 3
                 end = seek_in_page+i
-                bs = [b & 0xf] + trace[start:end]
+                bs = bytes([b & 0xf]) + trace[start:end]
                 yield TraceElem('F', bs, pos, big=True)
                 continue
             elif b & _TEST_FUNC_36 == _SET_FUNC_36:
                 start = seek_in_page+i
                 i += 4
                 end = seek_in_page+i
-                bs = [b & 0xf] + trace[start:end]
+                bs = bytes([b & 0xf]) + trace[start:end]
                 yield TraceElem('F', bs, pos, big=True)
                 continue
 

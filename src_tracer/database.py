@@ -26,7 +26,7 @@ class Database:
         cursor.execute("SELECT name FROM function_list WHERE rowid=?", (func_num,))
         name = cursor.fetchone()
         if name is None:
-            log.error("there is no name (entry) for the func_num (%d)", func_num)
+            log.error(f"there is no name (entry) for the func_num {func_num:x}")
             return None
         cursor.close()
         return name[0]

@@ -270,7 +270,7 @@ class SourceTraceReplayer:
 
     def try_solve_unconstrained(self, elem, simgr, database, to_stash='active'):
         if elem.letter == 'F' and database:
-            fun_num = int.from_bytes(elem.bs, "little")
+            fun_num = elem.num
             try:
                 fun_name = database.get_name(fun_num)
                 fun_addr = self.addr(fun_name)
