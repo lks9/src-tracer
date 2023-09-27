@@ -43,7 +43,6 @@ extern int _trace_after_fork(int pid);
 
 extern unsigned char _trace_ie_byte;
 extern int _trace_ie_count;
-extern bool _trace_ie_finished;
 
 extern unsigned char _trace_buf[TRACE_BUF_SIZE];
 extern int _trace_buf_pos;
@@ -117,20 +116,18 @@ extern int _trace_buf_pos;
 #define _TRACE_IE(if_true) ;{ \
     _trace_ie_byte |= (if_true) << _trace_ie_count; \
     _trace_ie_count += 1; \
-    _trace_ie_finished = 0; \
-    if (_trace_ie_count == 7) { \
-        _TRACE_PUT(_trace_ie_byte); \
+    if (_trace_ie_count == 6) { \
+        _TRACE_PUT(_trace_ie_byte | (1 << 6)); \
         _trace_ie_count = 0; \
         _trace_ie_byte = _TRACE_SET_IE; \
     } \
 }
 
 #define _TRACE_FINISH_IE() ;{ \
-    if (!_trace_ie_finished) { \
+    if (_trace_ie_count != 0) { \
         _TRACE_PUT(_trace_ie_byte | (1 << _trace_ie_count)); \
         _trace_ie_count = 0; \
         _trace_ie_byte = _TRACE_SET_IE; \
-        _trace_ie_finished = 1; \
     } \
 }
 
