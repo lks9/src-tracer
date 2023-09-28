@@ -10,7 +10,7 @@ lib/src_tracer.o: lib/src_tracer.i
 	gcc -Wall -fPIC -c -nostdlib -O3 -o $@ $<
 
 lib/byte_to_bit_trace: lib/byte_to_bit_trace.c
-	gcc -Wall -Iinclude -O3 -o $@ $<
+	gcc -fwhole-program -Wall -Iinclude -O3 -o $@ $<
 
 clean:
 	rm -f *.o *.a

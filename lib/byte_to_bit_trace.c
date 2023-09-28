@@ -3,11 +3,11 @@
 #include <unistd.h>
 #include <stdbool.h>
 
-char inbuf[4096];
-char outbuf[4096];
-int outpos = 0;
+static unsigned char inbuf[4096];
+static unsigned char outbuf[4096];
+static int outpos = 0;
 
-static void put_out(char c) {
+static void put_out(unsigned char c) {
     outbuf[outpos++] = c;
     if (outpos == 4096) {
         write(1, outbuf, 4096);
@@ -19,20 +19,25 @@ int main (void) {
     ssize_t len = read(0, inbuf, 4096);
     int skip = 0;
     int ie_count = 0;
-    char ie_byte = _TRACE_SET_IE;
+    unsigned char ie_byte = _TRACE_SET_IE;
     for (int i = 0; true; i++) {
         if (i == len) {
             len = read(0, inbuf, 4096);
-            i = 0;
+            if (len <= 0) {
+                write(1, outbuf, outpos);
+                return 0;
+            }
+            i = -1;
             continue;
         }
+        unsigned char b = inbuf[i];
         if (skip > 0) {
             skip--;
-            put_out(inbuf[i]);
+            put_out(b);
             continue;
         }
-        if (inbuf[i] == 'T' || inbuf[i] == 'N') {
-            ie_byte = (inbuf[i] == 'T') << ie_count;
+        if (b == 'T' || b == 'N') {
+            ie_byte |= (b == 'T') << ie_count;
             ie_count += 1;
             if (ie_count == 6) {
                 put_out(ie_byte | (1 << 6));
@@ -46,13 +51,14 @@ int main (void) {
             ie_byte = _TRACE_SET_IE;
             ie_count = 0;
         }
-        switch(inbuf[i] & _TRACE_TEST_OTHER) {
+        switch(b & _TRACE_TEST_OTHER) {
             case _TRACE_SET_FUNC_4:
                 break;
             case _TRACE_SET_ELEM_AO:
-                if (inbuf[i] == 'E') {
-                    put_out(inbuf[i]);
+                if (b == 'E') {
+                    put_out(b);
                     write(1, outbuf, outpos);
+                    while(read(0, inbuf, 4096) > 0);
                     return 0;
                 }
                 break;
@@ -71,12 +77,12 @@ int main (void) {
                 skip = 4;
                 break;
             case _TRACE_SET_DATA:
-                skip = inbuf[i] & _TRACE_TEST_LEN_BYTECOUNT;
+                skip = b & _TRACE_TEST_LEN_BYTECOUNT;
                 break;
             default:
                 break;
         }
-        put_out(inbuf[i]);
+        put_out(b);
     }
     return 0;
 }
