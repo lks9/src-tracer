@@ -92,13 +92,13 @@ if [ "$1" = "-E" ]; then
 
         # do the instrumentation
         #   you could add any of --no-return --cases --short-circuit --inline --no-functions --anon --no-inner --no-main
-        python3 "${SRC_TRACER_DIR}/instrumenter.py" "${outfile}.tmp.c" "${SRC_TRACER_STORE_DIR}" || exit $?
+        python3 "${SRC_TRACER_DIR}/instrumenter.py" --no-return "${outfile}.tmp.c" "${SRC_TRACER_STORE_DIR}" || exit $?
 
-        # rerun preprocessor to resolve instrumentation macros
-        cpp ${SRC_TRACER} "${outfile}.tmp.c" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/include/"
+        # rerun preprocessor to resolve instrumentation macros (you could add -DBYTE_TRACE)
+        cpp ${SRC_TRACER}  "${outfile}.tmp.c" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/include/"
         cp "${outfile}.tmp.i" "${outfile}"
     fi
 elif [ "$1" = "-fpreprocessed" ]; then
     # just compile it
-    exec $(${COLLECT_GCC} --print-prog-name=cc1) $@
+    exec $(${COLLECT_GCC} --print-prog-name=cc1) -mbmi2 $@
 fi

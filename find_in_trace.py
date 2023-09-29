@@ -20,9 +20,9 @@ else:
     raise Exception(usage)
 
 # create connection to database
-database_path = os.path.join(database_path, 'functions_database.db')
+database_path = os.path.join(database_path, 'function_database.db')
 if not os.path.exists(database_path):
-    error = f"Database {database} does not exist"
+    error = f"Database {database_path} does not exist"
     raise Exception(error)
 database = Database(store_dir = None, path = database_path)
 

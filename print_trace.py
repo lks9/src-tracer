@@ -38,7 +38,7 @@ if args.pretty in (5,3):
     else:
         database_path = args.database
     if not os.path.exists(database_path):
-        error = f"Could not open database from {database}, try --pretty 4 or --database"
+        error = f"Could not open database from {database_path}, try --pretty 4 or --database"
         raise Exception(error)
     database = Database(store_dir=None, path=database_path)
 else:

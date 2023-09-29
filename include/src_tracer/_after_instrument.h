@@ -30,12 +30,9 @@ extern "C" {
 
 struct _trace_ctx {
     char *ptr;
-    char *_page_ptr;
-    int fd;
+    void *_page_ptr;
     int fork_count;
     int try_count;
-    int if_count;
-    char if_byte;
     bool active;
 };
 
@@ -46,34 +43,60 @@ extern void _trace_close(void);
 extern void _trace_before_fork(void);
 extern int _trace_after_fork(int pid);
 
-#define _TRACE_TEST_IE            0b10000000
- #define _TRACE_SET_IE            0b10000000
+#define _TRACE_TEST_OTHER           0b11110000
+ #define _TRACE_SET_FUNC_4          0b00000000
+ #define _TRACE_SET_FUNC_12         0b00010000
+ #define _TRACE_SET_FUNC_20         0b00100000
+ #define _TRACE_SET_DATA            0b00110000
+ #define _TRACE_SET_ELEM_AO         0b01000000
+ #define _TRACE_SET_ELEM_PZ         0b01010000
+ #define _TRACE_SET_FUNC_28         0b01100000
+ #define _TRACE_SET_FUNC_32         0b01110000
 
-#define _TRACE_TEST_FUNC_DATA     0b10001000
- #define _TRACE_SET_FUNC          0b00000000
- #define _TRACE_SET_DATA          0b00001000
+#define _TRACE_TEST_LEN             0b11111111
+#define _TRACE_TEST_LEN_BYTECOUNT   0b00001111
+ #define _TRACE_SET_LEN_0           0b00110000
+ #define _TRACE_SET_LEN_8           0b00110001
+ #define _TRACE_SET_LEN_16          0b00110010
+ #define _TRACE_SET_LEN_reserved3   0b00110011
+ #define _TRACE_SET_LEN_32          0b00110100
+ #define _TRACE_SET_LEN_reserved5   0b00110101
+ #define _TRACE_SET_LEN_reserved6   0b00110110
+ #define _TRACE_SET_LEN_reserved7   0b00110111
+ #define _TRACE_SET_LEN_64          0b00111000
+ #define _TRACE_SET_LEN_reserved9   0b00111001
+ #define _TRACE_SET_LEN_reserved10  0b00111010
+ #define _TRACE_SET_LEN_reserved11  0b00111011
+ #define _TRACE_SET_LEN_reserved12  0b00111100
+ #define _TRACE_SET_LEN_PREFIX_res  0b00111101
+ #define _TRACE_SET_LEN_STRING_res  0b00111110
+ #define _TRACE_SET_LEN_reserved15  0b00111111
 
-#define _TRACE_TEST_LEN           0b11111000
- #define _TRACE_SET_LEN_0         0b00001000
- #define _TRACE_SET_LEN_8         0b00011000
- #define _TRACE_SET_LEN_16        0b00101000
- #define _TRACE_SET_LEN_32        0b00111000
- #define _TRACE_SET_LEN_64        0b01001000
- #define _TRACE_SET_LEN_reserved  0b01011000
- #define _TRACE_SET_LEN_PREFIX    0b01101000
- #define _TRACE_SET_LEN_STRING    0b01110000
+#define _TRACE_TEST_IS_ELEM         0b11100000
+ #define _TRACE_SET_IS_ELEM         0b01000000
 
- #define _TRACE_SET_FUNC_END      0b00000000
- #define _TRACE_SET_FUNC_LEN_0    0b00000000
- #define _TRACE_SET_FUNC_LEN_8    0b00010000
- #define _TRACE_SET_FUNC_LEN_16   0b00100000
- #define _TRACE_SET_FUNC_LEN_32   0b00110000
- #define _TRACE_SET_FUNC_LEN_24   0b01000000
- #define _TRACE_SET_FUNC_RETURN   0b01010000
- #define _TRACE_SET_FUNC_ANON     0b01100000
- #define _TRACE_SET_FUNC_reserved 0b01110000
+#define _TRACE_TEST_ELEM            0b11111111
+ #define _TRACE_SET_END             0b01000101 // 'E'
+ #define _TRACE_SET_RETURN          0b01010010 // 'R'
+ #define _TRACE_SET_FUNC_ANON       0b01000001 // 'A'
+ #define _TRACE_SET_TRY             0b01010011 // 'S'
+ #define _TRACE_SET_CATCH           0b01001100 // 'L'
+ #define _TRACE_SET_FORK            0b01000111 // 'G'
+ #define _TRACE_SET_PAUSE           0b01010000 // 'P'
+/* 'T' and 'N' could be used instead of
+ * _TRACE_SET_IE for faster trace writing */
+ #define _TRACE_SET_IF              0b01010100 // 'T'
+ #define _TRACE_SET_ELSE            0b01001110 // 'N'
+/* 'F' and 'D' are reserved, since
+ * _SET_FUNC_x and _SET_LEN_x are used instead */
+ #define _TRACE_SET_FUNC_reserved   0b01000110 // 'F'
+ #define _TRACE_SET_DATA_reserved   0b01000100 // 'D'
+/* 'M' and 'B' are currently not supported */
+ #define _TRACE_SET_FUNC_STRING_res 0b01001101 // 'M'
+ #define _TRACE_SET_DATA_STRING_res 0b01000010 // 'B'
 
-#define _TRACE_TEST_IE_COUNT      0b10000111
+#define _TRACE_TEST_IE              0b10000000
+ #define _TRACE_SET_IE              0b10000000
 
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
@@ -86,60 +109,66 @@ extern int _trace_after_fork(int pid);
 
 #define _TRACE_PUT_TEXT     _TRACE_PUT
 
-#define _TRACE_IE(if_true) ; \
-    if (_trace.active) { \
-        _trace.if_byte |= (if_true) << _trace.if_count; \
-        _trace.if_count += 1; \
-        if (_trace.if_count == 7) { \
-            _TRACE_PUT(_trace.if_byte); \
-            _trace.if_count = 0; \
-            _trace.if_byte = _TRACE_SET_IE; \
-        } \
-    }
+#define _TRACE_IF() \
+    _TRACE_PUT('T')
+#define _TRACE_ELSE() \
+    _TRACE_PUT('N')
 
-#define _TRACE_FUNC(num) ;{ \
-    if ((num) == 0) { \
-        _TRACE_PUT(_TRACE_SET_FUNC | _trace.if_count | _TRACE_SET_FUNC_ANON); \
-    } else if ((num) == ((num) & 0xff)) { \
-        _TRACE_PUT(_TRACE_SET_FUNC | _trace.if_count | _TRACE_SET_FUNC_LEN_8); \
-        _TRACE_PUT(((num) >> 0) & 0xff); \
-    } else if ((num) == ((num) & 0xffff)) { \
-        _TRACE_PUT(_TRACE_SET_FUNC | _trace.if_count | _TRACE_SET_FUNC_LEN_16); \
-        _TRACE_PUT(((num) >> 0) & 0xff); \
-        _TRACE_PUT(((num) >> 8) & 0xff); \
-    } else if ((num) == ((num) & 0xffffff)) { \
-        _TRACE_PUT(_TRACE_SET_FUNC | _trace.if_count | _TRACE_SET_FUNC_LEN_24); \
-        _TRACE_PUT(((num) >> 0) & 0xff); \
-        _TRACE_PUT(((num) >> 8) & 0xff); \
-        _TRACE_PUT(((num) >> 16) & 0xff); \
-    } else if ((num) == ((num) & 0xffffffff)) { \
-        _TRACE_PUT(_TRACE_SET_FUNC | _trace.if_count | _TRACE_SET_FUNC_LEN_32); \
-        _TRACE_PUT(((num) >> 0) & 0xff); \
-        _TRACE_PUT(((num) >> 8) & 0xff); \
-        _TRACE_PUT(((num) >> 16) & 0xff); \
-        _TRACE_PUT(((num) >> 24) & 0xff); \
+#define _TRACE_IE(if_true) ;{ \
+    if (if_true) { \
+        _TRACE_IF(); \
+    } else { \
+        _TRACE_ELSE(); \
     } \
 }
 
-#define _TRACE_NUM(num) ({ \
+// functions numbers are now big endian for better conversion
+#define _TRACE_FUNC(num) ;{ \
+    if ((num) == 0) { \
+        _TRACE_PUT(_TRACE_SET_FUNC_ANON); \
+    } else if ((num) == ((num) & 0xf)) { \
+        _TRACE_PUT(_TRACE_SET_FUNC_4  | (((num) >> 0) & 0xff)); \
+    } else if ((num) == ((num) & 0xfff)) { \
+        _TRACE_PUT(_TRACE_SET_FUNC_12 | (((num) >> 8) & 0xff)); \
+        _TRACE_PUT(((num) >> 0) & 0xff); \
+    } else if ((num) == ((num) & 0xfffff)) { \
+        _TRACE_PUT(_TRACE_SET_FUNC_20 | (((num) >> 16) & 0xff)); \
+        _TRACE_PUT(((num) >> 8) & 0xff); \
+        _TRACE_PUT(((num) >> 0) & 0xff); \
+    } else if ((num) == ((num) & 0xfffffff)) { \
+        _TRACE_PUT(_TRACE_SET_FUNC_28 | (((num) >> 24) & 0xff)); \
+        _TRACE_PUT(((num) >> 16) & 0xff); \
+        _TRACE_PUT(((num) >> 8) & 0xff); \
+        _TRACE_PUT(((num) >> 0) & 0xff); \
+    } else { \
+        _TRACE_PUT(_TRACE_SET_FUNC_32); \
+        _TRACE_PUT(((num) >> 24) & 0xff); \
+        _TRACE_PUT(((num) >> 16) & 0xff); \
+        _TRACE_PUT(((num) >> 8) & 0xff); \
+        _TRACE_PUT(((num) >> 0) & 0xff); \
+    } \
+}
+
+// data should be native endian (here little endian)
+#define _TRACE_NUM(num) ;{ \
     unsigned long long _trace_n = (num); \
     if (_trace_n == 0) { \
-        _TRACE_PUT(_TRACE_SET_DATA | _trace.if_count | _TRACE_SET_LEN_0); \
+        _TRACE_PUT(_TRACE_SET_DATA | _TRACE_SET_LEN_0); \
     } else if (_trace_n == (_trace_n & 0xff)) { \
-        _TRACE_PUT(_TRACE_SET_DATA | _trace.if_count | _TRACE_SET_LEN_8); \
+        _TRACE_PUT(_TRACE_SET_DATA | _TRACE_SET_LEN_8); \
         _TRACE_PUT((_trace_n >> 0) & 0xff); \
     } else if (_trace_n == (_trace_n & 0xffff)) { \
-        _TRACE_PUT(_TRACE_SET_DATA | _trace.if_count | _TRACE_SET_LEN_16); \
+        _TRACE_PUT(_TRACE_SET_DATA | _TRACE_SET_LEN_16); \
         _TRACE_PUT((_trace_n >> 0) & 0xff); \
         _TRACE_PUT((_trace_n >> 8) & 0xff); \
     } else if (_trace_n == (_trace_n & 0xffffffff)) { \
-        _TRACE_PUT(_TRACE_SET_DATA | _trace.if_count | _TRACE_SET_LEN_32); \
+        _TRACE_PUT(_TRACE_SET_DATA | _TRACE_SET_LEN_32); \
         _TRACE_PUT((_trace_n >> 0) & 0xff); \
         _TRACE_PUT((_trace_n >> 8) & 0xff); \
         _TRACE_PUT((_trace_n >> 16) & 0xff); \
         _TRACE_PUT((_trace_n >> 24) & 0xff); \
     } else { \
-        _TRACE_PUT(_TRACE_SET_DATA | _trace.if_count | _TRACE_SET_LEN_64); \
+        _TRACE_PUT(_TRACE_SET_DATA | _TRACE_SET_LEN_64); \
         _TRACE_PUT((_trace_n >> 0) & 0xff); \
         _TRACE_PUT((_trace_n >> 8) & 0xff); \
         _TRACE_PUT((_trace_n >> 16) & 0xff); \
@@ -149,8 +178,7 @@ extern int _trace_after_fork(int pid);
         _TRACE_PUT((_trace_n >> 48) & 0xff); \
         _TRACE_PUT((_trace_n >> 56) & 0xff); \
     } \
-    _trace_n; /* result (GNU extenstion) */ \
-})
+}
 
 #define NIBBLE_TO_HEX_(n)   (((n) >= 0xa) ? (n) - 0xa + 'a' : (n) + '0')
 #define NIBBLE_TO_HEX(n,i)  NIBBLE_TO_HEX_(((n) >> ((i)*4)) & 0xf)
@@ -158,37 +186,47 @@ extern int _trace_after_fork(int pid);
 // Shift twice, otherwise we might run into undefined behavior!
 #define NIBBLE_COUNT(n,c)   (((n) >> (c)*3 >> (c)) != 0)
 
-#define _TRACE_NUM_TEXT(type, num) ({ \
+#define _TRACE_NUM_TEXT(type, num) { \
     int count; \
     _TRACE_PUT(type); \
-    for (count = 0; NIBBLE_COUNT(_temp_num, count); count++) {}  \
+    for (count = 0; NIBBLE_COUNT(num, count); count++) {}  \
     for (int i = count-1; i >= 0; i--) { \
-        _TRACE_PUT(NIBBLE_TO_HEX(_temp_num, i)); \
+        _TRACE_PUT(NIBBLE_TO_HEX(num, i)); \
     } \
-    _temp_num; /* result (GNU extension) */ \
-})
+}
 
 #define _TRACE_RETURN() \
-    _TRACE_PUT(_TRACE_SET_FUNC_RETURN | _trace.if_count)
+    _TRACE_PUT(_TRACE_SET_RETURN)
 
 #define _TRACE_END() \
-    _TRACE_PUT(_TRACE_SET_FUNC_END | _trace.if_count)
+    _TRACE_PUT(_TRACE_SET_END)
 
-#define _TRACE_CONDITION(cond) ({ \
-    auto _temp_cond = (cond); \
-    _TRACE_IE(_temp_cond); \
-    _temp_cond; /* result (GNU extension) */ \
-})
+// same as the macro version
+// but returns num
+// can be used inside switch conditions
+static inline __attribute__((always_inline)) long long int _trace_num(long long int num) {
+    _TRACE_NUM(num);
+    return num;
+}
 
-#define _TEXT_TRACE_CONDITION(cond) ({ \
-    auto _temp_cond = cond; \
-    if (_temp_cond) { \
-        _TRACE_PUT_TEXT('T'); \
-    } else { \
-        _TRACE_PUT_TEXT('N'); \
-    } \
-    _temp_cond; /* result (GNU extension) */ \
-})
+static inline __attribute__((always_inline)) long long int _trace_num_text(char type, long long int num) {
+    _TRACE_NUM_TEXT(type, num);
+    return num;
+}
+
+static inline __attribute__((always_inline)) bool _trace_condition(bool cond) {
+    _TRACE_IE(cond);
+    return cond;
+}
+
+static inline __attribute__((always_inline)) bool _text_trace_condition(bool cond) {
+    if (cond) {
+        _TRACE_PUT_TEXT('T');
+    } else {
+        _TRACE_PUT_TEXT('N');
+    }
+    return cond;
+}
 
 
 // for retracing
@@ -241,9 +279,9 @@ extern volatile bool _is_retrace_mode;
 
 static inline __attribute__((always_inline)) bool _is_retrace_condition(bool cond) {
     if (cond) {
-        _IS_RETRACE(_retrace_if(), _TRACE_IE(1));
+        _IS_RETRACE(_retrace_if(), _TRACE_IF());
     } else {
-        _IS_RETRACE(_retrace_else(), _TRACE_IE(0));
+        _IS_RETRACE(_retrace_else(), _TRACE_ELSE());
     }
     return cond;
 }
@@ -269,8 +307,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #if defined _TRACE_MODE && defined _RETRACE_MODE
 /* combined trace/retrace mode, experimental */
 
-#define _IF                 _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
-#define _ELSE               _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
+#define _IF                 _IS_RETRACE(_retrace_if(), _TRACE_IF())
+#define _ELSE               _IS_RETRACE(_retrace_else(), _TRACE_ELSE())
 #define _CONDITION(cond)    _is_retrace_condition(cond)
 #define _FUNC(num)          _IS_RETRACE(_RETRACE_FUN_CALL(num), _TRACE_FUNC(num))
 #define _FUNC_RETURN        _IS_RETRACE(_retrace_return(), _TRACE_RETURN())
@@ -283,8 +321,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
-#define _LOOP_BODY(id)      _IS_RETRACE(_retrace_if(), _TRACE_IE(1))
-#define _LOOP_END(id)       _IS_RETRACE(_retrace_else(), _TRACE_IE(0))
+#define _LOOP_BODY(id)      _IS_RETRACE(_retrace_if(), _TRACE_IF())
+#define _LOOP_END(id)       _IS_RETRACE(_retrace_else(), _TRACE_ELSE())
 
 #define _TRACE_OPEN(fname)  _IS_RETRACE( ,_trace_open((fname)))
 #define _TRACE_CLOSE        _IS_RETRACE( ,_trace_close())
@@ -295,13 +333,13 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #elif defined _TRACE_MODE
 /* trace mode */
 
-#define _IF                 _TRACE_IE(1)
-#define _ELSE               _TRACE_IE(0)
-#define _CONDITION(cond)    (_TRACE_CONDITION(cond))
+#define _IF                 _TRACE_IF()
+#define _ELSE               _TRACE_ELSE()
+#define _CONDITION(cond)    _trace_condition(cond)
 #define _FUNC(num)          _TRACE_FUNC(num)
 #define _FUNC_RETURN        _TRACE_RETURN()
 // non-macro version for switch
-#define _SWITCH(num)        (_TRACE_NUM(num))
+#define _SWITCH(num)        _trace_num(num)
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id)      ;if (_cflow_switch_##id) { \
@@ -309,8 +347,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
-#define _LOOP_BODY(id)      _TRACE_IE(1)
-#define _LOOP_END(id)       _TRACE_IE(0)
+#define _LOOP_BODY(id)      _TRACE_IF()
+#define _LOOP_END(id)       _TRACE_ELSE()
 
 #define _TRACE_OPEN(fname)  ;_trace_open((fname));
 #define _TRACE_CLOSE        ;_trace_close();
