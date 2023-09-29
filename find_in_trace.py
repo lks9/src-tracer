@@ -2,14 +2,13 @@
 
 import sys
 import os
-import sqlite3
 import re
 #import monkeyhex
 import concurrent.futures
 import mmap
 
 from src_tracer.trace import Trace
-from src_tracer.util import Util
+from src_tracer.database import Database
 
 if len(sys.argv) >= 3:
     func_name = sys.argv[1]
@@ -21,18 +20,17 @@ else:
     raise Exception(usage)
 
 # create connection to database
-database = os.path.join(database_path, 'cflow_functions.db')
-if not os.path.exists(database):
-    error = f"Database {database} does not exist"
+database_path = os.path.join(database_path, 'function_database.db')
+if not os.path.exists(database_path):
+    error = f"Database {database_path} does not exist"
     raise Exception(error)
-connection = sqlite3.connect(database)
+database = Database(store_dir = None, path = database_path)
 
 trace = Trace.from_file(trace_file)
 
-cursor = connection.cursor()
-func_nums = Util.get_numbers(cursor, func_name)
-cursor.close()
-connection.close()
+
+func_nums = database.get_numbers(func_name)
+database.close_connection()
 
 # construct a regular expression to find the trace element
 low = 0b00001000
@@ -67,6 +65,6 @@ def search_file(filename):
 
 
 if __name__ == '__main__':
-	filenames = sys.argv[2:]
-	with concurrent.futures.ProcessPoolExecutor() as pool:
-	    pool.map(search_file, filenames)
+    filenames = sys.argv[2:]
+    with concurrent.futures.ProcessPoolExecutor() as pool:
+        pool.map(search_file, filenames)

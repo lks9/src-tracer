@@ -7,7 +7,6 @@ from angr.sim_type import parse_signature, parse_type
 
 
 from .trace import Trace
-from .util import Util
 
 log = logging.getLogger(__name__)
 
@@ -211,15 +210,6 @@ class SourceTraceReplayer:
             simgr.move(from_stash='ghost_handle', to_stash='ghost_end',
                        filter_func=lambda s: s.solver.eval(s.ip) == self.ghost_end_addr)
 
-            if debug:
-                for state in simgr.assertions:
-                    index = state.mem[self.assert_idx_addr].int.concrete
-                    label = state.mem[self.assert_names_addr + 8*index].deref.string.concrete.decode()
-                    log.debug(f'Assertion "{label}" with index {index}')
-                for state in simgr.assume:
-                    label = state.mem[self.assume_name_addr].deref.string.concrete.decode()
-                    log.debug(f'Assumption "{label}"')
-
             # handle propositions
             for state in simgr.propose:
                 index = state.mem[self.assert_idx_addr].int.concrete
@@ -245,6 +235,16 @@ class SourceTraceReplayer:
                 mem_assume = state.mem[self.assume_addr].bool.resolved
                 state.solver.add(mem_assume)
 
+            if debug:
+                for state in simgr.assertions:
+                    index = state.mem[self.assert_idx_addr].int.concrete
+                    label = state.mem[self.assert_names_addr + 8*index].deref.string.concrete.decode()
+                    log.debug(f'Assertion "{label}" with index {index}')
+                for state in simgr.assume:
+                    if state.satisfiable():
+                        label = state.mem[self.assume_name_addr].deref.string.concrete.decode()
+                        log.debug(f'Assumption "{label}"')
+
             simgr.step(stash='assertions')
             simgr.move(from_stash='assertions', to_stash='ghost')
             simgr.step(stash='assume')
@@ -268,11 +268,11 @@ class SourceTraceReplayer:
             log.debug(f"Merging {count} states in '{stash}'")
             simgr.merge(stash=stash)
 
-    def try_solve_unconstrained(self, elem, simgr, cursor, to_stash='active'):
-        if elem.letter == 'F' and cursor:
+    def try_solve_unconstrained(self, elem, simgr, database, to_stash='active'):
+        if elem.letter == 'F' and database:
             fun_num = int.from_bytes(elem.bs, "little")
             try:
-                fun_name = Util.get_name(cursor, fun_num)
+                fun_name = database.get_name(fun_num)
                 fun_addr = self.addr(fun_name)
                 for ustate in simgr.unconstrained:
                     ustate.solver.add(ustate.ip == fun_addr)
@@ -284,7 +284,7 @@ class SourceTraceReplayer:
         log.warning("Unconstrained state(s) and constraining not possible.")
         return False
 
-    def follow_trace(self, trace: Trace, func_name: str, cursor=None, merging=False, assumptions=[],
+    def follow_trace(self, trace: Trace, func_name: str, database=None, merging=False, assumptions=[],
                      assertions=[], finish_dead=True, **kwargs):
         # function name not given?
         if not func_name:
@@ -292,7 +292,7 @@ class SourceTraceReplayer:
             if elem.letter != 'F':
                 raise ValueError(f'Trace contains first element "{elem.letter}"')
             func_num = int.from_bytes(elem.bs, "little")
-            func_name = Util.get_name(cursor, func_num)
+            func_name = database.get_name(func_num)
             log.debug('Starting with function "%s"', func_name)
 
         # start_state, simulation manager
@@ -343,7 +343,7 @@ class SourceTraceReplayer:
 
                 # PART 2.5: handle unconstrained
                 if simgr.unconstrained != []:
-                    self.try_solve_unconstrained(elem, simgr, cursor)
+                    self.try_solve_unconstrained(elem, simgr, database)
                     # to break out of PART 2 loop if try_solve failed
                     simgr.move(from_stash='unconstrained', to_stash='deadended')
                     # final check is in PART 3
@@ -374,8 +374,8 @@ class SourceTraceReplayer:
                 name = None
                 if not elem.bs == b'':
                     num = int.from_bytes(elem.bs, "little")
-                    if elem.letter == 'F' and cursor:
-                        name = Util.get_name(cursor, num)
+                    if elem.letter == 'F' and database:
+                        name = database.get_name(num)
                 if len(simgr.traced) > 1:
                     log.debug(elem.pretty(name=name) + f" (found {len(simgr.traced)})")
                 else:

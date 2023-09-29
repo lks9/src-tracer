@@ -8,17 +8,15 @@ from clang.cindex import Index, CursorKind, StorageClass, TypeKind
 
 class Instrumenter:
 
-    def __init__(self, connection, trace_store_dir, case_instrument=False, boolop_instrument=False,
-                 inline_instrument=False, main_instrument=True, anon_instrument=False,
+    def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
+                 return_instrument=True, inline_instrument=False, main_instrument=True, anon_instrument=False,
                  function_instrument=True, inner_instrument=True):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
         """
-        self.connection = connection
-        self._init_db()
+        self.database = database
         self.trace_store_dir = trace_store_dir
-
         self.case_instrument = case_instrument
         self.boolop_instrument = boolop_instrument
         #self.return_instrument = return_instrument
@@ -35,37 +33,13 @@ class Instrumenter:
 
         self.annotations = {}
 
-    def _init_db(self):
-        cursor = self.connection.cursor()
-        cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS function_list
-                        (
-                            file    TEXT,
-                            line    INT,
-                            name    TEXT,
-                            PRIMARY KEY (file, name)
-                        )
-                            ''')
-        cursor.close()
-        cursor = self.connection.cursor()
-        cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS manual_lookup
-                        (
-                            num      INT,
-                            pre_file TEXT,
-                            offset   INT,
-                            PRIMARY KEY (pre_file, offset)
-                        )
-                            ''')
-        cursor.close()
-
     def filename(self, location):
         filename = location.file.name
         if filename not in self.annotations:
             with open(filename, "rb") as f:
                 content = f.read()
             self.annotations[filename] = {"content": content}
-            self.annotations[filename][0] = b'#include "src_tracer.h"\n'
+            self.annotations[filename][0] = b'#include <src_tracer/_after_instrument.h>\n'
         return filename
 
     def orig_file_and_line(self, location):
@@ -86,38 +60,15 @@ class Instrumenter:
     def func_num(self, node, create=True, match_file=True):
         (file, line) = self.orig_file_and_line(node.extent.start)
         name = node.spelling
-        if create:
-            cursor = self.connection.cursor()
-            try:
-                cursor.execute('''
-                    INSERT INTO function_list
-                    VALUES(?,?,?)
-                    ON CONFLICT DO NOTHING
-                    ''', (file, line, name))
-            except sqlite3.OperationalError:
-                # perhaps the insert was successful from another process?
-                pass
-            cursor.close()
-            self.connection.commit()
-        cursor = self.connection.cursor()
-        if match_file:
-            func_num_auto = cursor.execute('''
-                SELECT rowid
-                FROM function_list
-                WHERE file=? and name=?
-                ''', (file, name)).fetchone()
-        else:
-             func_num_auto = cursor.execute('''
-                SELECT rowid
-                FROM function_list
-                WHERE name=?
-                ''', (name)).fetchone()
-        cursor.close()
-        self.connection.commit()
+        pre_file = self.filename(node.extent.start)
+        offset = node.extent.start.offset
         try:
-            return func_num_auto[0]
-        except:
-            return None
+            self.database.insert_to_table(file, line, name)
+        except sqlite3.OperationalError:
+            # perhaps the insert was successful from another process?
+            pass
+        num = self.database.get_number(file, name)
+        return num
 
     def add_annotation(self, annotation, location, add_offset=0):
         offset = location.offset + add_offset
@@ -521,7 +472,7 @@ class Instrumenter:
             annotation = self.annotations[filename]
             content = annotation["content"]
             # overwrite
-            if (b'#include "src_tracer.h"' in content):
+            if (b'#include <src_tracer/_after_instrument.h>' in content):
                 # print("Skipping " + filename + " (already annotated)")
                 return False
             # print("Overwriting " + filename + "...")

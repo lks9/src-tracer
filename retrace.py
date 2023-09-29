@@ -2,12 +2,12 @@
 
 import logging
 import sys
-import sqlite3
 import os
 import argparse
 
 from src_tracer.retrace import SourceTraceReplayer
 from src_tracer.trace import Trace
+from src_tracer.database import Database
 
 # better hex printing
 try:
@@ -52,17 +52,14 @@ args = ap.parse_args()
 # create connection to database
 if args.fname is None:
     if args.database is None:
-        database_path = os.path.dirname(args.trace_file)
-        database = os.path.join(database_path, 'cflow_functions.db')
+        database_dir = os.path.dirname(args.trace_file)
+        database_path = os.path.join(database_dir, 'function_database.db')
     else:
-        database = args.database
-    if not os.path.exists(database):
-        error = f"Could not open database from {database}, try --fname or --database"
+        database_path = args.database
+    if not os.path.exists(database_path):
+        error = f"Could not open database from {database_path}, try --fname or --database"
         raise Exception(error)
-    connection = sqlite3.connect(database)
-    cursor = connection.cursor()
-else:
-    cursor = None
+    database = Database(store_dir=None, path=database_path)
 
 # retracing
 
@@ -77,7 +74,7 @@ DEFAULT_ADD_OPS = {"COPY_STATES",
 DEFAULT_REMOVE_OPS = {"ALL_FILES_EXIST"}
 
 # Some useful options:
-#   CONSERVATIVE_READ_STRATEGY CONSERVATIVE_WRITE_STRATEGY (for more reliable retracing, enabled by default)
+#   CONSERVATIVE_{READ/WRITE}_STRATEGY (seems to be needed so enabled by default)
 #   AVOID_MULTIVALUED_READS AVOID_MULTIVALUED_WRITES plus --merge 1 (for fast retracing, angr "fastpath" mode)
 #   BYPASS_UNSUPPORTED_... (retrace even when unsupported in angr)
 #   remove COPY_STATES
@@ -104,9 +101,9 @@ elif args.drop is not None:
     merge_after = args.drop
 
 assertion_checks = False
-if args.assertions:
+if args.assertions is not None:
     assertions = args.assertions
-    assert_checks = True
+    assertion_checks = True
 else:
     assertions = []
 
@@ -118,7 +115,7 @@ else:
 trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count, count_elems=args.count_elems)
 source_tracer = SourceTraceReplayer(args.binary_name, auto_load_libs=False)
 #logging.getLogger("").setLevel(logging.DEBUG)
-(simgr, state) = source_tracer.follow_trace(trace, args.fname, cursor,
+(simgr, state) = source_tracer.follow_trace(trace, args.fname, database,
                                             add_options=add, remove_options=remove, mode=args.mode,
                                             merging=args.merge, assertions=assertions, assumptions=assume)
 
@@ -130,3 +127,5 @@ if assertion_checks:
         print()
         print(f"Final assertion check result: {res.name}")
         print()
+
+database.close_connection()
