@@ -15,8 +15,7 @@
 #define O_LARGEFILE 0
 #endif
 
-unsigned char _trace_ie_byte = _TRACE_SET_IE;
-int _trace_ie_count = 0;
+unsigned char _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 unsigned char _trace_buf[TRACE_BUF_SIZE];
 int _trace_buf_pos = 0;
 
@@ -121,8 +120,7 @@ void _trace_open(const char *fname) {
     // now the tracing can start (guarded by trace_fd > 0)
     trace_fd = fd;
     _trace_buf_pos = 0;
-    _trace_ie_count = 0;
-    _trace_ie_byte = _TRACE_SET_IE;
+    _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 }
 
 void _trace_before_fork(void) {
@@ -156,7 +154,6 @@ int _trace_after_fork(int pid) {
         }
         _trace_buf_pos = temp_trace_buf_pos;
         _trace_ie_byte = 0;
-        _trace_ie_count = 0;
         trace_fd = temp_trace_fd;
         temp_trace_fd = 0;
 
@@ -178,8 +175,7 @@ int _trace_after_fork(int pid) {
     // now the tracing can start (guarded by trace_fd > 0)
     trace_fd = fd;
     _trace_buf_pos = 0;
-    _trace_ie_count = 0;
-    _trace_ie_byte = _TRACE_SET_IE;
+    _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 
     _TRACE_NUM(pid);
     return pid;

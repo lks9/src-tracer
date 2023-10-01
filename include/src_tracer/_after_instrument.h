@@ -42,8 +42,8 @@ extern void _trace_before_fork(void);
 extern int _trace_after_fork(int pid);
 
 #ifndef BYTE_TRACE
+#define _TRACE_IE_BYTE_INIT         0b11111110
 extern unsigned char _trace_ie_byte;
-extern int _trace_ie_count;
 #endif
 
 extern unsigned char _trace_buf[TRACE_BUF_SIZE];
@@ -93,7 +93,7 @@ extern int _trace_buf_pos;
  #define _TRACE_SET_FORK            0b01000111 // 'G'
  #define _TRACE_SET_PAUSE           0b01010000 // 'P'
 /* 'T' and 'N' could be used instead of
- * _TRACE_SET_IE for faster trace writing */
+ * _TRACE_IE_BYTE_INIT for faster trace writing */
  #define _TRACE_SET_IF              0b01010100 // 'T'
  #define _TRACE_SET_ELSE            0b01001110 // 'N'
 /* 'F' and 'D' are reserved, since
@@ -140,21 +140,36 @@ extern int _trace_buf_pos;
 #else
 
 #define _TRACE_IE(if_true) ;{ \
-    _trace_ie_byte |= (if_true) << _trace_ie_count; \
-    _trace_ie_count += 1; \
-    if (_trace_ie_count == 6) { \
-        _TRACE_PUT(_trace_ie_byte | (1 << 6)); \
-        _trace_ie_count = 0; \
-        _trace_ie_byte = _TRACE_SET_IE; \
+    _trace_ie_byte <<= 1; \
+    _trace_ie_byte |= (bool)(if_true); \
+    if (_trace_ie_byte < 0b11000000) { \
+        _TRACE_PUT(_trace_ie_byte); \
+        _trace_ie_byte = _TRACE_IE_BYTE_INIT; \
     } \
 }
-#define _TRACE_IF()     _TRACE_IE(1)
-#define _TRACE_ELSE()   _TRACE_IE(0)
+
+// will get optimized as rotate instruction
+#define rotate_8(x, n) \
+    ((x << n) | (x >> (8 - n)))
+
+#define _TRACE_IF() ;{ \
+    _trace_ie_byte = rotate_8(_trace_ie_byte, 1); \
+    if (_trace_ie_byte < 0b11000000) { \
+        _TRACE_PUT(_trace_ie_byte); \
+        _trace_ie_byte = _TRACE_IE_BYTE_INIT; \
+    } \
+}
+#define _TRACE_ELSE() ;{ \
+    _trace_ie_byte <<= 1; \
+    if (_trace_ie_byte < 0b11000000) { \
+        _TRACE_PUT(_trace_ie_byte); \
+        _trace_ie_byte = _TRACE_IE_BYTE_INIT; \
+    } \
+}
 #define _TRACE_FINISH_IE() ;{ \
-    if (_trace_ie_count != 0) { \
-        _TRACE_PUT(_trace_ie_byte | (1 << _trace_ie_count)); \
-        _trace_ie_count = 0; \
-        _trace_ie_byte = _TRACE_SET_IE; \
+    if (_trace_ie_byte != _TRACE_IE_BYTE_INIT) { \
+        _TRACE_PUT(_trace_ie_byte); \
+        _trace_ie_byte = _TRACE_IE_BYTE_INIT; \
     } \
 }
 
