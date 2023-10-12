@@ -196,6 +196,7 @@ class Instrumenter:
                         # well, we need something to start...
                         main_addition += b" _FUNC(0) "
 
+                func_attr = b'__attribute__((unused))\n'
 
                 mby_return = b""
                 if node.type.get_result().kind != TypeKind.VOID:
@@ -203,7 +204,7 @@ class Instrumenter:
 
                 new_function = cpp_middle_marker \
                             + b"#undef " + name + b"\n" \
-                            + signature + b"{ " + main_addition + func_macro + b"\n" \
+                            + func_attr + signature + b"{ " + main_addition + func_macro + b"\n" \
                             + b"#define " + name + b"(...) " + name + b"_original(__VA_ARGS__)\n" \
                             + b"    " + mby_return + call_function + b";\n" \
                             + b"}\n" \
