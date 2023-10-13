@@ -4,14 +4,6 @@
 // Reason: It works on pre-processed files.
 // A "#include <stdbool.h>" would result in double included files!
 
-// editable constant definitions
-#ifndef TRACE_BUF_SIZE
-#define TRACE_BUF_SIZE 4096
-#endif
-#ifndef TRACE_USE_POSIX_WRITE
-// if TRACE_USE_POSIX_WRITE is not set we use the syscall directly
-#endif
-
 // other constants
 #define PROP_FALSE          0
 #define PROP_TRUE           1
@@ -29,11 +21,12 @@ extern "C" {
 #endif
 
 struct _trace_ctx {
-    char *ptr;
+    unsigned char *ptr;
     void *_page_ptr;
     int fork_count;
     int try_count;
-    bool active;
+    unsigned short pos; 
+    unsigned char ie_byte;
 };
 
 extern struct _trace_ctx _trace;
@@ -42,6 +35,11 @@ extern void _trace_open(const char *fname);
 extern void _trace_close(void);
 extern void _trace_before_fork(void);
 extern int _trace_after_fork(int pid);
+
+#define _TRACE_IE_BYTE_INIT         0b11111110
+
+#define _TRACE_TEST_IE              0b10000000
+ #define _TRACE_SET_IE              0b10000000
 
 #define _TRACE_TEST_OTHER           0b11110000
  #define _TRACE_SET_FUNC_4          0b00000000
@@ -84,7 +82,7 @@ extern int _trace_after_fork(int pid);
  #define _TRACE_SET_FORK            0b01000111 // 'G'
  #define _TRACE_SET_PAUSE           0b01010000 // 'P'
 /* 'T' and 'N' could be used instead of
- * _TRACE_SET_IE for faster trace writing */
+ * _TRACE_IE_BYTE_INIT for faster trace writing */
  #define _TRACE_SET_IF              0b01010100 // 'T'
  #define _TRACE_SET_ELSE            0b01001110 // 'N'
 /* 'F' and 'D' are reserved, since
@@ -95,35 +93,69 @@ extern int _trace_after_fork(int pid);
  #define _TRACE_SET_FUNC_STRING_res 0b01001101 // 'M'
  #define _TRACE_SET_DATA_STRING_res 0b01000010 // 'B'
 
-#define _TRACE_TEST_IE              0b10000000
- #define _TRACE_SET_IE              0b10000000
-
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
 
-#define _TRACE_PUT(c) ; \
-    if (_trace.active) { \
-        _trace.ptr[0] = (c); \
-        _trace.ptr += 1; \
+#define _TRACE_PUT(c) ;{ \
+        _trace.ptr[_trace.pos] = (c); \
+        _trace.pos += 1; \
     }
 
 #define _TRACE_PUT_TEXT     _TRACE_PUT
 
-#define _TRACE_IF() \
-    _TRACE_PUT('T')
-#define _TRACE_ELSE() \
-    _TRACE_PUT('N')
+#ifdef BYTE_TRACE
 
-#define _TRACE_IE(if_true) ;{ \
+#define _TRACE_IF()     _TRACE_PUT('T')
+#define _TRACE_ELSE()   _TRACE_PUT('N')
+#define _TRACE_FINISH_IE()
+#define _TRACE_IE(if_true) ;\
     if (if_true) { \
         _TRACE_IF(); \
     } else { \
         _TRACE_ELSE(); \
+    }
+
+#else
+
+#define _TRACE_IE(if_true) ;{ \
+    _trace.ie_byte <<= 1; \
+    _trace.ie_byte |= (bool)(if_true); \
+    if (_trace.ie_byte < 0b11000000) { \
+        _TRACE_PUT(_trace.ie_byte); \
+        _trace.ie_byte = _TRACE_IE_BYTE_INIT; \
     } \
 }
 
+// will get optimized as rotate instruction
+#define rotate_8(x, n) \
+    ((x << n) | (x >> (8 - n)))
+
+#define _TRACE_IF() ;{ \
+    _trace.ie_byte = rotate_8(_trace.ie_byte, 1); \
+    if (_trace.ie_byte < 0b11000000) { \
+        _TRACE_PUT(_trace.ie_byte); \
+        _trace.ie_byte = _TRACE_IE_BYTE_INIT; \
+    } \
+}
+#define _TRACE_ELSE() ;{ \
+    _trace.ie_byte <<= 1; \
+    if (_trace.ie_byte < 0b11000000) { \
+        _TRACE_PUT(_trace.ie_byte); \
+        _trace.ie_byte = _TRACE_IE_BYTE_INIT; \
+    } \
+}
+#define _TRACE_FINISH_IE() ;{ \
+    if (_trace.ie_byte != _TRACE_IE_BYTE_INIT) { \
+        _TRACE_PUT(_trace.ie_byte); \
+        _trace.ie_byte = _TRACE_IE_BYTE_INIT; \
+    } \
+}
+
+#endif // BYTE_TRACE
+
 // functions numbers are now big endian for better conversion
 #define _TRACE_FUNC(num) ;{ \
+    _TRACE_FINISH_IE(); \
     if ((num) == 0) { \
         _TRACE_PUT(_TRACE_SET_FUNC_ANON); \
     } else if ((num) == ((num) & 0xf)) { \
@@ -151,6 +183,7 @@ extern int _trace_after_fork(int pid);
 
 // data should be native endian (here little endian)
 #define _TRACE_NUM(num) ;{ \
+    _TRACE_FINISH_IE(); \
     unsigned long long _trace_n = (num); \
     if (_trace_n == 0) { \
         _TRACE_PUT(_TRACE_SET_DATA | _TRACE_SET_LEN_0); \
@@ -195,11 +228,15 @@ extern int _trace_after_fork(int pid);
     } \
 }
 
-#define _TRACE_RETURN() \
-    _TRACE_PUT(_TRACE_SET_RETURN)
+#define _TRACE_RETURN() ;{ \
+    _TRACE_FINISH_IE(); \
+    _TRACE_PUT(_TRACE_SET_RETURN); \
+}
 
-#define _TRACE_END() \
-    _TRACE_PUT(_TRACE_SET_END)
+#define _TRACE_END() ;{ \
+    _TRACE_FINISH_IE(); \
+    _TRACE_PUT(_TRACE_SET_END); \
+}
 
 // same as the macro version
 // but returns num

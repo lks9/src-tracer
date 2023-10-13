@@ -12,24 +12,28 @@
 #include <sys/mman.h>
 #include <signal.h>
 #include <string.h>
-
-#include <pthread.h>
 #include <sys/prctl.h>
+#include <pthread.h>
+
+#ifndef O_LARGEFILE
+#define O_LARGEFILE 0
+#endif
+
+static char trace_fname[170];
 
 
-static char dummy[16];
+static unsigned char dummy[65536];
 
 struct _trace_ctx _trace = {
     .ptr = dummy,
     ._page_ptr = NULL,
+    .pos = 0,
+    .ie_byte = _TRACE_IE_BYTE_INIT,
     .fork_count = 0,
     .try_count = 0,
-    .active = 0,
 };
 
 static struct _trace_ctx temp_trace;
-
-static char trace_fname[200];
 
 extern char **__environ;
 
@@ -37,7 +41,7 @@ extern void *forked_write(char *);
 pthread_t thread_id;
 
 void _trace_open(const char *fname) {
-    if (_trace.ptr != dummy) {
+    if (_trace._page_ptr != NULL) {
         // already opened
         return;
     }
@@ -52,22 +56,23 @@ void _trace_open(const char *fname) {
     //printf("Trace to: %s\n", trace_fname);
 
     // reserve memory for the trace buffer
-    _trace._page_ptr = mmap(NULL, 1l << 36, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    _trace._page_ptr = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (_trace._page_ptr == MAP_FAILED) {
         _trace._page_ptr = NULL;
         perror("mmap");
         return;
     }
-    if (madvise(_trace._page_ptr, 1l << 36, MADV_SEQUENTIAL) <  0) {
-        perror("madvise");
-        return;
-    }
+    //if (madvise(_trace._page_ptr, 65536, MADV_SEQUENTIAL) <  0) {
+    //    perror("madvise");
+    //    return;
+    //}
     // map empty block at the end
     //mmap(_trace._page_ptr + (1l << 38), 4096, PROT_NONE, MAP_FIXED | MAP_ANON, -1, 0);
 
-    char ptr_str[8];
-    snprintf(ptr_str, 8, "%p", _trace._page_ptr);
+    //char ptr_str[8];
+    //snprintf(ptr_str, 8, "%p", _trace._page_ptr);
 
+#if 0
     if (fork() == 0) {
         // child process
         if (prctl(PR_SET_NAME, (unsigned long)"src_tracer") < 0)
@@ -75,19 +80,16 @@ void _trace_open(const char *fname) {
         forked_write(trace_fname);
         // will never return
     }
-    //pthread_create(&thread_id, NULL, &forked_write, trace_fname);
-
-    // well, we are not accessing the memory
-    if (madvise(_trace._page_ptr, 1l << 36, MADV_DONTNEED) <  0) {
-        perror("madvise DONTNEED");
-        return;
-    }
+#else
+    pthread_create(&thread_id, NULL, &forked_write, trace_fname);
+#endif
 
     atexit(_trace_close);
 
-    // now the tracing can start (guarded by _trace.fd > 0)
+    // now the tracing can start (guarded by _trace._page_ptr != NULL)
     _trace.ptr = _trace._page_ptr;
-    _trace.active = 1;
+    _trace.pos = 0;
+    _trace.ie_byte = _TRACE_IE_BYTE_INIT;
 }
 
 void _trace_before_fork(void) {
@@ -98,11 +100,12 @@ void _trace_before_fork(void) {
     _trace.fork_count += 1;
     _TRACE_NUM(_trace.fork_count);
 
-    // stop tracing
     temp_trace.ptr = _trace.ptr;
-    temp_trace.active = _trace.active;
+    temp_trace.pos = _trace.pos;
+    temp_trace.ie_byte = _trace.ie_byte;
+
+    // stop tracing
     _trace.ptr = dummy;
-    _trace.active = 0;
 }
 
 int _trace_after_fork(int pid) {
@@ -114,7 +117,8 @@ int _trace_after_fork(int pid) {
         // we are in the parent
         // resume tracing
         _trace.ptr = temp_trace.ptr;
-        _trace.active = temp_trace.active;
+        _trace.pos = temp_trace.pos;
+        _trace.ie_byte = temp_trace.ie_byte;
 
         _TRACE_NUM(pid < 0 ? -1 : 1);
         return pid;
@@ -134,28 +138,35 @@ int _trace_after_fork(int pid) {
         return pid;
     }
     if (madvise(_trace._page_ptr, 1l << 36, MADV_SEQUENTIAL) <  0) {
+        _trace._page_ptr = NULL;
         perror("madvise");
         return pid;
     }
-    // now the tracing can start (guarded by _trace.fd > 0)
+    // now the tracing can start (guarded by _trace._page_ptr != NULL)
     _trace.ptr = _trace._page_ptr;
-    _trace.active = 1;
+    _trace.pos = 0;
+    _trace.ie_byte = _TRACE_IE_BYTE_INIT;
+
+    //int lowfd = open(trace_fname, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    //int fd = fcntl(lowfd, F_DUPFD_CLOEXEC, lowfd + 42);
+    //close(lowfd);
 
     _TRACE_NUM(pid);
     return pid;
 }
 
 void _trace_close(void) {
-    if (_trace.ptr == dummy) {
+    if (_trace._page_ptr == NULL) {
         // already closed or never successfully opened
         return;
     }
     _TRACE_END();
-    //pthread_join(thread_id, NULL);
-
+#if 1
+    pthread_join(thread_id, NULL);
+#endif
     // stop tracing
     _trace.ptr = dummy;
-    _trace.active = 0;
+    _trace._page_ptr = NULL;
 }
 
 
