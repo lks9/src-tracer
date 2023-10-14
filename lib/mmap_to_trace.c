@@ -10,84 +10,128 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <pthread.h>
-
+#include <string.h>
 
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
 #endif
 
-static int outfd;
 
-static unsigned char *ptr;
-static unsigned short last_pos = 0;
-static unsigned short pos = 0;
+#ifndef _TRACE_USE_POSIX
+// taken from musl (arch/x86_64/syscall_arch.h)
+static __inline long __syscall0(long n)
+{
+    unsigned long ret;
+    __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n) : "rcx", "r11", "memory");
+    return ret;
+}
 
-static inline void __attribute__((always_inline)) put_out(void) {
-    pos++;
-    if ((unsigned short)(last_pos + 4096) == pos) {
-        if(write(outfd, &ptr[last_pos], 4096) == 0) {
-            close(outfd);
-            pthread_exit(-1);
-        }
-        // remove unneeded memory
-        madvise(&ptr[last_pos], 4096, MADV_REMOVE);
-        last_pos = pos;
+static __inline long __syscall1(long n, long a1)
+{
+    unsigned long ret;
+    __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1) : "rcx", "r11", "memory");
+    return ret;
+}
+
+static __inline long __syscall3(long n, long a1, long a2, long a3)
+{
+    unsigned long ret;
+    __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
+                                                  "d"(a3) : "rcx", "r11", "memory");
+    return ret;
+}
+#define SYS_write        1
+#define SYS_madvise     28
+#define SYS_nanosleep   35
+#define SYS_getppid    110
+#define SYS_fork        57
+// end musl code
+#endif
+
+static int trace_fd;
+
+static void my_exit(void) {
+#ifdef _TRACE_USE_PTHREAD
+    pthread_exit((void *)0);
+#else
+    exit(0);
+#endif
+}
+
+// side effect free fork version
+// without calling atfork etc.
+pid_t my_fork(void) {
+    return (pid_t)__syscall0(SYS_fork);
+}
+
+static void my_write(volatile void *ptr) {
+#ifdef _TRACE_USE_POSIX
+    ssize_t written = write(trace_fd, ptr, 4096);
+#else
+    long written = __syscall3(SYS_write, (long)trace_fd, (long)ptr, (long)4096);
+#endif
+    if (unlikely(written != 4096)) {
+        // some write error occured
+        // abort trace recording
+        close(trace_fd);
+        my_exit();
     }
 }
 
-void *forked_write (char *filename) {
-    outfd = open(filename, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
-    if (outfd <= 0)
-        pthread_exit(-1);
+void *forked_write (char *trace_fname) {
+    int lowfd = open(trace_fname, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
+#ifdef _TRACE_USE_PTHREAD
+    // The posix standard specifies that open always returns the lowest-numbered unused fd.
+    // It is possbile that the traced software relies on that behavior and expects a particalur fd number
+    // for a subsequent open call, how ugly this might be (busybox unzip expects fd number 3).
+    // The workaround is to increase the trace fd number by 42.
+    trace_fd = fcntl(lowfd, F_DUPFD_CLOEXEC, lowfd + 42);
+    close(lowfd);
+#else
+    trace_fd = lowfd;
+#endif
+    if (trace_fd < 0) {
+        my_exit();
+    }
 
-    ptr = _trace._page_ptr;
+    unsigned char *const ptr = _trace._page_ptr;
+    unsigned short next_pos = 4096;
+    unsigned short pos = 0;
 
     while (true) {
-        unsigned char b;
-        for (int timeout = 100; unlikely((b=ptr[pos]) == 0); timeout --) {
-            usleep(1000);
+        volatile long long *next_ptr = (long long *)&(ptr[next_pos]);
+        volatile long long *this_ptr = (long long *)&(ptr[pos]);
+        long long next_ll;
+
+        // wait in for loop until tracer in parent writes to next page
+        for (int timeout = 100000; (next_ll = *next_ptr) == 0ll; timeout --) {
             if (timeout == 0) {
-                if (write(outfd, &ptr[last_pos], pos - last_pos) < 0)
-                    pthread_exit(-1);
-                close(outfd);
-                pthread_exit(-1);
+                // parent done or timeout
+                my_write(this_ptr);
+                close(trace_fd);
+                my_exit();
             }
+            const struct timespec wait_time = {0,100000};
+#ifdef _TRACE_USE_POSIX
+            nanosleep(&wait_time);
+#else
+            __syscall1(SYS_nanosleep, (long)&wait_time);
+#endif
         }
-        switch(b & _TRACE_TEST_OTHER) {
-            case _TRACE_SET_FUNC_4:
-                break;
-            case _TRACE_SET_ELEM_AO:
-                if (b == 'E') {
-                    put_out();
-                    if (write(outfd, &ptr[last_pos], pos - last_pos) == pos - last_pos) {
-                        close(outfd);
-                        pthread_exit(0);
-                    } else {
-                        close(outfd);
-                        pthread_exit(-1);
-                    }
-                }
-                break;
-            case _TRACE_SET_ELEM_PZ:
-                break;
-            case _TRACE_SET_FUNC_32:
-                put_out();
-            case _TRACE_SET_FUNC_28:
-                put_out();
-            case _TRACE_SET_FUNC_20:
-                put_out();
-            case _TRACE_SET_FUNC_12:
-                put_out();
-                break;
-            case _TRACE_SET_DATA:
-                for (int i = 0; i < (b & _TRACE_TEST_LEN_BYTECOUNT); i++) {
-                    put_out();
-                }
-                break;
-            default:
-                break;
+        if (next_ll == -1ll) {
+            // parant wrote the trace end marker -1ll
+            my_write(this_ptr);
+            close(trace_fd);
+            my_exit();
         }
-        put_out();
+
+        my_write(this_ptr);
+        // zero page for future access (ringbuffer!)
+        for (int i = 0; i < 4096/8; i++) {
+            this_ptr[i] = 0ll;
+        }
+
+        pos = next_pos;
+        next_pos += 4096;
     }
-    pthread_exit(0);
 }
