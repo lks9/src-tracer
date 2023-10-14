@@ -4,6 +4,9 @@
 // Reason: It works on pre-processed files.
 // A "#include <stdbool.h>" would result in double included files!
 
+// assumes short is 16 bit
+// assumes char is 8 bit
+
 // other constants
 #define PROP_FALSE          0
 #define PROP_TRUE           1
@@ -25,6 +28,7 @@ struct _trace_ctx {
     void *_page_ptr;
     int fork_count;
     int try_count;
+    int fd;
     unsigned short pos; 
     unsigned char ie_byte;
 };
@@ -96,10 +100,8 @@ extern int _trace_after_fork(int pid);
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
 
-#define _TRACE_PUT(c) ;{ \
-        _trace.ptr[_trace.pos] = (c); \
-        _trace.pos += 1; \
-    }
+#define _TRACE_PUT(c) \
+    _trace.ptr[_trace.pos++] = (c)
 
 #define _TRACE_PUT_TEXT     _TRACE_PUT
 
@@ -107,8 +109,8 @@ extern int _trace_after_fork(int pid);
 
 #define _TRACE_IF()     _TRACE_PUT('T')
 #define _TRACE_ELSE()   _TRACE_PUT('N')
-#define _TRACE_FINISH_IE()
-#define _TRACE_IE(if_true) ;\
+#define _TRACE_IE_FINISH
+#define _TRACE_IE(if_true) \
     if (if_true) { \
         _TRACE_IF(); \
     } else { \
@@ -117,45 +119,40 @@ extern int _trace_after_fork(int pid);
 
 #else
 
-#define _TRACE_IE(if_true) ;{ \
-    _trace.ie_byte <<= 1; \
-    _trace.ie_byte |= (bool)(if_true); \
-    if (_trace.ie_byte < 0b11000000) { \
-        _TRACE_PUT(_trace.ie_byte); \
-        _trace.ie_byte = _TRACE_IE_BYTE_INIT; \
-    } \
-}
-
 // will get optimized as rotate instruction
 #define rotate_8(x, n) \
     ((x << n) | (x >> (8 - n)))
 
-#define _TRACE_IF() ;{ \
-    _trace.ie_byte = rotate_8(_trace.ie_byte, 1); \
+#define _TRACE_IE_PREPARE_NEXT \
     if (_trace.ie_byte < 0b11000000) { \
         _TRACE_PUT(_trace.ie_byte); \
         _trace.ie_byte = _TRACE_IE_BYTE_INIT; \
-    } \
-}
-#define _TRACE_ELSE() ;{ \
+    }
+
+#define _TRACE_IE(if_true) { \
     _trace.ie_byte <<= 1; \
-    if (_trace.ie_byte < 0b11000000) { \
-        _TRACE_PUT(_trace.ie_byte); \
-        _trace.ie_byte = _TRACE_IE_BYTE_INIT; \
-    } \
+    _trace.ie_byte |= (bool)(if_true); \
+    _TRACE_IE_PREPARE_NEXT \
 }
-#define _TRACE_FINISH_IE() ;{ \
+#define _TRACE_IF() { \
+    _trace.ie_byte = rotate_8(_trace.ie_byte, 1); \
+    _TRACE_IE_PREPARE_NEXT \
+}
+#define _TRACE_ELSE() { \
+    _trace.ie_byte <<= 1; \
+    _TRACE_IE_PREPARE_NEXT \
+}
+#define _TRACE_IE_FINISH \
     if (_trace.ie_byte != _TRACE_IE_BYTE_INIT) { \
         _TRACE_PUT(_trace.ie_byte); \
         _trace.ie_byte = _TRACE_IE_BYTE_INIT; \
-    } \
-}
+    }
 
 #endif // BYTE_TRACE
 
 // functions numbers are now big endian for better conversion
-#define _TRACE_FUNC(num) ;{ \
-    _TRACE_FINISH_IE(); \
+#define _TRACE_FUNC(num) { \
+    _TRACE_IE_FINISH \
     if ((num) == 0) { \
         _TRACE_PUT(_TRACE_SET_FUNC_ANON); \
     } else if ((num) == ((num) & 0xf)) { \
@@ -182,8 +179,8 @@ extern int _trace_after_fork(int pid);
 }
 
 // data should be native endian (here little endian)
-#define _TRACE_NUM(num) ;{ \
-    _TRACE_FINISH_IE(); \
+#define _TRACE_NUM(num) { \
+    _TRACE_IE_FINISH \
     unsigned long long _trace_n = (num); \
     if (_trace_n == 0) { \
         _TRACE_PUT(_TRACE_SET_DATA | _TRACE_SET_LEN_0); \
@@ -228,13 +225,13 @@ extern int _trace_after_fork(int pid);
     } \
 }
 
-#define _TRACE_RETURN() ;{ \
-    _TRACE_FINISH_IE(); \
+#define _TRACE_RETURN() { \
+    _TRACE_IE_FINISH \
     _TRACE_PUT(_TRACE_SET_RETURN); \
 }
 
-#define _TRACE_END() ;{ \
-    _TRACE_FINISH_IE(); \
+#define _TRACE_END() { \
+    _TRACE_IE_FINISH \
     _TRACE_PUT(_TRACE_SET_END); \
 }
 
@@ -370,11 +367,11 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #elif defined _TRACE_MODE
 /* trace mode */
 
-#define _IF                 _TRACE_IF()
-#define _ELSE               _TRACE_ELSE()
+#define _IF                 ;_TRACE_IF();
+#define _ELSE               ;_TRACE_ELSE();
 #define _CONDITION(cond)    _trace_condition(cond)
-#define _FUNC(num)          _TRACE_FUNC(num)
-#define _FUNC_RETURN        _TRACE_RETURN()
+#define _FUNC(num)          ;_TRACE_FUNC(num);
+#define _FUNC_RETURN        ;_TRACE_RETURN();
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num(num)
 // experimental version for switch
@@ -384,8 +381,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
-#define _LOOP_BODY(id)      _TRACE_IF()
-#define _LOOP_END(id)       _TRACE_ELSE()
+#define _LOOP_BODY(id)      ;_TRACE_IF();
+#define _LOOP_END(id)       ;_TRACE_ELSE();
 
 #define _TRACE_OPEN(fname)  ;_trace_open((fname));
 #define _TRACE_CLOSE        ;_trace_close();
@@ -401,11 +398,11 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _IF                 ;_TRACE_PUT_TEXT('T');
 #define _ELSE               ;_TRACE_PUT_TEXT('N');
-#define _CONDITION(cond)    (_TEXT_TRACE_CONDITION(cond))
+#define _CONDITION(cond)    _text_trace_condition(cond)
 #define _FUNC(num)          ;_TRACE_NUM_TEXT('F', ((unsigned int)(num)));
 #define _FUNC_RETURN        ;_TRACE_PUT_TEXT('R');
 // non-macro version for switch
-#define _SWITCH(num)        (_TRACE_NUM_TEXT('D', ((unsigned int)(num))))
+#define _SWITCH(num)        _trace_num_text('D', ((unsigned int)(num)))
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id)      ;if (_cflow_switch_##id) { \
