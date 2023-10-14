@@ -14,6 +14,8 @@
 #ifndef EFFICIENT_TEXT_TRACE
 // well it's not for efficiency, more for debugging
 #endif
+// assumes short is 16 bit
+// assumes char is 8 bit
 
 // other constants
 #define PROP_FALSE          0
@@ -129,8 +131,8 @@ extern int _trace_buf_pos;
 
 #define _TRACE_IF()     _TRACE_PUT('T')
 #define _TRACE_ELSE()   _TRACE_PUT('N')
-#define _TRACE_FINISH_IE()
-#define _TRACE_IE(if_true) ;\
+#define _TRACE_IE_FINISH
+#define _TRACE_IE(if_true) \
     if (if_true) { \
         _TRACE_IF(); \
     } else { \
@@ -139,45 +141,40 @@ extern int _trace_buf_pos;
 
 #else
 
-#define _TRACE_IE(if_true) ;{ \
-    _trace_ie_byte <<= 1; \
-    _trace_ie_byte |= (bool)(if_true); \
-    if (_trace_ie_byte < 0b11000000) { \
-        _TRACE_PUT(_trace_ie_byte); \
-        _trace_ie_byte = _TRACE_IE_BYTE_INIT; \
-    } \
-}
-
 // will get optimized as rotate instruction
 #define rotate_8(x, n) \
     ((x << n) | (x >> (8 - n)))
 
-#define _TRACE_IF() ;{ \
-    _trace_ie_byte = rotate_8(_trace_ie_byte, 1); \
+#define _TRACE_IE_PREPARE_NEXT \
     if (_trace_ie_byte < 0b11000000) { \
         _TRACE_PUT(_trace_ie_byte); \
         _trace_ie_byte = _TRACE_IE_BYTE_INIT; \
-    } \
-}
-#define _TRACE_ELSE() ;{ \
+    }
+
+#define _TRACE_IE(if_true) { \
     _trace_ie_byte <<= 1; \
-    if (_trace_ie_byte < 0b11000000) { \
-        _TRACE_PUT(_trace_ie_byte); \
-        _trace_ie_byte = _TRACE_IE_BYTE_INIT; \
-    } \
+    _trace_ie_byte |= (bool)(if_true); \
+    _TRACE_IE_PREPARE_NEXT \
 }
-#define _TRACE_FINISH_IE() ;{ \
+#define _TRACE_IF() { \
+    _trace_ie_byte = rotate_8(_trace_ie_byte, 1); \
+    _TRACE_IE_PREPARE_NEXT \
+}
+#define _TRACE_ELSE() { \
+    _trace_ie_byte <<= 1; \
+    _TRACE_IE_PREPARE_NEXT \
+}
+#define _TRACE_IE_FINISH \
     if (_trace_ie_byte != _TRACE_IE_BYTE_INIT) { \
         _TRACE_PUT(_trace_ie_byte); \
         _trace_ie_byte = _TRACE_IE_BYTE_INIT; \
-    } \
-}
+    }
 
 #endif // BYTE_TRACE
 
 // functions numbers are now big endian for better conversion
-#define _TRACE_FUNC(num) ;{ \
-    _TRACE_FINISH_IE(); \
+#define _TRACE_FUNC(num) { \
+    _TRACE_IE_FINISH \
     if ((num) == 0) { \
         _TRACE_PUT(_TRACE_SET_FUNC_ANON); \
     } else if ((num) == ((num) & 0xf)) { \
@@ -204,8 +201,8 @@ extern int _trace_buf_pos;
 }
 
 // data should be native endian (here little endian)
-#define _TRACE_NUM(num) ;{ \
-    _TRACE_FINISH_IE(); \
+#define _TRACE_NUM(num) { \
+    _TRACE_IE_FINISH \
     unsigned long long _trace_n = (num); \
     if (_trace_n == 0) { \
         _TRACE_PUT(_TRACE_SET_DATA | _TRACE_SET_LEN_0); \
@@ -263,13 +260,13 @@ extern int _trace_buf_pos;
 }
 #endif
 
-#define _TRACE_RETURN() ;{ \
-    _TRACE_FINISH_IE(); \
+#define _TRACE_RETURN() { \
+    _TRACE_IE_FINISH \
     _TRACE_PUT(_TRACE_SET_RETURN); \
 }
 
-#define _TRACE_END() ;{ \
-    _TRACE_FINISH_IE(); \
+#define _TRACE_END() { \
+    _TRACE_IE_FINISH \
     _TRACE_PUT(_TRACE_SET_END); \
 }
 
@@ -405,11 +402,11 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #elif defined _TRACE_MODE
 /* trace mode */
 
-#define _IF                 _TRACE_IF()
-#define _ELSE               _TRACE_ELSE()
+#define _IF                 ;_TRACE_IF();
+#define _ELSE               ;_TRACE_ELSE();
 #define _CONDITION(cond)    _trace_condition(cond)
-#define _FUNC(num)          _TRACE_FUNC(num)
-#define _FUNC_RETURN        _TRACE_RETURN()
+#define _FUNC(num)          ;_TRACE_FUNC(num);
+#define _FUNC_RETURN        ;_TRACE_RETURN();
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num(num)
 // experimental version for switch
@@ -419,8 +416,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
-#define _LOOP_BODY(id)      _TRACE_IF()
-#define _LOOP_END(id)       _TRACE_ELSE()
+#define _LOOP_BODY(id)      ;_TRACE_IF();
+#define _LOOP_END(id)       ;_TRACE_ELSE();
 
 #define _TRACE_OPEN(fname)  ;_trace_open((fname));
 #define _TRACE_CLOSE        ;_trace_close();
