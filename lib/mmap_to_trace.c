@@ -79,7 +79,9 @@ static void my_write(volatile void *ptr) {
 }
 
 void *forked_write (char *trace_fname) {
-    int lowfd = open(trace_fname, O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    int lowfd = open(trace_fname,
+                     O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE | O_NOCTTY,
+                     S_IRUSR | S_IWUSR);
 #ifdef _TRACE_USE_PTHREAD
     // The posix standard specifies that open always returns the lowest-numbered unused fd.
     // It is possbile that the traced software relies on that behavior and expects a particalur fd number

@@ -63,21 +63,18 @@ static void create_trace_process(void) {
 #ifdef _TRACE_USE_PTHREAD
     pthread_create(&thread_id, NULL, &forked_write, trace_fname);
 #else
+    // bsd style daemon + close all fd
     if (my_fork() == 0) {
         // child process
+        // new name
         prctl(PR_SET_NAME, (unsigned long)"src_tracer");
-        // session leader, independ from the previous process session
+        // session leader
+        //    -> independ from the previous process session
+        //    -> independent from terminal
         setsid();
-        // don't care about the terminal
-        signal(SIGHUP, SIG_IGN);
-        signal(SIGCHLD, SIG_IGN);
-        // fork second time to get free from process session
-        if (my_fork() != 0) {
-            _Exit(0);
-        }
-        umask(0);
         // anything might happen to the current directory, be independent
         chdir("/");
+        umask(0);
         // close any fd
         for (int i = sysconf(_SC_OPEN_MAX); i >= 0; i--) {
             close(i);
