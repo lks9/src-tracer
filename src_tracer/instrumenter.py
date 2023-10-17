@@ -62,12 +62,16 @@ class Instrumenter:
         name = node.spelling
         pre_file = self.filename(node.extent.start)
         offset = node.extent.start.offset
-        try:
-            self.database.insert_to_table(file, line, name)
-        except sqlite3.OperationalError:
-            # perhaps the insert was successful from another process?
-            pass
+        if create:
+            try:
+                self.database.insert_to_table(file, line, name)
+            except sqlite3.OperationalError:
+                # perhaps the insert was successful from another process?
+                pass
         num = self.database.get_number(file, name)
+        if num is None and not match_file:
+            # try without file
+            num = self.database.get_number(None, name)
         return num
 
     def add_annotation(self, annotation, location, add_offset=0):
@@ -88,12 +92,12 @@ class Instrumenter:
     def visit_signature(self, node):
         if not self.func_num(node, create=False, match_file=False):
             # the function is not (yet) instrumented
-            print("could not annotate signature for " + node.spelling, file=sys.stderr)
+            #print("could not annotate signature for " + node.spelling, file=sys.stderr)
             return
         semi_off = self.find_next_semi(node.extent.end)
         content = self.get_content(node.extent.start, node.extent.end, end_off=semi_off)
-        if b"..." in content:
-            # do not create _original for varargs
+        if b"__alias__" in content:
+            # do not create _original for references
             return
         name = bytes(node.spelling, "utf-8")
         try:
@@ -106,7 +110,8 @@ class Instrumenter:
                 cpp_linemarker = b""
         self.add_annotation(cpp_startmarker
                             + b"#undef " + name + b"\n"
-                            + content + b"\n"
+                            + b"__attribute__((unused))\n"
+                            + content + b";\n"
                             + b"#define " + name + b"(...) " + name + b"_original(__VA_ARGS__)\n"
                             + cpp_linemarker,
                             node.extent.start)
@@ -117,7 +122,7 @@ class Instrumenter:
             if child.kind == CursorKind.COMPOUND_STMT:
                 body = child
         if not body:
-            return
+            return self.visit_signature(node)
         if not self.check_location(body.extent.start, [b"{"]):
             print("Check location failed for function " + node.spelling, file=sys.stderr)
             return
@@ -126,90 +131,81 @@ class Instrumenter:
 
             signature = self.get_content(node.extent.start, body.extent.start)
 
-            if b'...' in signature:
-                # do not create _original for varargs
-                if self.anon_instrument:
-                    self.add_annotation(b" _FUNC(0) ", body.extent.start, 1)
-                else:
-                    func_num = self.func_num(node)
-                    self.add_annotation(b" _FUNC(" + bytes(hex(func_num), "utf-8") + b") ", body.extent.start, 1)
-
-            else:
-                try:
-                    (orig_fname, line) = self.orig_file_and_line(node.extent.start)
-                    cpp_startmarker = b"\n# " + bytes(str(line), "utf-8") + b' "' + bytes(orig_fname, "utf-8") + b'" 3 4\n'
-                    cpp_linemarker    = b"# " + bytes(str(line), "utf-8") + b' "' + bytes(orig_fname, "utf-8") + b'"\n'
-                except:
-                    orig_fname = ""
-                    cpp_startmarker = b'\n'
-                    cpp_linemarker = b""
-                try:
-                    (end_fname, line_end) = self.orig_file_and_line(node.extent.end)
-                    cpp_middle_marker = b"\n# " + bytes(str(line_end), "utf-8") + b' "' + bytes(end_fname, "utf-8") + b'" 3 4\n'
-                    cpp_line_end        = b"# " + bytes(str(line_end), "utf-8") + b' "' + bytes(end_fname, "utf-8") + b'"\n'
-                except:
-                    cpp_middle_marker = b'\n'
-                    cpp_line_end = b""
+            try:
+                (orig_fname, line) = self.orig_file_and_line(node.extent.start)
+                cpp_startmarker = b"\n# " + bytes(str(line), "utf-8") + b' "' + bytes(orig_fname, "utf-8") + b'" 3 4\n'
+                cpp_linemarker    = b"# " + bytes(str(line), "utf-8") + b' "' + bytes(orig_fname, "utf-8") + b'"\n'
+            except:
+                orig_fname = ""
+                cpp_startmarker = b'\n'
+                cpp_linemarker = b""
+            try:
+                (end_fname, line_end) = self.orig_file_and_line(node.extent.end)
+                cpp_middle_marker = b"\n# " + bytes(str(line_end), "utf-8") + b' "' + bytes(end_fname, "utf-8") + b'" 3 4\n'
+                cpp_line_end        = b"# " + bytes(str(line_end), "utf-8") + b' "' + bytes(end_fname, "utf-8") + b'"\n'
+            except:
+                cpp_middle_marker = b'\n'
+                cpp_line_end = b""
 
 
-                self.add_annotation(cpp_startmarker
-                                    + b"#undef " + name + b"\n"
-                                    + signature + b";\n"
-                                    + b"#define " + name + b"(...) " + name + b"_original(__VA_ARGS__)\n"
-                                    + cpp_linemarker,
-                                    node.extent.start)
+            self.add_annotation(cpp_startmarker
+                                + b"#undef " + name + b"\n"
+                                + signature + b";\n"
+                                + b"#define " + name + b"(...) " + name + b"_original(__VA_ARGS__)\n"
+                                + cpp_linemarker,
+                                node.extent.start)
 
-                token_end = None
-                for token in node.get_tokens():
-                    if token.cursor.kind == CursorKind.PARM_DECL:
-                        break
-                    if token.spelling == node.spelling and token.extent.end.offset <= body.extent.start.offset:
-                        token_end = token.extent.end
-                if token_end is not None:
-                    self.add_annotation(b"_original", token_end)
+            token_end = None
+            for token in node.get_tokens():
+                if token.cursor.kind == CursorKind.PARM_DECL:
+                    break
+                if token.spelling == node.spelling and token.extent.end.offset <= body.extent.start.offset:
+                    token_end = token.extent.end
+            if token_end is not None:
+                self.add_annotation(b"_original", token_end)
 
-                if self.anon_instrument:
-                    func_macro = b"_FUNC(0)"
-                else:
-                    func_num = self.func_num(node)
-                    func_macro = b"_FUNC(" + bytes(hex(func_num), "utf-8") + b")"
+            call_function = b'''asm(
+                "movb   %dl,%ah \\n"
+                "movq   _trace_ptr(%rip),%r11 \\n"
+                "movzwq %r12w,%r12 \\n"
+                "movb   _trace_ie_byte(%rip),%dl \\n"
+                "cmpb   $0xfe,%dl \\n"
+                "je     1f \\n"
+                "movb   %dl,(%r11,%r12,1) \\n"
+                "movb   $0xfe,_trace_ie_byte(%rip) \\n"
+                "incw   %r12w \\n"
+                "1: \\n"
+                "movb   $0x41,(%r11,%r12,1) \\n"
+                "incw   %r12w \\n"
+                "movb   %ah,%dl \\n"
+                "jmp    ''' + name + b'_original")'
 
-                call_function = name + b"_original("
-                has_params = False
-                for child in node.get_children():
-                    if child.kind == CursorKind.PARM_DECL:
-                        has_params = True
-                        call_function += bytes(child.spelling, "utf-8") + b", "
-                if has_params:
-                    call_function = call_function[:-2]
-                call_function += b")"
+            # hack to tell the compiler we referenced name_original
+            call_function2 = b'_trace_reference_trash = ' + name + b'_original';
 
-                # special treatment for main function
-                main_addition = b""
-                if self.main_instrument and node.spelling == "main":
-                    # print('Log trace to ' + self.trace_store_dir)
-                    trace_fname = "%F-%H%M%S-%%lx-" + os.path.basename(orig_fname) + ".trace"
-                    trace_path = os.path.join(os.path.abspath(self.trace_store_dir), trace_fname)
-                    main_addition = b'\n    _TRACE_OPEN("' + bytes(trace_path, "utf8") + b'")\n    '
+            # special treatment for main function
+            main_addition = b""
+            if self.main_instrument and node.spelling == "main":
+                # print('Log trace to ' + self.trace_store_dir)
+                trace_fname = "%F-%H%M%S-%%lx-" + os.path.basename(orig_fname) + ".trace"
+                trace_path = os.path.join(os.path.abspath(self.trace_store_dir), trace_fname)
+                main_addition = b'\n    _TRACE_OPEN("' + bytes(trace_path, "utf8") + b'")\n    '
 
-                    if not self.function_instrument:
-                        # well, we need something to start...
-                        main_addition += b" _FUNC(0) "
+                if not self.function_instrument:
+                    # well, we need something to start...
+                    main_addition += b" _FUNC(0) "
 
+            new_function = cpp_middle_marker \
+                        + b"#undef " + name + b"\n" \
+                        + b"__attribute__((naked,unused))\n" \
+                        + signature + b"{ " + b"\n" \
+                        + b"#define " + name + b"(...) " + name + b"_original(__VA_ARGS__)\n" \
+                        + b"    " + call_function + b";\n" \
+                        + b"    " + call_function2 + b";\n" \
+                        + b"}\n" \
+                        + cpp_line_end
 
-                mby_return = b""
-                if node.type.get_result().kind != TypeKind.VOID:
-                    mby_return = b"return "
-
-                new_function = cpp_middle_marker \
-                            + b"#undef " + name + b"\n" \
-                            + signature + b"{ " + main_addition + func_macro + b"\n" \
-                            + b"#define " + name + b"(...) " + name + b"_original(__VA_ARGS__)\n" \
-                            + b"    " + mby_return + call_function + b";\n" \
-                            + b"}\n" \
-                            + cpp_line_end
-
-                self.add_annotation(new_function, node.extent.end)
+            self.add_annotation(new_function, node.extent.end)
 
         # handle returns
         #if self.return_instrument:

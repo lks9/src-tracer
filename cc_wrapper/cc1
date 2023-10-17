@@ -96,9 +96,12 @@ if [ "$1" = "-E" ]; then
 
         # rerun preprocessor to resolve instrumentation macros (you could add -DBYTE_TRACE)
         cpp ${SRC_TRACER}  "${outfile}.tmp.c" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/include/"
+        sed "s|^#[^$]*||g" -i "${outfile}.tmp.i"
         cp "${outfile}.tmp.i" "${outfile}"
+        #echo "${outfile}"
     fi
 elif [ "$1" = "-fpreprocessed" ]; then
     # just compile it
+    #echo $(${COLLECT_GCC} --print-prog-name=cc1) $@
     exec $(${COLLECT_GCC} --print-prog-name=cc1) $@
 fi

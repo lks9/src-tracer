@@ -25,22 +25,17 @@ static char trace_fname[200];
 static unsigned char dummy[65536];
 
 struct _trace_ctx _trace = {
-    .ptr = dummy,
     ._page_ptr = dummy,
-    .pos = 0,
-    .ie_byte = _TRACE_IE_BYTE_INIT,
     .fork_count = 0,
     .try_count = 0,
 };
+unsigned char *_trace_ptr = dummy;
+unsigned char _trace_ie_byte = _TRACE_IE_BYTE_INIT;
+void *volatile _trace_reference_trash;
 
-static struct _trace_ctx temp_trace = {
-    .ptr = dummy,
-    ._page_ptr = dummy,
-    .pos = 0,
-    .ie_byte = _TRACE_IE_BYTE_INIT,
-    .fork_count = 0,
-    .try_count = 0,
-};
+static unsigned char *temp_trace_ptr = dummy;
+static unsigned short temp_trace_pos;
+static unsigned char temp_trace_ie_byte = _TRACE_IE_BYTE_INIT;
 
 extern char **__environ;
 
@@ -87,12 +82,12 @@ static void create_trace_process(void) {
 }
 
 void _trace_open(const char *fname) {
-    if (_trace.ptr != dummy) {
+    if (_trace_ptr != dummy) {
         // already opened
         return;
     }
     // just to be sure
-    temp_trace.ptr = dummy;
+    temp_trace_ptr = dummy;
     // Make the file name time dependent
     char timed_fname[160];
     struct timespec now;
@@ -107,47 +102,47 @@ void _trace_open(const char *fname) {
 
     atexit(_trace_close);
 
-    // now the tracing can start (guarded by _trace.ptr != dummy)
-    _trace.ptr = _trace._page_ptr;
-    _trace.pos = 0;
-    _trace.ie_byte = _TRACE_IE_BYTE_INIT;
+    // now the tracing can start (guarded by _trace_ptr != dummy)
+    _trace_ptr = _trace._page_ptr;
+    _trace_pos = 0;
+    _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 }
 
 void _trace_before_fork(void) {
-    if (_trace.ptr == dummy) {
+    if (_trace_ptr == dummy) {
         // tracing has already been aborted!
         return;
     }
     _trace.fork_count += 1;
     _TRACE_NUM(_trace.fork_count);
 
-    temp_trace.ptr = _trace.ptr;
-    temp_trace.pos = _trace.pos;
-    temp_trace.ie_byte = _trace.ie_byte;
+    temp_trace_ptr = _trace_ptr;
+    temp_trace_pos = _trace_pos;
+    temp_trace_ie_byte = _trace_ie_byte;
 
     // stop tracing
-    _trace.ptr = dummy;
+    _trace_ptr = dummy;
 }
 
 int _trace_after_fork(int pid) {
-    if (temp_trace.ptr == dummy) {
+    if (temp_trace_ptr == dummy) {
         // tracing has already been aborted!
         return pid;
     }
     // just to be sure
-    _trace.ptr = dummy;
+    _trace_ptr = dummy;
     if (pid != 0) {
         // we are in the parent
         // resume tracing
-        _trace.ptr = temp_trace.ptr;
-        _trace.pos = temp_trace.pos;
-        _trace.ie_byte = temp_trace.ie_byte;
+        _trace_ptr = temp_trace_ptr;
+        _trace_pos = temp_trace_pos;
+        _trace_ie_byte = temp_trace_ie_byte;
 
         _TRACE_NUM(pid < 0 ? -1 : 1);
         return pid;
     }
     // we are in a fork
-    temp_trace.ptr = dummy;
+    temp_trace_ptr = dummy;
     char fname_suffix[20];
     snprintf(fname_suffix, 20, "-fork-%d.trace", _trace.fork_count);
     strncat(trace_fname, fname_suffix, 20);
@@ -157,28 +152,28 @@ int _trace_after_fork(int pid) {
     munmap(_trace._page_ptr, 65536);
     create_trace_process();
 
-    // now the tracing can start (guarded by _trace.ptr != dummy)
-    _trace.ptr = _trace._page_ptr;
-    _trace.pos = 0;
-    _trace.ie_byte = _TRACE_IE_BYTE_INIT;
+    // now the tracing can start (guarded by _trace_ptr != dummy)
+    _trace_ptr = _trace._page_ptr;
+    _trace_pos = 0;
+    _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 
     _TRACE_NUM(pid);
     return pid;
 }
 
 void _trace_close(void) {
-    if (_trace.ptr == dummy) {
+    if (_trace_ptr == dummy) {
         // already closed, paused or never successfully opened
         return;
     }
-    temp_trace.ptr = dummy;
+    temp_trace_ptr = dummy;
     _TRACE_END();
 #ifdef _TRACE_USE_PTHREAD
     // FIXME
     pthread_join(thread_id, NULL);
 #endif
     // stop tracing
-    _trace.ptr = dummy;
+    _trace_ptr = dummy;
     _trace._page_ptr = dummy;
 }
 

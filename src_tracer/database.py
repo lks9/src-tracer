@@ -60,12 +60,21 @@ class Database:
 
     def get_number(self, file, name):
         cursor = self.connection.cursor()
-        func_num = cursor.execute('''
-                                  SELECT rowid
-                                  FROM function_list
-                                  WHERE file=? and name=?
-                                  ''', (file, name)).fetchone()
+        if file is None:
+            func_num = cursor.execute('''
+                                    SELECT rowid
+                                    FROM function_list
+                                    WHERE name=?
+                                    ''', (name,)).fetchone()
+        else:
+            func_num = cursor.execute('''
+                                    SELECT rowid
+                                    FROM function_list
+                                    WHERE file=? and name=?
+                                    ''', (file, name)).fetchone()
         cursor.close()
+        if func_num == None:
+            return None
         return func_num[0]
 
     def close_connection(self):
