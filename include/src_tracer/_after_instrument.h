@@ -385,7 +385,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _SWITCH(num)        _is_retrace_switch(num)
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
-#define _CASE(num, id)      ;if (_cflow_switch_##id) { \
+#define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
                                 _IS_RETRACE(_RETRACE_NUM(num), _TRACE_NUM(num)) \
                                 _cflow_switch_##id = 0; \
                             };
@@ -411,7 +411,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _SWITCH(num)        _trace_num(num)
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
-#define _CASE(num, id)      ;if (_cflow_switch_##id) { \
+#define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
                                 _TRACE_NUM(num) \
                                 _cflow_switch_##id = 0; \
                             };
@@ -440,7 +440,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _SWITCH(num)        _trace_num_text('D', ((unsigned int)(num)))
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
-#define _CASE(num, id)      ;if (_cflow_switch_##id) { \
+#define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
                                 _TRACE_NUM_TEXT('D', ((unsigned int)(num))); \
                                 _cflow_switch_##id = 0; \
                             };
@@ -466,7 +466,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _SWITCH(num)        _retrace_num(num)
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
-#define _CASE(num, id)      ;if (_cflow_switch_##id) { \
+#define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
                                 _RETRACE_NUM(num) \
                                 _cflow_switch_##id = 0; \
                             };
@@ -492,7 +492,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _FUNC_RETURN        /* nothing here */
 #define _SWITCH(num)        num
 #define _SWITCH_START(id)   /* nothing here */
-#define _CASE(num, id)      /* nothing here */
+#define _CASE(num, id, cnt) /* nothing here */
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      /* nothing here */
 #define _LOOP_END(id)       /* nothing here */
