@@ -116,6 +116,11 @@ extern int _trace_after_fork(int pid);
         _TRACE_ELSE(); \
     }
 
+#define _TRACE_SWITCH_CASE(num, bit_cnt) { \
+    for (int i = 0; i < bit_cnt; i++) { \
+        _TRACE_IE(num & (1 << i)); \
+    } \
+}
 #else
 
 // will get optimized as rotate instruction
@@ -146,6 +151,18 @@ extern int _trace_after_fork(int pid);
         _TRACE_PUT(_trace.ie_byte); \
         _trace.ie_byte = _TRACE_IE_BYTE_INIT; \
     }
+
+#define _TRACE_SWITCH_CASE(num, bit_cnt) { \
+    _TRACE_IE_FINISH \
+    int bit_cnt_left = bit_cnt; \
+    int num_left = num; \
+    while (bit_cnt_left >= 6) { \
+        _TRACE_PUT((num_left & 0b00111111) | 0b10000000); \
+        bit_cnt_left -= 6; \
+        num_left >>= 6; \
+    } \
+    _trace.ie_byte = (num_left & 0b00111111) - (2 << bit_cnt_left); \
+}
 
 #endif // BYTE_TRACE
 
@@ -355,7 +372,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _SWITCH(num)        _is_retrace_switch(num)
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
-#define _CASE(num, id)      ;if (_cflow_switch_##id) { \
+#define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
                                 _IS_RETRACE(_RETRACE_NUM(num), _TRACE_NUM(num)) \
                                 _cflow_switch_##id = 0; \
                             };
@@ -381,8 +398,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _SWITCH(num)        _trace_num(num)
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
-#define _CASE(num, id)      ;if (_cflow_switch_##id) { \
-                                _TRACE_NUM(num) \
+#define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
+                                _TRACE_SWITCH_CASE(num, cnt) \
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
@@ -410,7 +427,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _SWITCH(num)        _trace_num_text('D', ((unsigned int)(num)))
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
-#define _CASE(num, id)      ;if (_cflow_switch_##id) { \
+#define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
                                 _TRACE_NUM_TEXT('D', ((unsigned int)(num))); \
                                 _cflow_switch_##id = 0; \
                             };
@@ -436,7 +453,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _SWITCH(num)        _retrace_num(num)
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
-#define _CASE(num, id)      ;if (_cflow_switch_##id) { \
+#define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
                                 _RETRACE_NUM(num) \
                                 _cflow_switch_##id = 0; \
                             };
@@ -462,7 +479,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _FUNC_RETURN        /* nothing here */
 #define _SWITCH(num)        num
 #define _SWITCH_START(id)   /* nothing here */
-#define _CASE(num, id)      /* nothing here */
+#define _CASE(num, id, cnt) /* nothing here */
 #define _LOOP_START(id)     /* nothing here */
 #define _LOOP_BODY(id)      /* nothing here */
 #define _LOOP_END(id)       /* nothing here */

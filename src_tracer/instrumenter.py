@@ -328,23 +328,24 @@ class Instrumenter:
 #            if (descendant.kind in (CursorKind.RETURN_STMT, CursorKind.GOTO_STMT)):
 #                self.add_annotation(b"_LOOP_END(" + loop_id + b") ", descendant.extent.start)
 
-    def traverse_switch(self, node, switch_id):
-        if node.kind in (CursorKind.CASE_STMT, CursorKind.DEFAULT_STMT):
-            case_id = bytes(hex(self.switch_case_count), "utf-8")
-            if node.kind == CursorKind.CASE_STMT:
-                number_end = [c for c in node.get_children()][0].extent.end
-            else:
-                number_end = node.extent.start
-            try:
-                colon_off = self.find_next_colon(number_end)
-                self.add_annotation(b" _CASE(" + case_id + b", " + switch_id + b") ", number_end, colon_off+1)
-            except IndexError:
-                print(b"Failed to annotate _CASE(" + case_id + b", " + switch_id + b") ")
-            self.switch_case_count += 1
+    def visit_case(self, node, switch_id, case_id, bits_needed):
+        if node.kind == CursorKind.CASE_STMT:
+            number_end = [c for c in node.get_children()][0].extent.end
+        else:
+            number_end = node.extent.start
+        try:
+            colon_off = self.find_next_colon(number_end)
+            self.add_annotation(b" _CASE(" + case_id + b", " + switch_id + b", " + bits_needed + b") ",
+                                number_end, colon_off+1)
+        except IndexError:
+            print(b"Failed to annotate _CASE(" + case_id + b", " + switch_id + b", " + bits_needed + b") ")
 
+    def accumulate_cases(self, node, case_node_list):
+        if node.kind in (CursorKind.CASE_STMT, CursorKind.DEFAULT_STMT):
+            case_node_list.append(node)
         for child in node.get_children():
             if (child.kind != CursorKind.SWITCH_STMT):
-                self.traverse_switch(child, switch_id)
+                self.accumulate_cases(child, case_node_list)
 
     def visit_switch(self, node):
         self.switchis.append(node)
@@ -357,8 +358,14 @@ class Instrumenter:
             # experimental
             switch_id = bytes(hex(len(self.switchis) - 1), "utf-8")
             self.add_annotation(b" _SWITCH_START(" + switch_id + b") ", node.extent.start)
-            self.switch_case_count = 0
-            self.traverse_switch(node, switch_id)
+            case_node_list = []
+            self.accumulate_cases(node, case_node_list)
+            case_count = len(case_node_list)
+            bits_needed = bytes(hex(int.bit_length(case_count-1)), "utf-8")
+            for case_index in range(case_count):
+                case_node = case_node_list[case_index]
+                case_id = bytes(hex(case_index), "utf-8")
+                self.visit_case(case_node, switch_id, case_id, bits_needed)
         else:
             # simpler, default
             switch_num = children[0]
