@@ -20,7 +20,9 @@ extern "C" {
 
 // bool is available in C++ but not in C without (see above) include stdbool
 #ifndef __cplusplus
+#ifndef BOOL_ALREADY_DEFINED
 #define bool _Bool
+#endif
 #endif
 
 struct _trace_ctx {
