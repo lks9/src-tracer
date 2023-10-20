@@ -126,27 +126,37 @@ class Instrumenter:
         if not self.check_location(body.extent.start, [b"{"]):
             print("Check location failed for function " + node.spelling, file=sys.stderr)
             return
-        if self.function_instrument:
+
+        # special treatment for main function
+        if self.main_instrument and node.spelling == "main":
+            if True:
+                # well, we need something to start...
+                self.add_annotation(b" _FUNC(0) ", body.extent.start, 1)
+
+            # print('Log trace to ' + self.trace_store_dir)
+            try:
+                (orig_fname, _) = self.orig_file_and_line(node.extent.start)
+            except:
+                orig_fname = ""
+            trace_fname = "%F-%H%M%S-%%lx-" + os.path.basename(orig_fname) + ".trace"
+            trace_path = os.path.join(os.path.abspath(self.trace_store_dir), trace_fname)
+            self.prepent_annotation(b' _TRACE_OPEN("' + bytes(trace_path, "utf8") + b'") ', body.extent.start, 1)
+
+            self.add_annotation(b'''
+                extern __typeof(main) main_original __attribute__((__weak__, __alias__("main")));
+            ''', node.extent.end)
+
+        elif self.function_instrument:
+            # any function but main
             name = bytes(node.spelling, "utf-8")
 
             signature = self.get_content(node.extent.start, body.extent.start)
 
-            try:
-                (orig_fname, line) = self.orig_file_and_line(node.extent.start)
-                cpp_startmarker = b"\n# " + bytes(str(line), "utf-8") + b' "' + bytes(orig_fname, "utf-8") + b'" 3 4\n'
-                cpp_linemarker    = b"# " + bytes(str(line), "utf-8") + b' "' + bytes(orig_fname, "utf-8") + b'"\n'
-            except:
-                orig_fname = ""
-                cpp_startmarker = b'\n'
-                cpp_linemarker = b""
-            try:
-                (end_fname, line_end) = self.orig_file_and_line(node.extent.end)
-                cpp_middle_marker = b"\n# " + bytes(str(line_end), "utf-8") + b' "' + bytes(end_fname, "utf-8") + b'" 3 4\n'
-                cpp_line_end        = b"# " + bytes(str(line_end), "utf-8") + b' "' + bytes(end_fname, "utf-8") + b'"\n'
-            except:
-                cpp_middle_marker = b'\n'
-                cpp_line_end = b""
-
+            orig_fname = ""
+            cpp_startmarker = b'\n'
+            cpp_linemarker = b""
+            cpp_middle_marker = b'\n'
+            cpp_line_end = b""
 
             self.add_annotation(cpp_startmarker
                                 + b"#undef " + name + b"\n"
@@ -164,36 +174,27 @@ class Instrumenter:
             if token_end is not None:
                 self.add_annotation(b"_original", token_end)
 
-            call_function = b'''asm(
-                "movb   %dl,%ah \\n"
-                "movq   _trace_ptr(%rip),%r11 \\n"
-                "movzwq %r12w,%r12 \\n"
-                "movb   _trace_ie_byte(%rip),%dl \\n"
-                "cmpb   $0xfe,%dl \\n"
+            call_function = b'''asm volatile (
+                "movb   %%dl,%%ah \\n"
+                "movq   _trace_ptr(%%rip),%%r11 \\n"
+                "movzwq %%r12w,%%r12 \\n"
+                "movb   _trace_ie_byte(%%rip),%%dl \\n"
+                "cmpb   $0xfe,%%dl \\n"
                 "je     1f \\n"
-                "movb   %dl,(%r11,%r12,1) \\n"
-                "movb   $0xfe,_trace_ie_byte(%rip) \\n"
-                "incw   %r12w \\n"
+                "movb   %%dl,(%%r11,%%r12,1) \\n"
+                "movb   $0xfe,_trace_ie_byte(%%rip) \\n"
+                "incw   %%r12w \\n"
                 "1: \\n"
-                "movb   $0x41,(%r11,%r12,1) \\n"
-                "incw   %r12w \\n"
-                "movb   %ah,%dl \\n"
-                "jmp    ''' + name + b'_original")'
+                "movb   $0b01000001,(%%r11,%%r12,1) \\n"
+                "incw   %%r12w \\n"
+                "movb   %%ah,%%dl \\n"
+                "jmp    ''' + name + b'''_original"
+                : /* outputs */
+                : /* inputs */
+                : /* clobbers */ "ah", "r11", "r12", "memory")'''
 
             # hack to tell the compiler we referenced name_original
             call_function2 = b'_trace_reference_trash = ' + name + b'_original';
-
-            # special treatment for main function
-            main_addition = b""
-            if self.main_instrument and node.spelling == "main":
-                # print('Log trace to ' + self.trace_store_dir)
-                trace_fname = "%F-%H%M%S-%%lx-" + os.path.basename(orig_fname) + ".trace"
-                trace_path = os.path.join(os.path.abspath(self.trace_store_dir), trace_fname)
-                main_addition = b'\n    _TRACE_OPEN("' + bytes(trace_path, "utf8") + b'")\n    '
-
-                if not self.function_instrument:
-                    # well, we need something to start...
-                    main_addition += b" _FUNC(0) "
 
             new_function = cpp_middle_marker \
                         + b"#undef " + name + b"\n" \
@@ -446,7 +447,7 @@ class Instrumenter:
 
         if self.case_instrument:
             # experimental
-            switch_id = bytes(hex(len(self.switchis) - 1), "utf-8")
+            switch_id = bytes("s" + hex(len(self.switchis) - 1)[2:], "utf-8")
             self.add_annotation(b" _SWITCH_START(" + switch_id + b") ", node.extent.start)
             case_node_list = []
             self.accumulate_cases(node, case_node_list)
