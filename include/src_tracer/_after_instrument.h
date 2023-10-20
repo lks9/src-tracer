@@ -164,7 +164,7 @@ extern int _trace_after_fork(int pid);
         bit_cnt_left -= 6; \
         num_left >>= 6; \
     } \
-    _trace.ie_byte = (num_left & 0b00111111) - (2 << bit_cnt_left); \
+    _trace_ie_byte = (num_left & 0b00111111) - (2 << bit_cnt_left); \
 }
 
 #endif // BYTE_TRACE
