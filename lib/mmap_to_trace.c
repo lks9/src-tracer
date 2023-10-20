@@ -60,6 +60,7 @@ static void my_exit(void) {
 
 // side effect free fork version
 // without calling atfork etc.
+__attribute__((returns_twice))
 pid_t my_fork(void) {
     return (pid_t)__syscall0(SYS_fork);
 }

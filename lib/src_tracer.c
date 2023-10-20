@@ -42,7 +42,9 @@ extern void *forked_write(char *);
 static pthread_t thread_id;
 #endif
 
-extern pid_t my_fork(void);
+extern
+__attribute__((returns_twice))
+pid_t my_fork(void);
 
 static void create_trace_process(void) {
     // reserve memory for the trace buffer
