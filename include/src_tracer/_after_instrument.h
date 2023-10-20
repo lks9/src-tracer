@@ -28,7 +28,7 @@ extern "C" {
 
 // bool is available in C++ but not in C without (see above) include stdbool
 #ifndef __cplusplus
-#ifndef BOOL_ALREADY_DEFINED
+#ifndef bool
 #define bool _Bool
 #endif
 #endif
@@ -432,6 +432,10 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _GHOST(code)        /* nothing here */
 
 #endif // _TRACE_MODE or _RETRACE_MODE
+
+#ifdef BOOL_ALREADY_DEFINED
+#undef bool
+#endif
 
 #ifdef __cplusplus
 } // end extern "C"
