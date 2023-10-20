@@ -198,7 +198,7 @@ class Instrumenter:
 
             new_function = cpp_middle_marker \
                         + b"#undef " + name + b"\n" \
-                        + b"__attribute__((naked,unused))\n" \
+                        + b"__attribute__((naked,unused,noipa))\n" \
                         + signature + b"{ " + b"\n" \
                         + b"#define " + name + b"(...) " + name + b"_original(__VA_ARGS__)\n" \
                         + b"    " + call_function + b";\n" \
