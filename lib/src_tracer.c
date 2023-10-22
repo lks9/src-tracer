@@ -31,7 +31,7 @@ union _trace_ptr_pos _trace_ptr_pos = { .ptr = dummy };
 #define _trace_ptr ((void*)(_trace_ptr_pos.ptr_l & ~0xffffl))
 unsigned char _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 
-static void __attribute__((aligned(65536))) *aligned_ptr = dummy;
+void __attribute__((aligned(65536))) *_trace_aligned_ptr = dummy;
 static void *unaligned_ptr;
 
 static union _trace_ptr_pos temp_trace_ptr_pos = { .ptr = dummy };
@@ -57,7 +57,7 @@ static void create_trace_process(void) {
         return;
     }
     /* 65536 aligned ptr */
-    aligned_ptr = (void *)(((unsigned long)unaligned_ptr + 65536l) & ~65535l);
+    _trace_aligned_ptr = (void *)(((unsigned long)unaligned_ptr + 65536l) & ~65535l);
 
 #ifdef _TRACE_USE_PTHREAD
     pthread_create(&thread_id, NULL, &forked_write, trace_fname);
@@ -107,7 +107,7 @@ void _trace_open(const char *fname) {
     atexit(_trace_close);
 
     // now the tracing can start (guarded by _trace_ptr != dummy)
-    _trace_ptr_pos.ptr = aligned_ptr;
+    _trace_ptr_pos.ptr = _trace_aligned_ptr;
     _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 }
 
@@ -154,7 +154,7 @@ int _trace_after_fork(int pid) {
     create_trace_process();
 
     // now the tracing can start (guarded by _trace_ptr != dummy)
-    _trace_ptr_pos.ptr = aligned_ptr;
+    _trace_ptr_pos.ptr = _trace_aligned_ptr;
     _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 
     _TRACE_NUM(pid);
@@ -175,7 +175,7 @@ void _trace_close(void) {
     // stop tracing
     munmap(unaligned_ptr, 2*65536);
     _trace_ptr_pos.ptr = dummy;
-    aligned_ptr = dummy;
+    _trace_aligned_ptr = dummy;
 }
 
 __attribute((used))
