@@ -21,20 +21,22 @@
 
 static char trace_fname[200];
 
-static unsigned char dummy[65536];
+static unsigned char dummy[65536] __attribute__((aligned(65536)));
 
 struct _trace_ctx _trace = {
-    ._page_ptr = dummy,
     .fork_count = 0,
     .try_count = 0,
 };
-unsigned char *_trace_ptr = dummy;
+union _trace_ptr_pos _trace_ptr_pos = { .ptr = dummy };
+#define _trace_ptr ((void*)(_trace_ptr_pos.ptr_l & ~0xffffl))
 unsigned char _trace_ie_byte = _TRACE_IE_BYTE_INIT;
-unsigned short _trace_pos = 0;
 void (*volatile _trace_reference_trash)(void);
 
-static unsigned char *temp_trace_ptr = dummy;
-static unsigned short temp_trace_pos;
+static void __attribute__((aligned(65536))) *aligned_ptr = dummy;
+static void *unaligned_ptr;
+
+static union _trace_ptr_pos temp_trace_ptr_pos = { .ptr = dummy };
+#define temp_trace_ptr ((void*)(temp_trace_ptr_pos.ptr_l & ~0xffffl))
 static unsigned char temp_trace_ie_byte = _TRACE_IE_BYTE_INIT;
 
 extern char **__environ;
@@ -50,12 +52,13 @@ pid_t my_fork(void);
 
 static void create_trace_process(void) {
     // reserve memory for the trace buffer
-    _trace._page_ptr = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (_trace._page_ptr == MAP_FAILED) {
-        _trace._page_ptr = dummy;
+    void *unaligned_ptr = mmap(NULL, 2*65536, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (unaligned_ptr == MAP_FAILED) {
         perror("mmap");
         return;
     }
+    /* 65536 aligned ptr */
+    aligned_ptr = (void *)(((unsigned long)unaligned_ptr + 65536l) & ~65535l);
 
 #ifdef _TRACE_USE_PTHREAD
     pthread_create(&thread_id, NULL, &forked_write, trace_fname);
@@ -89,7 +92,7 @@ void _trace_open(const char *fname) {
         return;
     }
     // just to be sure
-    temp_trace_ptr = dummy;
+    temp_trace_ptr_pos.ptr = dummy;
     // Make the file name time dependent
     char timed_fname[160];
     struct timespec now;
@@ -105,8 +108,7 @@ void _trace_open(const char *fname) {
     atexit(_trace_close);
 
     // now the tracing can start (guarded by _trace_ptr != dummy)
-    _trace_ptr = _trace._page_ptr;
-    _trace_pos = 0;
+    _trace_ptr_pos.ptr = aligned_ptr;
     _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 }
 
@@ -118,12 +120,11 @@ void _trace_before_fork(void) {
     _trace.fork_count += 1;
     _TRACE_NUM(_trace.fork_count);
 
-    temp_trace_ptr = _trace_ptr;
-    temp_trace_pos = _trace_pos;
+    temp_trace_ptr_pos = _trace_ptr_pos;
     temp_trace_ie_byte = _trace_ie_byte;
 
     // stop tracing
-    _trace_ptr = dummy;
+    _trace_ptr_pos.ptr = dummy;
 }
 
 int _trace_after_fork(int pid) {
@@ -132,31 +133,29 @@ int _trace_after_fork(int pid) {
         return pid;
     }
     // just to be sure
-    _trace_ptr = dummy;
+    _trace_ptr_pos.ptr = dummy;
     if (pid != 0) {
         // we are in the parent
         // resume tracing
-        _trace_ptr = temp_trace_ptr;
-        _trace_pos = temp_trace_pos;
+        _trace_ptr_pos = temp_trace_ptr_pos;
         _trace_ie_byte = temp_trace_ie_byte;
 
         _TRACE_NUM(pid < 0 ? -1 : 1);
         return pid;
     }
     // we are in a fork
-    temp_trace_ptr = dummy;
+    temp_trace_ptr_pos.ptr = dummy;
     char fname_suffix[20];
     snprintf(fname_suffix, 20, "-fork-%d.trace", _trace.fork_count);
     strncat(trace_fname, fname_suffix, 20);
     //printf("Trace to: %s\n", trace_fname);
 
     // reserve memory for the trace buffer
-    munmap(_trace._page_ptr, 65536);
+    munmap(unaligned_ptr, 2*65536);
     create_trace_process();
 
     // now the tracing can start (guarded by _trace_ptr != dummy)
-    _trace_ptr = _trace._page_ptr;
-    _trace_pos = 0;
+    _trace_ptr_pos.ptr = aligned_ptr;
     _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 
     _TRACE_NUM(pid);
@@ -168,15 +167,16 @@ void _trace_close(void) {
         // already closed, paused or never successfully opened
         return;
     }
-    temp_trace_ptr = dummy;
+    temp_trace_ptr_pos.ptr = dummy;
     _TRACE_END();
 #ifdef _TRACE_USE_PTHREAD
     // FIXME
     pthread_join(thread_id, NULL);
 #endif
     // stop tracing
-    _trace_ptr = dummy;
-    _trace._page_ptr = dummy;
+    munmap(unaligned_ptr, 2*65536);
+    _trace_ptr_pos.ptr = dummy;
+    aligned_ptr = dummy;
 }
 
 __attribute((used))

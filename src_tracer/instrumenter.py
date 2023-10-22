@@ -121,7 +121,7 @@ class Instrumenter:
 
         def trace_put(c):
             nonlocal res
-            res += b'    asm("movb   $' + bytes(hex(c), "utf-8") + b', (%r11,%rax,1)");\n'
+            res += b'    asm("movb   $' + bytes(hex(c), "utf-8") + b', (%rax)");\n'
             res += b'    asm("incw   %ax");\n'
 
         if num == 0:
@@ -227,26 +227,26 @@ class Instrumenter:
             function_body = b'''
     /* save registers */
 ''' + save_regs + b'''
-    /* prepare r11 as _trace_ptr and rax as _trace_pos */
-    asm("movq   _trace_ptr(%rip), %r11");
-    asm("movzwl _trace_pos(%rip), %eax");
+    /* prepare rax as _trace_ptr + _trace_pos */
+    asm("movq   _trace_ptr_pos(%rip), %rax");
 
     /* trace ie byte if needed */
     asm("mov    $0xfe, %r10b");
-    asm("cmpb   %r10b, _trace_ie_byte(%rip)");
+    asm("lea    _trace_ie_byte(%rip), %r11");
+    asm("cmpb   %r10b, (%r11)");
     asm("je     1f");
 
-    /* write the current ie byte to the trace */
-    asm("xchgb  _trace_ie_byte(%rip), %r10b");
-    asm("movb   %r10b, (%r11,%rax,1)");
     /* initialize the new ie byte */
+    asm("xchgb  (%r11), %r10b");
+    /* write the current ie byte to the trace */
+    asm("movb   %r10b, (%rax)");
     asm("incw   %ax");
 
 asm("1:");
     /* trace function number */
 ''' + self.func_num_instructions(func_num) + b'''
     /* write new pos */
-    asm("movw   %ax, _trace_pos(%rip)");
+    asm("movq   %rax, _trace_ptr_pos(%rip)");
     /* restore registers */
 ''' + rest_regs + b'''
     /* tail-call */
