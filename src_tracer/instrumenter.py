@@ -116,6 +116,38 @@ class Instrumenter:
                             + cpp_linemarker,
                             node.extent.start)
 
+    def func_num_instructions(self, num):
+        res = b''
+
+        def trace_put(c):
+            nonlocal res
+            res += b'    asm("movb   $' + bytes(hex(c), "utf-8") + b', (%r11,%rax,1)");\n'
+            res += b'    asm("incw   %ax");\n'
+
+        if num == 0:
+            trace_put(0b01000001)
+        elif num == num & 0xf:
+            trace_put(0b00000000 | ((num >> 0) & 0xf))
+        elif num == num & 0xfff:
+            trace_put(0b00010000 | ((num >> 8) & 0xf))
+            trace_put((num >> 0) & 0xff)
+        elif num == num & 0xfffff:
+            trace_put(0b00100000 | ((num >> 16) & 0xf))
+            trace_put((num >> 8) & 0xff)
+            trace_put((num >> 0) & 0xff)
+        elif num == num & 0xfffffff:
+            trace_put(0b01100000 | ((num >> 24) & 0xf))
+            trace_put((num >> 16) & 0xff)
+            trace_put((num >> 8) & 0xff)
+            trace_put((num >> 0) & 0xff)
+        else:
+            trace_put(0b01110000)
+            trace_put((num >> 24) & 0xff)
+            trace_put((num >> 16) & 0xff)
+            trace_put((num >> 8) & 0xff)
+            trace_put((num >> 0) & 0xff)
+        return res
+
     def visit_function(self, node):
         body = None
         for child in node.get_children():
@@ -129,9 +161,14 @@ class Instrumenter:
 
         # special treatment for main function
         if self.main_instrument and node.spelling == "main":
-            if True:
+
+            if self.anon_instrument or not self.function_instrument:
                 # well, we need something to start...
-                self.add_annotation(b" _FUNC(0) ", body.extent.start, 1)
+                func_num_bytes = b'0'
+            else:
+                func_num = self.func_num(node)
+                func_num_bytes = bytes(hex(func_num), "utf-8")
+            self.add_annotation(b" _FUNC(" + func_num_bytes + b") ", body.extent.start, 1)
 
             # print('Log trace to ' + self.trace_store_dir)
             try:
@@ -174,36 +211,59 @@ class Instrumenter:
             if token_end is not None:
                 self.add_annotation(b"_original", token_end)
 
-            call_function = b'''asm volatile (
-                "movb   %%dl,%%ah \\n"
-                "movq   _trace_ptr(%%rip),%%r11 \\n"
-                "movzwq %%r12w,%%r12 \\n"
-                "movb   _trace_ie_byte(%%rip),%%dl \\n"
-                "cmpb   $0xfe,%%dl \\n"
-                "je     1f \\n"
-                "movb   %%dl,(%%r11,%%r12,1) \\n"
-                "movb   $0xfe,_trace_ie_byte(%%rip) \\n"
-                "incw   %%r12w \\n"
-                "1: \\n"
-                "movb   $0b01000001,(%%r11,%%r12,1) \\n"
-                "incw   %%r12w \\n"
-                "movb   %%ah,%%dl \\n"
-                "jmp    ''' + name + b'''_original"
-                : /* outputs */
-                : /* inputs */
-                : /* clobbers */ "ah", "r11", "r12", "memory")'''
+            if self.anon_instrument:
+                func_num = 0
+            else:
+                func_num = self.func_num(node)
 
-            # hack to tell the compiler we referenced name_original
-            call_function2 = b'_trace_reference_trash = ' + name + b'_original';
+            if b'...' in signature:
+                # rax is used for varargs as hidden argument
+                save_regs = b'    asm("push   %rax");'
+                rest_regs = b'    asm("pop    %rax");'
+            else:
+                save_regs = b''
+                rest_regs = b''
+
+            function_body = b'''
+    /* save registers */
+''' + save_regs + b'''
+    /* prepare r11 as _trace_ptr and rax as _trace_pos */
+    asm("movq   _trace_ptr(%rip), %r11");
+    asm("movzwl _trace_pos(%rip), %eax");
+
+    /* trace ie byte if needed */
+    asm("mov    $0xfe, %r10b");
+    asm("cmpb   %r10b, _trace_ie_byte(%rip)");
+    asm("je     1f");
+
+    /* write the current ie byte to the trace */
+    asm("xchgb  _trace_ie_byte(%rip), %r10b");
+    asm("movb   %r10b, (%r11,%rax,1)");
+    /* initialize the new ie byte */
+    asm("incw   %ax");
+
+asm("1:");
+    /* trace function number */
+''' + self.func_num_instructions(func_num) + b'''
+    /* write new pos */
+    asm("movw   %ax, _trace_pos(%rip)");
+    /* restore registers */
+''' + rest_regs + b'''
+    /* tail-call */
+    asm("jmp    ''' + name + b'''_original");
+    /* unreachable */
+
+    /* hack to tell the compiler we referenced name_original */
+    asm ("" : : "g" (''' + name + b'''_original));
+    __builtin_unreachable();
+'''
 
             new_function = cpp_middle_marker \
                         + b"#undef " + name + b"\n" \
                         + b"__attribute__((naked,unused,noipa))\n" \
-                        + signature + b"{ " + b"\n" \
+                        + signature \
+                        + b"{" + function_body + b"}\n" \
                         + b"#define " + name + b"(...) " + name + b"_original(__VA_ARGS__)\n" \
-                        + b"    " + call_function + b";\n" \
-                        + b"    " + call_function2 + b";\n" \
-                        + b"}\n" \
                         + cpp_line_end
 
             self.add_annotation(new_function, node.extent.end)
@@ -304,7 +364,10 @@ class Instrumenter:
             body = children[-1]
             low = node.extent.start
             high = body.extent.start
-            return self.search(rb"inline", low, high)
+            mby_inline = self.search(rb"inline", low, high)
+            noinline = self.search(rb"noinline", low, high)
+            static = self.search(rb"static", low, high)
+            return static and mby_inline and not noinline
         except:
             return False
 
@@ -505,7 +568,7 @@ class Instrumenter:
 
     def traverse(self, node, function_scope=False):
         try:
-            if node.kind in (CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE):
+            if not function_scope and node.kind in (CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE):
                 # no recursive annotation
                 if "_trace" in node.spelling or "_retrace" in node.spelling:
                     return
@@ -513,8 +576,7 @@ class Instrumenter:
                 #if self.check_const_method(node):
                 #    return
                 function_scope = True
-                #if not self.inline_instrument and self.check_inline_method(node):
-                if False:
+                if self.check_inline_method(node):
                     pass
                 else:
                     self.visit_function(node)

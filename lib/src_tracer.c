@@ -21,7 +21,6 @@
 
 static char trace_fname[200];
 
-
 static unsigned char dummy[65536];
 
 struct _trace_ctx _trace = {
@@ -31,7 +30,8 @@ struct _trace_ctx _trace = {
 };
 unsigned char *_trace_ptr = dummy;
 unsigned char _trace_ie_byte = _TRACE_IE_BYTE_INIT;
-void *volatile _trace_reference_trash;
+unsigned short _trace_pos = 0;
+void (*volatile _trace_reference_trash)(void);
 
 static unsigned char *temp_trace_ptr = dummy;
 static unsigned short temp_trace_pos;
@@ -177,6 +177,11 @@ void _trace_close(void) {
     // stop tracing
     _trace_ptr = dummy;
     _trace._page_ptr = dummy;
+}
+
+__attribute((used))
+void _trace_func(unsigned int num) {
+    _TRACE_FUNC(num);
 }
 
 

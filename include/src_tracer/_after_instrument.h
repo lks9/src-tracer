@@ -34,8 +34,8 @@ struct _trace_ctx {
 extern struct _trace_ctx _trace;
 extern unsigned char *_trace_ptr;
 extern unsigned char _trace_ie_byte;
-extern void *volatile _trace_reference_trash;
-register unsigned short _trace_pos __asm__ ("r12");
+extern void (*volatile _trace_reference_trash)(void);
+extern unsigned short _trace_pos;
 
 extern void _trace_open(const char *fname);
 extern void _trace_close(void);
@@ -286,7 +286,6 @@ static inline __attribute__((always_inline)) bool _text_trace_condition(bool con
     }
     return cond;
 }
-
 
 // for retracing
 extern void _retrace_if(void);
