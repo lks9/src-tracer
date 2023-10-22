@@ -31,7 +31,6 @@ struct _trace_ctx {
 };
 
 extern struct _trace_ctx _trace;
-extern unsigned char *_trace_ptr;
 register unsigned char _trace_ie_byte __asm__("r12");
 
 union _trace_ptr_pos {
@@ -43,6 +42,8 @@ union _trace_ptr_pos {
     };
 };
 extern union _trace_ptr_pos _trace_ptr_pos;
+
+extern void __attribute__((aligned(65536))) *_trace_aligned_ptr;
 
 extern void _trace_open(const char *fname);
 extern void _trace_close(void);
