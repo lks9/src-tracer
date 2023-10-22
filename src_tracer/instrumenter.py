@@ -231,16 +231,14 @@ class Instrumenter:
     asm("movq   _trace_ptr_pos(%rip), %rax");
 
     /* trace ie byte if needed */
-    asm("mov    $0xfe, %r10b");
-    asm("lea    _trace_ie_byte(%rip), %r11");
-    asm("cmpb   %r10b, (%r11)");
+    asm("cmpb   $0xfe, %r12b");
     asm("je     1f");
 
-    /* initialize the new ie byte */
-    asm("xchgb  (%r11), %r10b");
     /* write the current ie byte to the trace */
-    asm("movb   %r10b, (%rax)");
+    asm("movb   %r12b, (%rax)");
     asm("incw   %ax");
+    /* initialize the new ie byte */
+    asm("movb   $0xfe, %r12b");
 
 asm("1:");
     /* trace function number */

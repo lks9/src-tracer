@@ -32,7 +32,7 @@ struct _trace_ctx {
 
 extern struct _trace_ctx _trace;
 extern unsigned char *_trace_ptr;
-extern unsigned char _trace_ie_byte;
+register unsigned char _trace_ie_byte __asm__("r12");
 
 union _trace_ptr_pos {
     unsigned char *ptr;
