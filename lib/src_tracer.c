@@ -51,7 +51,7 @@ pid_t my_fork(void);
 
 static void create_trace_process(void) {
     // reserve memory for the trace buffer
-    void *unaligned_ptr = mmap(NULL, 2*65536, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    unaligned_ptr = mmap(NULL, 2*65536, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (unaligned_ptr == MAP_FAILED) {
         perror("mmap");
         return;
@@ -168,14 +168,16 @@ void _trace_close(void) {
     }
     temp_trace_ptr_pos.ptr = dummy;
     _TRACE_END();
+    // stop tracing
+    _trace_ptr_pos.ptr = dummy;
+    _trace_aligned_ptr = dummy;
+
+    // now we can safely call library functions
 #ifdef _TRACE_USE_PTHREAD
     // FIXME
     pthread_join(thread_id, NULL);
 #endif
-    // stop tracing
     munmap(unaligned_ptr, 2*65536);
-    _trace_ptr_pos.ptr = dummy;
-    _trace_aligned_ptr = dummy;
 }
 
 __attribute((used))
