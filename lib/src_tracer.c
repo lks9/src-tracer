@@ -30,7 +30,6 @@ struct _trace_ctx _trace = {
 union _trace_ptr_pos _trace_ptr_pos = { .ptr = dummy };
 #define _trace_ptr ((void*)(_trace_ptr_pos.ptr_l & ~0xffffl))
 unsigned char _trace_ie_byte = _TRACE_IE_BYTE_INIT;
-void (*volatile _trace_reference_trash)(void);
 
 static void __attribute__((aligned(65536))) *aligned_ptr = dummy;
 static void *unaligned_ptr;

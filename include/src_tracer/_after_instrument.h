@@ -33,7 +33,7 @@ struct _trace_ctx {
 extern struct _trace_ctx _trace;
 extern unsigned char *_trace_ptr;
 extern unsigned char _trace_ie_byte;
-extern void (*volatile _trace_reference_trash)(void);
+
 union _trace_ptr_pos {
     unsigned char *ptr;
     unsigned long ptr_l;
