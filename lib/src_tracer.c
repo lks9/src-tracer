@@ -28,7 +28,7 @@ struct _trace_ctx _trace = {
     .fork_count = 0,
     .try_count = 0,
 };
-unsigned char *_trace_ptr = dummy;
+unsigned char *restrict _trace_ptr = dummy;
 unsigned char _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 unsigned short _trace_pos = 0;
 

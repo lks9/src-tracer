@@ -35,7 +35,7 @@ extern struct _trace_ctx _trace;
 extern unsigned char _trace_ie_byte;
 extern unsigned short _trace_pos;
 
-extern unsigned char *_trace_ptr;
+extern unsigned char *restrict _trace_ptr;
 
 extern void _trace_open(const char *fname);
 extern void _trace_close(void);
