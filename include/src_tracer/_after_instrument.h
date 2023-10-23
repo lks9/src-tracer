@@ -252,10 +252,8 @@ extern int _trace_after_fork(int pid);
     _TRACE_IE_FINISH \
     _TRACE_PUT(_TRACE_SET_END); \
     /* put a -1ll sign to the next page */ \
-    if (_trace.pos % 4096 != 0) { \
-        _trace.pos += 4096; \
-        _trace.pos &= ~4095; \
-    } \
+    _trace.pos += 4095; \
+    _trace.pos &= ~4095; \
     *((long long*)&_trace.ptr[_trace.pos]) = -1ll; \
 }
 
