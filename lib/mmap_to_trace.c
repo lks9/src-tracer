@@ -97,7 +97,7 @@ void *forked_write (char *trace_fname) {
         my_exit();
     }
 
-    volatile unsigned char *const ptr = _trace_aligned_ptr;
+    volatile unsigned char *const ptr = _trace._page_ptr;
     unsigned short next_pos = 4096;
     unsigned short pos = 0;
 
