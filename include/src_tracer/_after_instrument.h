@@ -26,7 +26,7 @@ extern "C" {
 #endif
 
 struct _trace_ctx {
-    unsigned char *ptr;
+    unsigned char *restrict ptr;
     void *_page_ptr;
     int fork_count;
     int try_count;
