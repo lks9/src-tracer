@@ -173,12 +173,15 @@ void _trace_close(void) {
     }
     temp_trace.ptr = dummy;
     _TRACE_END();
+    // stop tracing
+    _trace.ptr = dummy;
+
+    // now we can safely call library functions
 #ifdef _TRACE_USE_PTHREAD
     // FIXME
     pthread_join(thread_id, NULL);
 #endif
-    // stop tracing
-    _trace.ptr = dummy;
+    munmap(_trace._page_ptr, 65536);
     _trace._page_ptr = dummy;
 }
 
