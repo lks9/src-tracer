@@ -50,34 +50,36 @@
         _retrace_ghost_end(); \
         _retrace_in_ghost = false; \
     end_ghost_##id: ; \
-    );
+    )
 
 // check assertions in retrace mode
 
 // ASSERT(condition)
 
-#define ASSERT(condition) \
+#define ASSERT(condition) { \
     GHOST( \
         _retrace_assert_names[_retrace_assert_idx] = LOCATION; \
         _retrace_asserts[_retrace_assert_idx] = (condition); \
         _retrace_assert_passed(); \
         _retrace_assert_idx += 1; \
-    )
+    ) \
+}
 
 // ASSUME(condition)
 
-#define ASSUME(condition) \
+#define ASSUME(condition) { \
     GHOST( \
         _retrace_assume_name = LOCATION; \
         _retrace_assume = (condition); \
         _retrace_assume_passed(); \
-    )
+    ) \
+}
 
 // PROPOSE("label", condition)
 // Could be either assertion, assumption or ignored, it's completely up to the retracer.
 // If ignored, the condition is not evaluated at all. This speeds up retracing.
 
-#define PROPOSE(label, condition) \
+#define PROPOSE(label, condition) { \
     GHOST( \
         _retrace_assert_names[_retrace_assert_idx] = (label); \
         _retrace_prop_start(); \
@@ -88,18 +90,20 @@
         _retrace_prop_passed(); \
         _retrace_assert_idx \
             += _retrace_prop_is_assert ? 1 :0; \
-    )
+    ) \
+}
 
 // GHOST_DUMP("label", pointer)
 // Dump a pointer to a list, which can be inspected from the retracer.
 
-#define GHOST_DUMP(label, pointer) \
+#define GHOST_DUMP(label, pointer) { \
     GHOST( \
         _retrace_dump_names[_retrace_dump_idx] = (label); \
         _retrace_dumps[_retrace_dump_idx] = pointer; \
         _retrace_dump_passed(); \
         _retrace_dump_idx += 1; \
-    )
+    ) \
+}
 
 // extern variables and functions
 extern void _retrace_ghost_start(void);
