@@ -79,6 +79,7 @@ static void my_write(volatile void *ptr) {
     }
 }
 
+__attribute__((noreturn))
 void *forked_write (char *trace_fname) {
     int lowfd = open(trace_fname,
                      O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE | O_NOCTTY,
@@ -97,9 +98,25 @@ void *forked_write (char *trace_fname) {
         my_exit();
     }
 
-    volatile unsigned char *const ptr = _trace._page_ptr;
+    volatile unsigned char *const ptr = _trace_buf;
     unsigned short next_pos = 4096;
     unsigned short pos = 0;
+    const struct timespec wait_time = {0,100000};
+
+#ifdef _TRACE_USE_POSIX
+#define my_wait()   nanosleep(&wait_time)
+#else
+#define my_wait()   __syscall1(SYS_nanosleep, (long)&wait_time)
+#endif
+
+    // wait until anything has been written
+    while(ptr[0] == 0)
+        my_wait();
+    // clear out any garbage trace left
+    volatile long long *garbage_ptr = (long long*)&(ptr[2*4096]);
+    for (int i = 0; i < 4096/8; i++) {
+        garbage_ptr[i] = 0ll;
+    }
 
     while (true) {
         volatile long long *next_ptr = (long long *)&(ptr[next_pos]);
@@ -114,12 +131,7 @@ void *forked_write (char *trace_fname) {
                 close(trace_fd);
                 my_exit();
             }
-            const struct timespec wait_time = {0,100000};
-#ifdef _TRACE_USE_POSIX
-            nanosleep(&wait_time);
-#else
-            __syscall1(SYS_nanosleep, (long)&wait_time);
-#endif
+            my_wait();
         }
         if (next_ll == -1ll) {
             // parant wrote the trace end marker -1ll

@@ -21,24 +21,22 @@
 
 static char trace_fname[200];
 
-static unsigned char dummy[65536];
+unsigned char _trace_buf[65536] __attribute__((aligned(65536)));
 
 struct _trace_ctx _trace = {
-    ._page_ptr = dummy,
     .fork_count = 0,
     .try_count = 0,
 };
-unsigned char *restrict _trace_ptr = dummy;
 unsigned char _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 unsigned short _trace_pos = 0;
 
-static unsigned char *temp_trace_ptr = dummy;
-static unsigned short temp_trace_pos;
-static unsigned char temp_trace_ie_byte = _TRACE_IE_BYTE_INIT;
+static bool trace_active = false;
 
 extern char **__environ;
 
-extern void *forked_write(char *);
+extern
+__attribute__((noreturn))
+void *forked_write(char *);
 #ifdef _TRACE_USE_PTHREAD
 static pthread_t thread_id;
 #endif
@@ -48,13 +46,18 @@ __attribute__((returns_twice))
 pid_t my_fork(void);
 
 static void create_trace_process(void) {
+    // write garbage trace at a position it wouldn't matter
+    _trace_pos = 2*4096;
+
     // reserve memory for the trace buffer
-    _trace._page_ptr = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (_trace._page_ptr == MAP_FAILED) {
-        _trace._page_ptr = dummy;
+    void *tmp_ptr = mmap(_trace_buf, 65536, PROT_READ | PROT_WRITE,
+            MAP_FIXED | MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (tmp_ptr == MAP_FAILED) {
         perror("mmap");
         return;
     }
+    // the next fork should have the same _trace_buf
+    madvise(_trace_buf, 65536, MADV_DOFORK);
 
 #ifdef _TRACE_USE_PTHREAD
     pthread_create(&thread_id, NULL, &forked_write, trace_fname);
@@ -80,15 +83,15 @@ static void create_trace_process(void) {
         // will never return
     }
 #endif
+    // further forks should not write to the same trace
+    madvise(_trace_buf, 65536, MADV_DONTFORK);
 }
 
 void _trace_open(const char *fname) {
-    if (_trace_ptr != dummy) {
+    if (trace_active) {
         // already opened
         return;
     }
-    // just to be sure
-    temp_trace_ptr = dummy;
     // Make the file name time dependent
     char timed_fname[160];
     struct timespec now;
@@ -103,82 +106,62 @@ void _trace_open(const char *fname) {
 
     atexit(_trace_close);
 
-    // now the tracing can start (guarded by _trace_ptr != dummy)
-    _trace_ptr = _trace._page_ptr;
+    // now the tracing can start (guarded by trace_active)
+    trace_active = true;
     _trace_pos = 0;
     _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 }
 
 void _trace_before_fork(void) {
-    if (_trace_ptr == dummy) {
-        // tracing has already been aborted!
-        return;
-    }
     _trace.fork_count += 1;
     _TRACE_NUM(_trace.fork_count);
-
-    temp_trace_ptr = _trace_ptr;
-    temp_trace_pos = _trace_pos;
-    temp_trace_ie_byte = _trace_ie_byte;
-
-    // stop tracing
-    _trace_ptr = dummy;
 }
 
 int _trace_after_fork(int pid) {
-    if (temp_trace_ptr == dummy) {
-        // tracing has already been aborted!
+    if (trace_active == false) {
+        // we are not tracing
         return pid;
     }
-    // just to be sure
-    _trace_ptr = dummy;
     if (pid != 0) {
         // we are in the parent
-        // resume tracing
-        _trace_ptr = temp_trace_ptr;
-        _trace_pos = temp_trace_pos;
-        _trace_ie_byte = temp_trace_ie_byte;
-
-        _TRACE_NUM(pid < 0 ? -1 : 1);
         return pid;
     }
     // we are in a fork
-    temp_trace_ptr = dummy;
+    trace_active = false;
     char fname_suffix[20];
     snprintf(fname_suffix, 20, "-fork-%d.trace", _trace.fork_count);
     strncat(trace_fname, fname_suffix, 20);
     //printf("Trace to: %s\n", trace_fname);
 
-    // reserve memory for the trace buffer
-    munmap(_trace._page_ptr, 65536);
     create_trace_process();
 
-    // now the tracing can start (guarded by _trace_ptr != dummy)
-    _trace_ptr = _trace._page_ptr;
+    // now the tracing can start (guarded by trace_active)
+    trace_active = true;
     _trace_pos = 0;
     _trace_ie_byte = _TRACE_IE_BYTE_INIT;
-
-    _TRACE_NUM(pid);
     return pid;
 }
 
 void _trace_close(void) {
-    if (_trace_ptr == dummy) {
+    if (trace_active == false) {
         // already closed, paused or never successfully opened
         return;
     }
-    temp_trace_ptr = dummy;
-    _TRACE_END();
     // stop tracing
-    _trace_ptr = dummy;
+    _TRACE_END();
+    trace_active = false;
 
     // now we can safely call library functions
 #ifdef _TRACE_USE_PTHREAD
     // FIXME
     pthread_join(thread_id, NULL);
 #endif
-    munmap(_trace._page_ptr, 65536);
-    _trace._page_ptr = dummy;
+    void *tmp_ptr = mmap(_trace_buf, 65536, PROT_READ | PROT_WRITE,
+            MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (tmp_ptr == MAP_FAILED) {
+        perror("mmap close");
+        return;
+    }
 }
 
 __attribute((used))

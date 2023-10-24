@@ -26,7 +26,6 @@ extern "C" {
 #endif
 
 struct _trace_ctx {
-    void *_page_ptr;
     int fork_count;
     int try_count;
 };
@@ -35,7 +34,7 @@ extern struct _trace_ctx _trace;
 extern unsigned char _trace_ie_byte;
 extern unsigned short _trace_pos;
 
-extern unsigned char *restrict _trace_ptr;
+extern unsigned char _trace_buf[65536] __attribute__((aligned(65536)));
 
 extern void _trace_open(const char *fname);
 extern void _trace_close(void);
@@ -103,7 +102,7 @@ extern int _trace_after_fork(int pid);
 #define unlikely(x)     __builtin_expect((x),0)
 
 #define _TRACE_PUT(c) \
-    _trace_ptr[_trace_pos++] = (c)
+    _trace_buf[_trace_pos++] = (c)
 
 #define _TRACE_PUT_TEXT     _TRACE_PUT
 
@@ -255,7 +254,8 @@ extern int _trace_after_fork(int pid);
     /* put a -1ll sign to the next page */ \
     _trace_pos += 4095; \
     _trace_pos &= ~4095; \
-    *((long long*)&_trace_ptr[_trace_pos]) = -1ll; \
+    *((long long*)&_trace_buf[_trace_pos]) = -1ll; \
+    _trace_pos += 8; \
 }
 
 // same as the macro version

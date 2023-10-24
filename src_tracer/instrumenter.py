@@ -227,8 +227,8 @@ class Instrumenter:
             function_body = b'''
     /* save registers */
 ''' + save_regs + b'''
-    /* prepare r11 as _trace_ptr and rax as _trace_pos */
-    asm("movq   _trace_ptr(%rip), %r11");
+    /* prepare r11 as _trace_buf and rax as _trace_pos */
+    asm("leaq   _trace_buf(%rip), %r11");
     asm("movzwl _trace_pos(%rip), %eax");
 
     /* trace ie byte if needed */
