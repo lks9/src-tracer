@@ -98,6 +98,9 @@ class SourceTraceReplayer:
 
         self.asserts_addr = self.addr("_retrace_asserts")
 
+        self.symbolic_addr = self.addr("_retrace_symbolic")
+        self.symbolic_idx_addr = self.addr("_retrace_symbolic_idx")
+
     def addr(self, sym_name):
         try:
             return self.p.loader.main_object.get_symbol(sym_name).rebased_addr
@@ -152,6 +155,8 @@ class SourceTraceReplayer:
             state.mem[self.is_retrace_addr].bool = True
         if self.assert_idx_addr:
             state.mem[self.assert_idx_addr].int = 0
+        if self.symbolic_idx_addr:
+            state.mem[self.symbolic_idx_addr].int = 0
         if self.in_ghost_addr:
             state.mem[self.in_ghost_addr].bool = False
 

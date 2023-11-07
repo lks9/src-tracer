@@ -244,5 +244,8 @@ void *volatile _retrace_dumps[GHOST_DUMP_BUF_SIZE];
 volatile int   _retrace_dump_idx;
 void  _retrace_dump_passed(void) { barrier(); }
 
+long long *volatile _retrace_symbolic[RETRACE_SYMBOLIC_SIZE];
+volatile int _retrace_symbolic_idx;
+
 // for both tracing and retracing
 volatile bool _is_retrace_mode = false;

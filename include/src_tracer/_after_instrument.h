@@ -415,7 +415,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _TRACE_OPEN(fname)  _IS_RETRACE( ,_trace_open((fname)))
 #define _TRACE_CLOSE        _IS_RETRACE( ,_trace_close())
 
-#define _GHOST(code)        code
+#define _RETRO_ONLY(code)   _IS_RETRACE(code, )
+#define _RETRO_SKIP(code)   _IS_RETRACE(, code)
 
 
 #elif defined _TRACE_MODE
@@ -444,7 +445,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _FORK(fork_stmt)    (_trace_before_fork(), \
                              _trace_after_fork(fork_stmt))
 
-#define _GHOST(code)        /* nothing here */
+#define _RETRO_ONLY(code)   /* nothing here */
+#define _RETRO_SKIP(code)   code
 
 
 #elif defined _TEXT_TRACE_MODE
@@ -470,7 +472,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _TRACE_OPEN(fname)  ;_trace_open(fname ".txt");
 #define _TRACE_CLOSE        ;_trace_close();
 
-#define _GHOST(code)        /* nothing here */
+#define _RETRO_ONLY(code)   /* nothing here */
+#define _RETRO_SKIP(code)   code
 
 
 #elif defined _RETRACE_MODE
@@ -499,7 +502,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _FORK(fork_stmt)    (_retrace_num(_retrace_fork_count), \
                              _retrace_num((fork_stmt) < 0 ? -1 : 1))
 
-#define _GHOST(code)        code
+#define _RETRO_ONLY(code)   code
+#define _RETRO_SKIP(code)   /* nothing here */
 
 
 #else // neither _TRACE_MODE nor _RETRACE_MODE
@@ -521,7 +525,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _FORK(fork_stmt)    fork_stmt
 
-#define _GHOST(code)        /* nothing here */
+#define _RETRO_ONLY(code)   /* nothing here */
+#define _RETRO_SKIP(code)   code
 
 #endif // _TRACE_MODE or _RETRACE_MODE
 
