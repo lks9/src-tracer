@@ -142,7 +142,7 @@ extern int _trace_buf_pos;
     }
 
 #define _TRACE_SWITCH_CASE(num, bit_cnt) { \
-    for (int i = 0; i < bit_cnt; i++) { \
+    for (int i = bit_cnt-1; i >= 0; i--) { \
         _TRACE_IE(num & (1 << i)); \
     } \
 }
@@ -180,13 +180,12 @@ extern int _trace_buf_pos;
 #define _TRACE_SWITCH_CASE(num, bit_cnt) { \
     _TRACE_IE_FINISH \
     int bit_cnt_left = bit_cnt; \
-    int num_left = num; \
+    const int num_left = num; \
     while (bit_cnt_left >= 6) { \
-        _TRACE_PUT((num_left & 0b00111111) | 0b10000000); \
         bit_cnt_left -= 6; \
-        num_left >>= 6; \
+        _TRACE_PUT(((num_left >> bit_cnt_left) & 0b00111111) | 0b10000000); \
     } \
-    _trace_ie_byte = (num_left & 0b00111111) - (2 << bit_cnt_left); \
+    _trace_ie_byte = (num_left & ~(0b11111111 << bit_cnt_left) & 0b00111111) - (2 << bit_cnt_left); \
 }
 
 #endif // BYTE_TRACE
@@ -355,6 +354,12 @@ static inline __attribute__((always_inline)) bool _retrace_condition(bool cond) 
     return cond;
 }
 
+#define _RETRACE_SWITCH_CASE(num, bit_cnt) { \
+    for (int i = bit_cnt-1; i >= 0; i++) { \
+        _retrace_condition(num & (1 << i)); \
+    } \
+}
+
 // for both tracing and retracing
 extern volatile bool _is_retrace_mode;
 
@@ -489,7 +494,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
-                                _RETRACE_NUM(num) \
+                                _RETRACE_SWITCH_CASE(num) \
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
