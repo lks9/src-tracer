@@ -392,6 +392,10 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
     return num;
 }
 
+#define _RETRO(normal, retro) \
+    _RETRO_SKIP(normal) \
+    _RETRO_ONLY(retro)
+
 /*
  * Macros used in the instrumentation.
  * 2 versions: _TRACE_MODE and _RETRACE_MODE

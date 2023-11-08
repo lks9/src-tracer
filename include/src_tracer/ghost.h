@@ -49,18 +49,21 @@
 #define RETRO_SKIP(code) \
     _RETRO_SKIP(code)
 
-// RETRO_SYMBOLIC( type )
-// Get a fresh symbolic value in retrace mode (otherwise, undefined behavior)
+#define RETRO(normal_code, retro_code) \
+    _RETRO(normal_code, retro_code)
+
+
+// RETRO_SYMBOLIC( type, default_value )
+// Get a fresh symbolic value in retrace mode. Outside retrace mode, the default value is taken.
 //
 // Example:
-// RETRO_ONLY(
-//      int x = RETRO_SYMBOLIC(int);
-// )
-// RETRO_SKIP(
 //      int x = 42;
-// )
-#define RETRO_SYMBOLIC(type) \
-    ((type)_retrace_symbolic[_retrace_symbolic_idx++])
+// Modified as retro symbolic:
+//      int x = RETRO_SYMBOLIC(int, 42);
+#define RETRO_SYMBOLIC(type, default_value) \
+    RETRO(default_value, \
+          ((type)_retrace_symbolic[_retrace_symbolic_idx++])  \
+    )
 
 // check assertions in retrace mode
 
