@@ -1,109 +1,127 @@
 import re
 
 TEST_IE          = 0b10000000
-PUT_IE           = 0b10000000
+SET_IE           = 0b10000000
+TEST_IE_INIT     = 0b11111111
+SET_IE_INIT      = 0b11111110
 
-TEST_FUNC_DATA   = 0b10001000
-PUT_FUNC         = 0b00000000
-PUT_DATA         = 0b00001000
+TEST_OTHER      = 0b11110000
+SET_FUNC_4      = 0b00000000
+SET_FUNC_12     = 0b00010000
+SET_FUNC_20     = 0b00100000
+SET_DATA        = 0b00110000
+SET_ELEM_AO     = 0b01000000
+SET_ELEM_PZ     = 0b01010000
+SET_FUNC_28     = 0b01100000
+SET_FUNC_32     = 0b01110000
 
-TEST_LEN         = 0b11111000
+TEST_LEN          = 0b11111111
+TEST_LEN_BYTECOUNT= 0b00001111
+SET_LEN_0         = 0b00110000
+SET_LEN_8         = 0b00110001
+SET_LEN_16        = 0b00110010
+SET_LEN_reserved3 = 0b00110011
+SET_LEN_32        = 0b00110100
+SET_LEN_reserved5 = 0b00110101
+SET_LEN_reserved6 = 0b00110110
+SET_LEN_reserved7 = 0b00110111
+SET_LEN_64        = 0b00111000
+SET_LEN_reserved9 = 0b00111001
+SET_LEN_reserved10= 0b00111010
+SET_LEN_reserved11= 0b00111011
+SET_LEN_reserved12= 0b00111100
+SET_LEN_PREFIX_res= 0b00111101
+SET_LEN_STRING_res= 0b00111110
+SET_LEN_reserved15= 0b00111111
 
-PUT_FUNC_END     = 0b00000000
-PUT_FUNC_LEN_8   = 0b00010000
-PUT_FUNC_LEN_16  = 0b00100000
-PUT_FUNC_LEN_32  = 0b00110000
-PUT_FUNC_LEN_24  = 0b01000000
-PUT_FUNC_RETURN  = 0b01010000
-PUT_FUNC_ANON    = 0b01100000
-PUT_FUNC_reserved= 0b01110000
+TEST_IS_ELEM     = 0b11100000
+SET_IS_ELEM      = 0b01000000
 
-PUT_LEN_0        = 0b00001000
-PUT_LEN_8        = 0b00011000
-PUT_LEN_16       = 0b00101000
-PUT_LEN_32       = 0b00111000
-PUT_LEN_64       = 0b01001000
-PUT_LEN_reserved = 0b01011000
-PUT_LEN_PREFIX   = 0b01101000
-PUT_LEN_STRING   = 0b01111000
+TEST_ELEM        = 0b11111111
+SET_END         = 0b01000101 # 'E'
+SET_RETURN      = 0b01010010 # 'R'
+SET_FUNC_ANON   = 0b01000001 # 'A'
+SET_TRY         = 0b01010011 # 'S'
+SET_CATCH       = 0b01001100 # 'L'
+SET_FORK        = 0b01000111 # 'G'
+SET_PAUSE       = 0b01010000 # 'P'
+#/* 'T' and 'N' could be used instead of
+# * _TRACE_IE_BYTE_INIT for faster trace writing */
+SET_IF          = 0b01010100 # 'T'
+SET_ELSE        = 0b01001110 # 'N'
+#/* 'F' and 'D' are reserved, since
+# * _SET_FUNC_x and _SET_LEN_x are used instead */
+SET_FUNC_reserved  =  0b01000110 # 'F'
+SET_DATA_reserved  = 0b01000100 # 'D'
+#/* 'M' and 'B' are currently not supported */
+SET_FUNC_STRING_res = 0b01001101 # 'M'
+SET_DATA_STRING_res = 0b01000010 # 'B'
 
-TEST_IE_COUNT    = 0b10000111
 
 bit_length = {
-    PUT_LEN_0: 0,
-    PUT_LEN_8: 8,
-    PUT_LEN_16: 16,
-    PUT_LEN_32: 32,
-    PUT_LEN_64: 64,
+    SET_LEN_0: 0,
+    SET_LEN_8: 8,
+    SET_LEN_16: 16,
+    SET_LEN_32: 32,
+    SET_LEN_64: 64,
 
-    PUT_FUNC_END: 0,
-    PUT_FUNC_RETURN: 0,
-    PUT_FUNC_ANON: 0,
-    PUT_FUNC_LEN_8: 8,
-    PUT_FUNC_LEN_16: 16,
-    PUT_FUNC_LEN_24: 32,
-    PUT_FUNC_LEN_32: 32,
+    SET_FUNC_4: 4,
+    SET_FUNC_12: 12,
+    SET_FUNC_20: 20,
+    SET_FUNC_28: 28,
+    SET_FUNC_32: 32,
 }
 
 byte_length = {
-    PUT_LEN_0: 0,
-    PUT_LEN_8: 1,
-    PUT_LEN_16: 2,
-    PUT_LEN_32: 4,
-    PUT_LEN_64: 8,
+    SET_LEN_0: 0,
+    SET_LEN_8: 1,
+    SET_LEN_16: 2,
+    SET_LEN_32: 4,
+    SET_LEN_64: 8,
 
-    PUT_FUNC_END: 0,
-    PUT_FUNC_RETURN: 0,
-    PUT_FUNC_ANON: 0,
-    PUT_FUNC_LEN_8: 1,
-    PUT_FUNC_LEN_16: 2,
-    PUT_FUNC_LEN_24: 3,
-    PUT_FUNC_LEN_32: 4,
+    SET_FUNC_4: 0,
+    SET_FUNC_12: 1,
+    SET_FUNC_20: 2,
+    SET_FUNC_28: 3,
+    SET_FUNC_32: 4,
 }
 
 def letter(b, count=0):
-    if b & TEST_IE == PUT_IE:
+    if b & TEST_IE == SET_IE:
         if b & (1 << count):
             return 'T'
         else:
             return 'N'
-    elif b & TEST_FUNC_DATA == PUT_DATA:
-        l = b & TEST_LEN
-        if l == PUT_LEN_STRING:
-            return 'B'
-        elif l != PUT_LEN_reserved:
-            return 'D'
-    elif b & TEST_FUNC_DATA == PUT_FUNC:
-        l = b & TEST_LEN
-        if l == PUT_FUNC_END:
-            return 'E'
-        elif l == PUT_FUNC_RETURN:
-            return 'R'
-        elif l == PUT_FUNC_ANON:
-            return 'A'
-        elif l != PUT_FUNC_reserved:
-            return 'F'
+    elif b & TEST_OTHER == SET_DATA:
+        return 'D'
+    elif b & TEST_OTHER in (SET_FUNC_4, SET_FUNC_12, SET_FUNC_20, SET_FUNC_28, SET_FUNC_32):
+        return 'F'
+    elif b & TEST_OTHER in (SET_ELEM_AO, SET_ELEM_PZ):
+        return chr(b)
     raise ValueError(f"There is no letter for {bin(b)}")
 
 
-def to_number(bs):
-    return int.from_bytes(bs, "little")
-
-
 class TraceElem:
-    def __init__(self, letter, bs, pos=None, ie_pos=None):
+    def __init__(self, letter, bs, pos=None, ie_pos=None, endian="little"):
         self.letter = letter
         self.bs = bs
         self.pos = pos
         self.ie_pos = ie_pos
+        self.endian = endian
 
     def __str__(self):
         return self.pretty(show_ie_pos=True)
 
+    @property
+    def num(self):
+        if self.bs == b'':
+            return 0
+        return int.from_bytes(self.bs, self.endian)
+
     def pretty(self, show_pos=True, show_ie_pos=False, name=None):
         res = f"{self.letter}"
         if self.bs != b'':
-            num = int.from_bytes(self.bs, "little")
+            num = int.from_bytes(self.bs, self.endian)
             res += f"{num:x}"
         if name is not None:
             res += f" {name}"
@@ -257,47 +275,40 @@ class TraceCompact(Trace):
         """
         Iterate over all elements, ignoring seek and count.
         """
-        after_count = [[], [], [], [], [], [], [], []]
         i = 0
-        last_pos = -1
-        ie_pos = 0
         while i < len(trace):
             pos = i
             b = trace[i]
             i += 1
 
-            if b & TEST_IE == PUT_IE:
-                for count in range(7):
-                    for elem in after_count[count]:
-                        ie_pos = 1
-                        yield elem
-                        last_pos = elem.pos
-                    after_count[count] = []
-                    # yield 'T'/'N'
+            if b & TEST_IE == SET_IE:
+                count = 7
+                ie_pos = 0
+                while b & (1 << count):
+                    count -= 1
+                count -= 1
+                while 0 <= count:
+                    yield TraceElem(letter(b, count), b'', pos, ie_pos)
                     ie_pos += 1
-                    yield TraceElem(letter(b, count), b'', last_pos, ie_pos)
+                    count -= 1
+                # done with ie
                 continue
 
-            len_bits = b & TEST_LEN
-            if len_bits == PUT_FUNC_RETURN:
+            endian = "little"
+            if b & TEST_OTHER == SET_DATA:
+                length = byte_length[b]
+                bs = trace[i:i+length]
+            elif b & TEST_OTHER in (SET_ELEM_AO, SET_ELEM_PZ):
                 length = 0
-            elif len_bits == PUT_LEN_STRING:
-                m = re.match(rb'[^\0]*\0', trace[i:])
-                length = m.end()
-            elif len_bits == PUT_LEN_PREFIX:
-                length = trace[i]
-                i += 1
+                bs = b''
             else:
-                length = byte_length[len_bits]
-            bs = trace[i:i+length]
-            i += length
-            count = b & TEST_IE_COUNT
-            elem = TraceElem(letter(b), bs, pos)
-            after_count[count].append(elem)
+                # function number
+                endian = "big"
+                length = byte_length[b & TEST_OTHER]
+                bs = (b &~ TEST_OTHER).to_bytes(1, "big") + trace[i:i+length]
 
-        # yield possibly remaining elements
-        for elem in after_count[0]:
-            yield elem
+            i += length
+            yield TraceElem(letter(b), bs, pos, endian=endian)
 
     def function_iter(self):
         i = 0
@@ -305,23 +316,16 @@ class TraceCompact(Trace):
             b = self._trace[i]
             pos = i
             i += 1
-            if b & TEST_IE == PUT_IE:
+            if b & TEST_IE == SET_IE:
                 continue
-            elif b & TEST_LEN == PUT_FUNC_RETURN:
+            elif b & TEST_OTHER == (SET_ELEM_AO, SET_ELEM_PZ):
                 continue
 
-            len_bits = b & TEST_LEN
-            if len_bits == PUT_LEN_STRING:
-                m = re.match(rb'[^\0]*\0', self._trace[i:])
-                length = m.end()
-            elif len_bits == PUT_LEN_PREFIX:
-                length = self._trace[i]
-                i += 1
+            if b & TEST_OTHER == SET_DATA:
+                length = byte_length[b]
             else:
-                length = byte_length[len_bits]
-
-            if b & TEST_FUNC_DATA == PUT_FUNC:
-                bs = self._trace[i:i+length]
-                yield TraceElem(letter(b), bs, pos)
+                length = byte_length[b & TEST_OTHER]
+                bs = (b &~ TEST_OTHER).to_bytes(1, "big") + self._trace[i:i+length]
+                yield TraceElem(letter(b), bs, pos, endian="big")
 
             i += length

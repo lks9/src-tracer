@@ -60,30 +60,7 @@ static void create_trace_process(void) {
         return;
     }
 
-#ifdef _TRACE_USE_PTHREAD
-    pthread_create(&thread_id, NULL, &forked_write, trace_fname);
-#else
-    // bsd style daemon + close all fd
-    if (my_fork() == 0) {
-        // child process
-        // new name
-        prctl(PR_SET_NAME, (unsigned long)"src_tracer");
-        // session leader
-        //    -> independ from the previous process session
-        //    -> independent from terminal
-        setsid();
-        // anything might happen to the current directory, be independent
-        chdir("/");
-        umask(0);
-        // close any fd
-        for (int i = sysconf(_SC_OPEN_MAX); i >= 0; i--) {
-            close(i);
-        }
-
-        forked_write(trace_fname);
-        // will never return
-    }
-#endif
+    // TODO create a separate trace process
 }
 
 void _trace_open(const char *fname) {
@@ -177,10 +154,6 @@ void _trace_close(void) {
     _trace.ptr = dummy;
 
     // now we can safely call library functions
-#ifdef _TRACE_USE_PTHREAD
-    // FIXME
-    pthread_join(thread_id, NULL);
-#endif
     munmap(_trace._page_ptr, 65536);
     _trace._page_ptr = dummy;
 }
@@ -230,6 +203,9 @@ char *volatile _retrace_dump_names[GHOST_DUMP_BUF_SIZE];
 void *volatile _retrace_dumps[GHOST_DUMP_BUF_SIZE];
 volatile int   _retrace_dump_idx;
 void  _retrace_dump_passed(void) { barrier(); }
+
+long long *volatile _retrace_symbolic[RETRACE_SYMBOLIC_SIZE];
+volatile int _retrace_symbolic_idx;
 
 // for both tracing and retracing
 volatile bool _is_retrace_mode = false;
