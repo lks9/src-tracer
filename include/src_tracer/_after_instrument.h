@@ -26,22 +26,24 @@ extern "C" {
 #endif
 
 struct _trace_ctx {
-    unsigned char *restrict ptr;
-    void *_page_ptr;
     int fork_count;
     int try_count;
-    unsigned short pos; 
-    unsigned char ie_byte;
 };
-
-extern struct _trace_ctx _trace;
+// _trace_buf might point to a dummy buffer when tracing paused
+// _trace_ptr points to a proper trace buf even when tracing paused
+extern __attribute__((aligned(4096))) unsigned char *restrict _trace_buf;
+extern __attribute__((aligned(4096))) void *_trace_ptr;
+extern unsigned short _trace_pos;
 
 extern void _trace_open(const char *fname);
 extern void _trace_close(void);
 extern void _trace_before_fork(void);
 extern int _trace_after_fork(int pid);
 
+#ifndef BYTE_TRACE
 #define _TRACE_IE_BYTE_INIT         0b11111110
+extern unsigned char _trace_ie_byte;
+#endif
 
 #define _TRACE_TEST_IE              0b10000000
  #define _TRACE_SET_IE              0b10000000
@@ -102,7 +104,7 @@ extern int _trace_after_fork(int pid);
 #define unlikely(x)     __builtin_expect((x),0)
 
 #define _TRACE_PUT(c) \
-    _trace.ptr[_trace.pos++] = (c)
+    _trace_buf[_trace_pos++] = (c)
 
 #define _TRACE_PUT_TEXT     _TRACE_PUT
 
@@ -130,28 +132,28 @@ extern int _trace_after_fork(int pid);
     ((x << n) | (x >> (8 - n)))
 
 #define _TRACE_IE_PREPARE_NEXT \
-    if (_trace.ie_byte < 0b11000000) { \
-        _TRACE_PUT(_trace.ie_byte); \
-        _trace.ie_byte = _TRACE_IE_BYTE_INIT; \
+    if (_trace_ie_byte < 0b11000000) { \
+        _TRACE_PUT(_trace_ie_byte); \
+        _trace_ie_byte = _TRACE_IE_BYTE_INIT; \
     }
 
 #define _TRACE_IE(if_true) { \
-    _trace.ie_byte <<= 1; \
-    _trace.ie_byte |= (bool)(if_true); \
+    _trace_ie_byte <<= 1; \
+    _trace_ie_byte |= (bool)(if_true); \
     _TRACE_IE_PREPARE_NEXT \
 }
 #define _TRACE_IF() { \
-    _trace.ie_byte = rotate_8(_trace.ie_byte, 1); \
+    _trace_ie_byte = rotate_8(_trace_ie_byte, 1); \
     _TRACE_IE_PREPARE_NEXT \
 }
 #define _TRACE_ELSE() { \
-    _trace.ie_byte <<= 1; \
+    _trace_ie_byte <<= 1; \
     _TRACE_IE_PREPARE_NEXT \
 }
 #define _TRACE_IE_FINISH \
-    if (_trace.ie_byte != _TRACE_IE_BYTE_INIT) { \
-        _TRACE_PUT(_trace.ie_byte); \
-        _trace.ie_byte = _TRACE_IE_BYTE_INIT; \
+    if (_trace_ie_byte != _TRACE_IE_BYTE_INIT) { \
+        _TRACE_PUT(_trace_ie_byte); \
+        _trace_ie_byte = _TRACE_IE_BYTE_INIT; \
     }
 
 #define _TRACE_SWITCH_CASE(num, bit_cnt) { \
@@ -162,7 +164,7 @@ extern int _trace_after_fork(int pid);
         bit_cnt_left -= 6; \
         _TRACE_PUT(((num_left >> bit_cnt_left) & 0b00111111) | 0b10000000); \
     } \
-    _trace.ie_byte = (num_left & ~(0b11111111 << bit_cnt_left) & 0b00111111) - (2 << bit_cnt_left); \
+    _trace_ie_byte = (num_left & ~(0b11111111 << bit_cnt_left) & 0b00111111) - (2 << bit_cnt_left); \
 }
 
 #endif // BYTE_TRACE
@@ -251,9 +253,9 @@ extern int _trace_after_fork(int pid);
     _TRACE_IE_FINISH \
     _TRACE_PUT(_TRACE_SET_END); \
     /* put a -1ll sign to the next page */ \
-    _trace.pos += 4095; \
-    _trace.pos &= ~4095; \
-    *((long long*)&_trace.ptr[_trace.pos]) = -1ll; \
+    _trace_pos += 4095; \
+    _trace_pos &= ~4095; \
+    *((long long*)&_trace_buf[_trace_pos]) = -1ll; \
 }
 
 // same as the macro version
