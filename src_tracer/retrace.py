@@ -98,6 +98,9 @@ class SourceTraceReplayer:
 
         self.asserts_addr = self.addr("_retrace_asserts")
 
+        self.symbolic_addr = self.addr("_retrace_symbolic")
+        self.symbolic_idx_addr = self.addr("_retrace_symbolic_idx")
+
     def addr(self, sym_name):
         try:
             return self.p.loader.main_object.get_symbol(sym_name).rebased_addr
@@ -152,6 +155,8 @@ class SourceTraceReplayer:
             state.mem[self.is_retrace_addr].bool = True
         if self.assert_idx_addr:
             state.mem[self.assert_idx_addr].int = 0
+        if self.symbolic_idx_addr:
+            state.mem[self.symbolic_idx_addr].int = 0
         if self.in_ghost_addr:
             state.mem[self.in_ghost_addr].bool = False
 
@@ -270,7 +275,7 @@ class SourceTraceReplayer:
 
     def try_solve_unconstrained(self, elem, simgr, database, to_stash='active'):
         if elem.letter == 'F' and database:
-            fun_num = int.from_bytes(elem.bs, "little")
+            fun_num = elem.num
             try:
                 fun_name = database.get_name(fun_num)
                 fun_addr = self.addr(fun_name)
@@ -291,7 +296,7 @@ class SourceTraceReplayer:
             elem = next(iter(trace))
             if elem.letter != 'F':
                 raise ValueError(f'Trace contains first element "{elem.letter}"')
-            func_num = int.from_bytes(elem.bs, "little")
+            func_num = elem.num
             func_name = database.get_name(func_num)
             log.debug('Starting with function "%s"', func_name)
 
@@ -359,12 +364,12 @@ class SourceTraceReplayer:
             # PART 5: add constraints for functions and data
             if elem.letter == 'D':
                 # add the constrain for the int
-                trace_int = int.from_bytes(elem.bs, "little")
+                trace_int = elem.num
                 for state in simgr.traced:
                     mem_int = state.mem[self.int_addr].with_type(parse_type("long long int")).resolved
                     state.solver.add(mem_int == trace_int)
             elif elem.letter == 'F':
-                fun_num = int.from_bytes(elem.bs, "little")
+                fun_num = elem.num
                 for state in simgr.traced:
                     mem_num = state.mem[self.fun_num_addr].int.resolved
                     state.solver.add(mem_num == fun_num)
@@ -373,7 +378,7 @@ class SourceTraceReplayer:
             if debug:
                 name = None
                 if not elem.bs == b'':
-                    num = int.from_bytes(elem.bs, "little")
+                    num = elem.num
                     if elem.letter == 'F' and database:
                         name = database.get_name(num)
                 if len(simgr.traced) > 1:
