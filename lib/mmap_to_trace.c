@@ -65,18 +65,26 @@ pid_t my_fork(void) {
     return (pid_t)__syscall0(SYS_fork);
 }
 
-static void my_write(volatile void *ptr) {
+static void my_write(void *ptr, int len) {
 #ifdef _TRACE_USE_POSIX
-    ssize_t written = write(trace_fd, ptr, 4096);
+    ssize_t written = write(trace_fd, ptr, len);
 #else
-    long written = __syscall3(SYS_write, (long)trace_fd, (long)ptr, (long)4096);
+    long written = __syscall3(SYS_write, (long)trace_fd, (long)ptr, (long)len);
 #endif
-    if (unlikely(written != 4096)) {
+    if (unlikely(written != len)) {
         // some write error occured
         // abort trace recording
         close(trace_fd);
         my_exit();
     }
+}
+
+static void write_and_exit(unsigned char *ptr, int len) {
+    // find were the trace ended
+    while (len > 0 && ptr[len-1] == 0) len--;
+    my_write(ptr, len);
+    close(trace_fd);
+    my_exit();
 }
 
 void *forked_write (char *trace_fname) {
@@ -103,16 +111,14 @@ void *forked_write (char *trace_fname) {
 
     while (true) {
         volatile long long *next_ptr = (long long *)&(ptr[next_pos]);
-        volatile long long *this_ptr = (long long *)&(ptr[pos]);
+        unsigned char *this_ptr = &(ptr[pos]);
         long long next_ll;
 
         // wait in for loop until tracer in parent writes to next page
         for (int timeout = 100000; (next_ll = *next_ptr) == 0ll; timeout --) {
             if (timeout == 0) {
                 // parent done or timeout
-                my_write(this_ptr);
-                close(trace_fd);
-                my_exit();
+                write_and_exit(this_ptr, 4096);
             }
             const struct timespec wait_time = {0,100000};
 #ifdef _TRACE_USE_POSIX
@@ -123,16 +129,12 @@ void *forked_write (char *trace_fname) {
         }
         if (next_ll == -1ll) {
             // parant wrote the trace end marker -1ll
-            my_write(this_ptr);
-            close(trace_fd);
-            my_exit();
+            write_and_exit(this_ptr, 4096);
         }
 
-        my_write(this_ptr);
+        my_write(this_ptr, 4096);
         // zero page for future access (ringbuffer!)
-        for (int i = 0; i < 4096/8; i++) {
-            this_ptr[i] = 0ll;
-        }
+        __builtin_memset(this_ptr, 0, 4096);
 
         pos = next_pos;
         next_pos += 4096;
