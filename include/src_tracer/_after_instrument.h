@@ -20,29 +20,30 @@ extern "C" {
 
 // bool is available in C++ but not in C without (see above) include stdbool
 #ifndef __cplusplus
-#ifndef BOOL_ALREADY_DEFINED
+#ifndef bool
 #define bool _Bool
 #endif
 #endif
 
 struct _trace_ctx {
-    void *_page_ptr;
     int fork_count;
     int try_count;
 };
-
-extern struct _trace_ctx _trace;
-extern unsigned char _trace_ie_byte;
+// _trace_buf might point to a dummy buffer when tracing paused
+// _trace_ptr points to a proper trace buf even when tracing paused
+extern __attribute__((aligned(4096))) unsigned char *restrict _trace_buf;
+extern __attribute__((aligned(4096))) void *_trace_ptr;
 extern unsigned short _trace_pos;
-
-extern unsigned char *restrict _trace_ptr;
 
 extern void _trace_open(const char *fname);
 extern void _trace_close(void);
 extern void _trace_before_fork(void);
 extern int _trace_after_fork(int pid);
 
+#ifndef BYTE_TRACE
 #define _TRACE_IE_BYTE_INIT         0b11111110
+extern unsigned char _trace_ie_byte;
+#endif
 
 #define _TRACE_TEST_IE              0b10000000
  #define _TRACE_SET_IE              0b10000000
@@ -103,7 +104,7 @@ extern int _trace_after_fork(int pid);
 #define unlikely(x)     __builtin_expect((x),0)
 
 #define _TRACE_PUT(c) \
-    _trace_ptr[_trace_pos++] = (c)
+    _trace_buf[_trace_pos++] = (c)
 
 #define _TRACE_PUT_TEXT     _TRACE_PUT
 
@@ -120,7 +121,7 @@ extern int _trace_after_fork(int pid);
     }
 
 #define _TRACE_SWITCH_CASE(num, bit_cnt) { \
-    for (int i = 0; i < bit_cnt; i++) { \
+    for (int i = bit_cnt-1; i >= 0; i--) { \
         _TRACE_IE(num & (1 << i)); \
     } \
 }
@@ -158,13 +159,12 @@ extern int _trace_after_fork(int pid);
 #define _TRACE_SWITCH_CASE(num, bit_cnt) { \
     _TRACE_IE_FINISH \
     int bit_cnt_left = bit_cnt; \
-    int num_left = num; \
+    const int num_left = num; \
     while (bit_cnt_left >= 6) { \
-        _TRACE_PUT((num_left & 0b00111111) | 0b10000000); \
         bit_cnt_left -= 6; \
-        num_left >>= 6; \
+        _TRACE_PUT(((num_left >> bit_cnt_left) & 0b00111111) | 0b10000000); \
     } \
-    _trace_ie_byte = (num_left & 0b00111111) - (2 << bit_cnt_left); \
+    _trace_ie_byte = (num_left & ~(0b11111111 << bit_cnt_left) & 0b00111111) - (2 << bit_cnt_left); \
 }
 
 #endif // BYTE_TRACE
@@ -255,7 +255,7 @@ extern int _trace_after_fork(int pid);
     /* put a -1ll sign to the next page */ \
     _trace_pos += 4095; \
     _trace_pos &= ~4095; \
-    *((long long*)&_trace_ptr[_trace_pos]) = -1ll; \
+    *((long long*)&_trace_buf[_trace_pos]) = -1ll; \
 }
 
 // same as the macro version
@@ -323,6 +323,12 @@ static inline __attribute__((always_inline)) bool _retrace_condition(bool cond) 
     return cond;
 }
 
+#define _RETRACE_SWITCH_CASE(num, bit_cnt) { \
+    for (int i = bit_cnt-1; i >= 0; i++) { \
+        _retrace_condition(num & (1 << i)); \
+    } \
+}
+
 // for both tracing and retracing
 extern volatile bool _is_retrace_mode;
 
@@ -355,6 +361,10 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
     return num;
 }
 
+#define _RETRO(normal, retro) \
+    _RETRO_SKIP(normal) \
+    _RETRO_ONLY(retro)
+
 /*
  * Macros used in the instrumentation.
  * 2 versions: _TRACE_MODE and _RETRACE_MODE
@@ -383,7 +393,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _TRACE_OPEN(fname)  _IS_RETRACE( ,_trace_open((fname)))
 #define _TRACE_CLOSE        _IS_RETRACE( ,_trace_close())
 
-#define _GHOST(code)        code
+#define _RETRO_ONLY(code)   _IS_RETRACE(code, )
+#define _RETRO_SKIP(code)   _IS_RETRACE(, code)
 
 
 #elif defined _TRACE_MODE
@@ -412,7 +423,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _FORK(fork_stmt)    (_trace_before_fork(), \
                              _trace_after_fork(fork_stmt))
 
-#define _GHOST(code)        /* nothing here */
+#define _RETRO_ONLY(code)   /* nothing here */
+#define _RETRO_SKIP(code)   code
 
 
 #elif defined _TEXT_TRACE_MODE
@@ -438,7 +450,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _TRACE_OPEN(fname)  ;_trace_open(fname ".txt");
 #define _TRACE_CLOSE        ;_trace_close();
 
-#define _GHOST(code)        /* nothing here */
+#define _RETRO_ONLY(code)   /* nothing here */
+#define _RETRO_SKIP(code)   code
 
 
 #elif defined _RETRACE_MODE
@@ -454,7 +467,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
-                                _RETRACE_NUM(num) \
+                                _RETRACE_SWITCH_CASE(num) \
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
@@ -467,7 +480,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _FORK(fork_stmt)    (_retrace_num(_retrace_fork_count), \
                              _retrace_num((fork_stmt) < 0 ? -1 : 1))
 
-#define _GHOST(code)        code
+#define _RETRO_ONLY(code)   code
+#define _RETRO_SKIP(code)   /* nothing here */
 
 
 #else // neither _TRACE_MODE nor _RETRACE_MODE
@@ -489,9 +503,14 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _FORK(fork_stmt)    fork_stmt
 
-#define _GHOST(code)        /* nothing here */
+#define _RETRO_ONLY(code)   /* nothing here */
+#define _RETRO_SKIP(code)   code
 
 #endif // _TRACE_MODE or _RETRACE_MODE
+
+#ifdef BOOL_ALREADY_DEFINED
+#undef bool
+#endif
 
 #ifdef __cplusplus
 } // end extern "C"

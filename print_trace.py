@@ -108,7 +108,7 @@ for elem in trace:
     elif elem.bs == b'':
         print_extra(elem.pretty(show_pos=args.show_pos))
     else:
-        num = int.from_bytes(elem.bs, "little")
+        num = elem.num
         if elem.letter == 'F':
             if args.pretty in (5,3):
                 name = database.get_name(num)
