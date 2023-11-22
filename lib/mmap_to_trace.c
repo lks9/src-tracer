@@ -11,45 +11,80 @@
 #include <sys/mman.h>
 #include <pthread.h>
 #include <string.h>
+#include <time.h>
+#include <signal.h>
 
-#ifndef O_LARGEFILE
-#define O_LARGEFILE 0
+// editable constant definitions
+#ifndef SHORT_SLEEP_NSEC
+#define SHORT_SLEEP_NSEC 20000
+#endif
+#ifndef LONG_SLEEP_MULT
+#define LONG_SLEEP_MULT 25
+#endif
+#ifndef TIMEOUT_NSEC
+#define TIMEOUT_NSEC 10000000000 // 10 sec
+#endif
+#ifndef BUSY_WAITING
+// comment out if you really want busy waiting
+//#define BUSY_WAITING
+#endif
+#ifndef WRITE_BLOCK_SIZE
+#define WRITE_BLOCK_SIZE 16384
 #endif
 
+// computed constants
+#define LONG_SLEEP_NSEC \
+    (SHORT_SLEEP_NSEC * LONG_SLEEP_MULT)
+#define SLEEP_COUNT_TIMEOUT \
+    (TIMEOUT_NSEC / LONG_SLEEP_NSEC)
 
 #ifndef _TRACE_USE_POSIX
 // taken from musl (arch/x86_64/syscall_arch.h)
-static __inline long __syscall0(long n)
+static __inline long syscall_0(long n)
 {
     unsigned long ret;
     __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n) : "rcx", "r11", "memory");
     return ret;
 }
 
-static __inline long __syscall1(long n, long a1)
+static __inline long syscall_1(long n, long a1)
 {
     unsigned long ret;
     __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1) : "rcx", "r11", "memory");
     return ret;
 }
 
-static __inline long __syscall3(long n, long a1, long a2, long a3)
+static __inline long syscall_3(long n, long a1, long a2, long a3)
 {
     unsigned long ret;
     __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
                                                   "d"(a3) : "rcx", "r11", "memory");
     return ret;
 }
+
+static __inline long syscall_4(long n, long a1, long a2, long a3, long a4)
+{
+       unsigned long ret;
+       register long r10 __asm__("r10") = a4;
+       __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
+                                                 "d"(a3), "r"(r10): "rcx", "r11", "memory");
+       return ret;
+}
+
 #define SYS_write        1
 #define SYS_madvise     28
 #define SYS_nanosleep   35
 #define SYS_getppid    110
 #define SYS_fork        57
+#define SYS_timer_create        222
+#define SYS_timer_settime       223
+#define SYS_timer_gettime       224
 // end musl code
 #endif
 
 static int trace_fd;
 
+__attribute__((noreturn))
 static void my_exit(void) {
 #ifdef _TRACE_USE_PTHREAD
     pthread_exit((void *)0);
@@ -62,14 +97,18 @@ static void my_exit(void) {
 // without calling atfork etc.
 __attribute__((returns_twice))
 pid_t my_fork(void) {
-    return (pid_t)__syscall0(SYS_fork);
+#ifdef _TRACE_USE_POSIX
+    return fork();
+#else
+    return (pid_t)syscall_0(SYS_fork);
+#endif
 }
 
 static void my_write(void *ptr, int len) {
 #ifdef _TRACE_USE_POSIX
     ssize_t written = write(trace_fd, ptr, len);
 #else
-    long written = __syscall3(SYS_write, (long)trace_fd, (long)ptr, (long)len);
+    long written = syscall_3(SYS_write, (long)trace_fd, (long)ptr, (long)len);
 #endif
     if (unlikely(written != len)) {
         // some write error occured
@@ -87,56 +126,110 @@ static void write_and_exit(unsigned char *ptr, int len) {
     my_exit();
 }
 
-void *forked_write (char *trace_fname) {
-    int lowfd = open(trace_fname,
-                     O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE | O_NOCTTY,
-                     S_IRUSR | S_IWUSR);
-#ifdef _TRACE_USE_PTHREAD
-    // The posix standard specifies that open always returns the lowest-numbered unused fd.
-    // It is possbile that the traced software relies on that behavior and expects a particalur fd number
-    // for a subsequent open call, how ugly this might be (busybox unzip expects fd number 3).
-    // The workaround is to increase the trace fd number by 42.
-    trace_fd = fcntl(lowfd, F_DUPFD_CLOEXEC, lowfd + 42);
-    close(lowfd);
-#else
-    trace_fd = lowfd;
+#ifndef O_LARGEFILE
+#define O_LARGEFILE 0
 #endif
+
+static volatile long long *next_ptr;
+
+#ifdef BUSY_WAITING
+
+static int counter = 0;
+static int prev_counter = 0;
+
+static void counter_handler(int nr) {
+    if (counter == prev_counter) {
+        // timeout
+        // write trace end marker -1ll
+        *next_ptr = -1ll;
+    }
+    prev_counter = counter;
+}
+
+#else // BUSY_WAITING
+
+static void my_sleep(long nsec) {
+    const struct timespec sleep_time = {0, nsec};
+#ifdef _TRACE_USE_POSIX
+    nanosleep(&sleep_time);
+#else
+    syscall_1(SYS_nanosleep, (long)&sleep_time);
+#endif
+}
+
+#endif // BUSY_WAITING
+
+void *forked_write (char *trace_fname) {
+    int trace_fd = open(trace_fname,
+                        O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE | O_NOCTTY,
+                        S_IRUSR | S_IWUSR);
     if (trace_fd < 0) {
         my_exit();
     }
 
     unsigned char *const ptr = _trace_ptr;
-    unsigned short next_pos = 4096;
+    unsigned short next_pos = WRITE_BLOCK_SIZE;
     unsigned short pos = 0;
 
+#ifdef BUSY_WAITING
+    // timer to interrupt busy waiting
+    struct sigevent sev;
+    sev.sigev_notify = SIGEV_SIGNAL;
+    sev.sigev_signo = SIGRTMIN;
+    timer_t timerid;
+    sev.sigev_value.sival_ptr = &timerid;
+    syscall_3(SYS_timer_create, CLOCK_BOOTTIME, (long)&sev, (long)&timerid);
+
+    signal(SIGRTMIN, counter_handler);
+
+    time_t secs = TIMEOUT_NSEC / 1000000000;
+    long nsecs  = TIMEOUT_NSEC % 1000000000;
+    struct itimerspec interv = {{secs,nsecs}, {secs,nsecs}};
+    syscall_4(SYS_timer_settime, (long)timerid, (long)0, (long)&interv, (long)NULL);
+#else
+    bool slept_before = false;
+#endif
+
     while (true) {
-        volatile long long *next_ptr = (long long *)&(ptr[next_pos]);
+        next_ptr = (long long *)&(ptr[next_pos]);
         unsigned char *this_ptr = &(ptr[pos]);
         long long next_ll;
 
         // wait in for loop until tracer in parent writes to next page
-        for (int timeout = 100000; (next_ll = *next_ptr) == 0ll; timeout --) {
-            if (timeout == 0) {
-                // parent done or timeout
-                write_and_exit(this_ptr, 4096);
-            }
-            const struct timespec wait_time = {0,100000};
-#ifdef _TRACE_USE_POSIX
-            nanosleep(&wait_time);
-#else
-            __syscall1(SYS_nanosleep, (long)&wait_time);
-#endif
+#ifdef BUSY_WAITING
+        while ((next_ll = *next_ptr) == 0ll) {
+            __builtin_ia32_pause();
         }
-        if (next_ll == -1ll) {
-            // parant wrote the trace end marker -1ll
-            write_and_exit(this_ptr, 4096);
+        counter += 1;
+#else
+        if (!slept_before) {
+            // sleep short when tracing is quick
+            for (int i = 0; i < LONG_SLEEP_MULT; i++) {
+                next_ll = *next_ptr;
+                if (next_ll != 0ll) break;
+                my_sleep(SHORT_SLEEP_NSEC);
+            }
+        } else {
+            next_ll = *next_ptr;
+        }
+        slept_before = false;
+        for (int timeout = 0; timeout < SLEEP_COUNT_TIMEOUT; timeout++) {
+            if (next_ll != 0ll) break;
+            my_sleep(LONG_SLEEP_NSEC);
+            next_ll = *next_ptr;
+            slept_before = true;
+        }
+#endif
+        if (next_ll == 0ll || next_ll == -1ll) {
+            // timeout (indicated by 0ll) or parent wrote trace end marker -1ll
+            write_and_exit(this_ptr, WRITE_BLOCK_SIZE);
         }
 
-        my_write(this_ptr, 4096);
+        my_write(this_ptr, WRITE_BLOCK_SIZE);
         // zero page for future access (ringbuffer!)
-        __builtin_memset(this_ptr, 0, 4096);
+        __builtin_memset(this_ptr, 0, WRITE_BLOCK_SIZE);
 
         pos = next_pos;
-        next_pos += 4096;
+        next_pos += WRITE_BLOCK_SIZE;
     }
 }
