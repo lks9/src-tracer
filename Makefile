@@ -13,4 +13,4 @@ lib/byte_to_bit_trace: lib/byte_to_bit_trace.c
 	gcc -fwhole-program -Wall -Iinclude -O3 -o $@ $<
 
 clean:
-	rm -f *.o *.a
+	rm -f lib/*.o lib/*.a lib/*.i
