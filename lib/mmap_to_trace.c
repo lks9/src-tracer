@@ -15,19 +15,28 @@
 #include <signal.h>
 
 // editable constant definitions
-#ifndef SLEEP_NSEC
-#define SLEEP_NSEC 1000000
+#ifndef SHORT_SLEEP_NSEC
+#define SHORT_SLEEP_NSEC 20000
+#endif
+#ifndef LONG_SLEEP_MULT
+#define LONG_SLEEP_MULT 25
 #endif
 #ifndef TIMEOUT_NSEC
 #define TIMEOUT_NSEC 10000000000 // 10 sec
+#endif
+#ifndef BUSY_WAITING
+// comment out if you really want busy waiting
+//#define BUSY_WAITING
 #endif
 #ifndef WRITE_BLOCK_SIZE
 #define WRITE_BLOCK_SIZE 16384
 #endif
 
-// computed constant definitions
-#define TIMEOUT_COUNT \
-    (TIMEOUT_NSEC / SLEEP_NSEC)
+// computed constants
+#define LONG_SLEEP_NSEC \
+    (SHORT_SLEEP_NSEC * LONG_SLEEP_MULT)
+#define SLEEP_COUNT_TIMEOUT \
+    (TIMEOUT_NSEC / LONG_SLEEP_NSEC)
 
 #ifndef _TRACE_USE_POSIX
 // taken from musl (arch/x86_64/syscall_arch.h)
@@ -123,21 +132,32 @@ static void write_and_exit(unsigned char *ptr, int len) {
 
 static volatile long long *next_ptr;
 
+#ifdef BUSY_WAITING
 
-static bool waiting = false;
-static bool poll_cond = true;
 static int counter = 0;
 static int prev_counter = 0;
 
-static void timer_handler(int nr) {
-    if (!waiting) return;
+static void counter_handler(int nr) {
     if (counter == prev_counter) {
         // timeout
-        poll_cond = false;
-    } else {
-        prev_counter = counter;
+        // write trace end marker -1ll
+        *next_ptr = -1ll;
     }
+    prev_counter = counter;
 }
+
+#else // BUSY_WAITING
+
+static void my_sleep(long nsec) {
+    const struct timespec sleep_time = {0, nsec};
+#ifdef _TRACE_USE_POSIX
+    nanosleep(&sleep_time);
+#else
+    syscall_1(SYS_nanosleep, (long)&sleep_time);
+#endif
+}
+
+#endif // BUSY_WAITING
 
 void *forked_write (char *trace_fname) {
     int trace_fd = open(trace_fname,
@@ -151,6 +171,7 @@ void *forked_write (char *trace_fname) {
     unsigned short next_pos = WRITE_BLOCK_SIZE;
     unsigned short pos = 0;
 
+#ifdef BUSY_WAITING
     // timer to interrupt busy waiting
     struct sigevent sev;
     sev.sigev_notify = SIGEV_SIGNAL;
@@ -159,10 +180,15 @@ void *forked_write (char *trace_fname) {
     sev.sigev_value.sival_ptr = &timerid;
     syscall_3(SYS_timer_create, CLOCK_BOOTTIME, (long)&sev, (long)&timerid);
 
-    signal(SIGRTMIN, timer_handler);
+    signal(SIGRTMIN, counter_handler);
 
-    struct itimerspec interv = {{0, SLEEP_NSEC}, {0, SLEEP_NSEC}};
+    time_t secs = TIMEOUT_NSEC / 1000000000;
+    long nsecs  = TIMEOUT_NSEC % 1000000000;
+    struct itimerspec interv = {{secs,nsecs}, {secs,nsecs}};
     syscall_4(SYS_timer_settime, (long)timerid, (long)0, (long)&interv, (long)NULL);
+#else
+    bool slept_before = false;
+#endif
 
     while (true) {
         next_ptr = (long long *)&(ptr[next_pos]);
@@ -170,26 +196,30 @@ void *forked_write (char *trace_fname) {
         long long next_ll;
 
         // wait in for loop until tracer in parent writes to next page
-        waiting = true;
-        counter += 1;
-        // 1. first try
-        next_ll = *next_ptr;
-        // 2. busy waiting
-        while (poll_cond) {
-            if (next_ll != 0ll) break;
+#ifdef BUSY_WAITING
+        while ((next_ll = *next_ptr) == 0ll) {
             __builtin_ia32_pause();
+        }
+        counter += 1;
+#else
+        if (!slept_before) {
+            // sleep short when tracing is quick
+            for (int i = 0; i < LONG_SLEEP_MULT; i++) {
+                next_ll = *next_ptr;
+                if (next_ll != 0ll) break;
+                my_sleep(SHORT_SLEEP_NSEC);
+            }
+        } else {
             next_ll = *next_ptr;
         }
-        poll_cond = true;
-        // 3. sleep waiting
-        for (int timeout = 0; timeout < TIMEOUT_COUNT; timeout++) {
+        slept_before = false;
+        for (int timeout = 0; timeout < SLEEP_COUNT_TIMEOUT; timeout++) {
             if (next_ll != 0ll) break;
-            // pause() causes timer_handler() to set poll_cond=false for the next iteration
-            pause();
+            my_sleep(LONG_SLEEP_NSEC);
             next_ll = *next_ptr;
+            slept_before = true;
         }
-        waiting = false;
-
+#endif
         if (next_ll == 0ll || next_ll == -1ll) {
             // timeout (indicated by 0ll) or parent wrote trace end marker -1ll
             write_and_exit(this_ptr, WRITE_BLOCK_SIZE);
