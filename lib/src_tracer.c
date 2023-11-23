@@ -21,9 +21,8 @@
 
 static unsigned char dummy[65536] __attribute__ ((aligned (4096)));
 static int trace_fd;
-#define TRACE_FD_SIZE_STEP 4096
-static off_t trace_fd_size;
-static unsigned short trace_mapped_pos;
+#define TRACE_FD_SIZE_STEP 32768
+static unsigned short trace_written_pos;
 
 __attribute__((aligned(4096))) unsigned char *restrict _trace_buf = dummy;
 void __attribute__((aligned(4096))) *_trace_ptr = dummy;
@@ -50,19 +49,20 @@ extern
 __attribute__((returns_twice))
 pid_t my_fork(void);
 
-static void sigbus_handler(int nr) {
-    // sync what was already written
-    short old_mapped_pos = trace_mapped_pos - TRACE_FD_SIZE_STEP;
-    msync(&_trace_buf[old_mapped_pos], TRACE_FD_SIZE_STEP, MS_ASYNC);
+static void segv_handler(int nr, siginfo_t *si, void *unused) {
+    // is it even in the addr range of the trace?
+    if (si->si_addr < _trace_ptr || _trace_ptr + 65536 <= si->si_addr) {
+        exit(EXIT_FAILURE);
+    }
 
-    // resulve sigbus with ftruncate
-    trace_fd_size += TRACE_FD_SIZE_STEP;
-    ftruncate(trace_fd, trace_fd_size);
+    // write, to the disk
+    write(trace_fd, _trace_ptr + trace_written_pos, TRACE_FD_SIZE_STEP);
+    // mprotect for future segv handling
+    mprotect(_trace_ptr + trace_written_pos, TRACE_FD_SIZE_STEP, PROT_NONE);
+    trace_written_pos += TRACE_FD_SIZE_STEP;
 
-    // map the next memory range (writing there will produce sigbus, to be handled again)
-    trace_mapped_pos += TRACE_FD_SIZE_STEP;
-    mmap(&_trace_buf[trace_mapped_pos], TRACE_FD_SIZE_STEP, PROT_READ | PROT_WRITE,
-         MAP_FIXED | MAP_SHARED, trace_fd, trace_fd_size);
+    // resolve current segv with mprotect
+    mprotect(_trace_ptr + trace_written_pos, TRACE_FD_SIZE_STEP, PROT_WRITE);
 }
 
 static void create_trace_process(void) {
@@ -78,23 +78,27 @@ static void create_trace_process(void) {
     trace_fd = fcntl(lowfd, F_DUPFD_CLOEXEC, lowfd + 42);
     close(lowfd);
 
-    trace_fd_size = TRACE_FD_SIZE_STEP;
-    if(ftruncate(trace_fd, trace_fd_size) < 0) {
-        perror("ftruncate");
-        close(trace_fd);
+    // when reaching the mprotect area, segv handler calls writes
+    struct sigaction sa;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_sigaction = segv_handler;
+    if (sigaction(SIGSEGV, &sa, NULL) == -1) {
+        perror("sigaction");
         return;
     }
 
     // reserve memory address range for the trace buffer
-    _trace_ptr = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED, trace_fd, 0);
+    _trace_ptr = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (_trace_ptr == MAP_FAILED) {
         _trace_ptr = dummy;
         perror("mmap");
         return;
     }
 
-    // when reaching the end of file, sigbus handler calls ftruncate
-    signal(SIGBUS, sigbus_handler);
+    if (mprotect(_trace_ptr + TRACE_FD_SIZE_STEP, 65536 - TRACE_FD_SIZE_STEP, PROT_NONE)) {
+        perror("mprotect");
+    }
 }
 
 void _trace_open(const char *fname) {
@@ -189,13 +193,12 @@ void _trace_close(void) {
     _trace_buf = dummy;
 
     // now we can safely call library functions
+    write(trace_fd, _trace_ptr + trace_written_pos, _trace_pos % TRACE_FD_SIZE_STEP);
+    // trace_written_pos += no longer needed
+    close(trace_fd);
+
     munmap(_trace_ptr, 65536);
     _trace_ptr = dummy;
-
-    trace_fd_size -= TRACE_FD_SIZE_STEP;
-    trace_fd_size += _trace_pos % TRACE_FD_SIZE_STEP;
-    ftruncate(trace_fd, trace_fd_size);
-    close(trace_fd);
 }
 
 
