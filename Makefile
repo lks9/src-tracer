@@ -16,4 +16,4 @@ lib/mmap_to_trace.o: lib/mmap_to_trace.c
 	gcc -Wall -fPIC -c -Iinclude -O3 -o $@ $<
 
 clean:
-	rm -f lib/*.o lib/*.a
+	rm -f lib/*.o lib/*.a lib/*.i
