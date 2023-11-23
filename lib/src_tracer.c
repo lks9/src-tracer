@@ -20,6 +20,10 @@
 #endif
 
 static unsigned char dummy[65536] __attribute__ ((aligned (4096)));
+static int trace_fd;
+#define TRACE_FD_SIZE_STEP 4096
+static off_t trace_fd_size;
+static unsigned short trace_mapped_pos;
 
 __attribute__((aligned(4096))) unsigned char *restrict _trace_buf = dummy;
 void __attribute__((aligned(4096))) *_trace_ptr = dummy;
@@ -46,39 +50,51 @@ extern
 __attribute__((returns_twice))
 pid_t my_fork(void);
 
+static void sigbus_handler(int nr) {
+    // sync what was already written
+    short old_mapped_pos = trace_mapped_pos - TRACE_FD_SIZE_STEP;
+    msync(&_trace_buf[old_mapped_pos], TRACE_FD_SIZE_STEP, MS_ASYNC);
+
+    // resulve sigbus with ftruncate
+    trace_fd_size += TRACE_FD_SIZE_STEP;
+    ftruncate(trace_fd, trace_fd_size);
+
+    // map the next memory range (writing there will produce sigbus, to be handled again)
+    trace_mapped_pos += TRACE_FD_SIZE_STEP;
+    mmap(&_trace_buf[trace_mapped_pos], TRACE_FD_SIZE_STEP, PROT_READ | PROT_WRITE,
+         MAP_FIXED | MAP_SHARED, trace_fd, trace_fd_size);
+}
+
 static void create_trace_process(void) {
-    // reserve memory for the trace buffer
-    _trace_ptr = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    int lowfd = open(trace_fname, O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE, S_IRUSR | S_IWUSR);
+    if (lowfd < 0) {
+        perror("open");
+        return;
+    }
+    // The posix standard specifies that open always returns the lowest-numbered unused fd.
+    // It is possbile that the traced software relies on that behavior and expects a particalur fd number
+    // for a subsequent open call, how ugly this might be (busybox unzip expects fd number 3).
+    // The workaround is to increase the trace fd number by 42.
+    trace_fd = fcntl(lowfd, F_DUPFD_CLOEXEC, lowfd + 42);
+    close(lowfd);
+
+    trace_fd_size = TRACE_FD_SIZE_STEP;
+    if(ftruncate(trace_fd, trace_fd_size) < 0) {
+        perror("ftruncate");
+        close(trace_fd);
+        return;
+    }
+
+    // reserve memory address range for the trace buffer
+    _trace_ptr = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED, trace_fd, 0);
     if (_trace_ptr == MAP_FAILED) {
         _trace_ptr = dummy;
         perror("mmap");
         return;
     }
 
-#ifdef _TRACE_USE_PTHREAD
-    pthread_create(&thread_id, NULL, &forked_write, trace_fname);
-#else
-    // bsd style daemon + close all fd
-    if (my_fork() == 0) {
-        // child process
-        // new name
-        prctl(PR_SET_NAME, (unsigned long)"src_tracer");
-        // session leader
-        //    -> independ from the previous process session
-        //    -> independent from terminal
-        setsid();
-        // anything might happen to the current directory, be independent
-        chdir("/");
-        umask(0);
-        // close any fd
-        for (int i = sysconf(_SC_OPEN_MAX); i >= 0; i--) {
-            close(i);
-        }
-
-        forked_write(trace_fname);
-        // will never return
-    }
-#endif
+    // when reaching the end of file, sigbus handler calls ftruncate
+    signal(SIGBUS, sigbus_handler);
 }
 
 void _trace_open(const char *fname) {
@@ -176,10 +192,10 @@ void _trace_close(void) {
     munmap(_trace_ptr, 65536);
     _trace_ptr = dummy;
 
-#ifdef _TRACE_USE_PTHREAD
-    // FIXME
-    pthread_join(thread_id, NULL);
-#endif
+    trace_fd_size -= TRACE_FD_SIZE_STEP;
+    trace_fd_size += _trace_pos % TRACE_FD_SIZE_STEP;
+    ftruncate(trace_fd, trace_fd_size);
+    close(trace_fd);
 }
 
 
