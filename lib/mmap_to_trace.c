@@ -13,7 +13,6 @@
 #include <string.h>
 #include <time.h>
 #include <signal.h>
-#include <sys/syscall.h>
 #include <linux/futex.h>
 #include <limits.h>
 
@@ -72,6 +71,7 @@ static __inline long syscall_4(long n, long a1, long a2, long a3, long a4)
 #define SYS_timer_create        222
 #define SYS_timer_settime       223
 #define SYS_timer_gettime       224
+#define SYS_futex      202
 // end musl code
 #endif
 
@@ -149,20 +149,20 @@ void *forked_write (char *trace_fname) {
         // wait in for loop until tracer in parent writes to next page
         next = *next_ptr;
         if (next == 0) {
-            syscall(SYS_futex, next_ptr, FUTEX_WAIT, 0, &wait_timeout);
+            syscall_4(SYS_futex, (long)next_ptr, FUTEX_WAIT, 0, (long)&wait_timeout);
             next = *next_ptr;
         }
 
         if (next == 0 || next == -1) {
             // timeout == 0 or parent wrote trace end marker -1
-            write_and_exit(this_ptr, WRITE_BLOCK_SIZE);
+            write_and_exit((unsigned char*)this_ptr, WRITE_BLOCK_SIZE);
         }
 
-        my_write(this_ptr, WRITE_BLOCK_SIZE);
+        my_write((unsigned char*)this_ptr, WRITE_BLOCK_SIZE);
 
         // zero for future access (ringbuffer!)
         *this_ptr = 0;
-        syscall(SYS_futex, this_ptr, FUTEX_WAKE, INT_MAX);
+        syscall_3(SYS_futex, (long)this_ptr, FUTEX_WAKE, INT_MAX);
 
         pos = next_pos;
         next_pos += WRITE_BLOCK_SIZE;
