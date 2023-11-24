@@ -20,6 +20,8 @@
 #endif
 
 static unsigned char dummy[65536] __attribute__ ((aligned (4096)));
+#define TRACE_FD_SIZE_STEP 32768
+static unsigned short trace_written_pos;
 
 __attribute__((aligned(4096))) unsigned char *restrict _trace_buf = dummy;
 void __attribute__((aligned(4096))) *_trace_ptr = dummy;
@@ -39,12 +41,43 @@ static char trace_fname[200];
 
 extern void *forked_write(char *);
 #ifdef _TRACE_USE_PTHREAD
-static pthread_t thread_id;
+static pthread_t writer_tid;
+#else
+static pid_t writer_pid;
 #endif
 
 extern
 __attribute__((returns_twice))
 pid_t my_fork(void);
+
+static void segv_handler(int nr, siginfo_t *si, void *unused) {
+    // is it even in the addr range of the trace?
+    if (si->si_addr < _trace_ptr || _trace_ptr + 65536 <= si->si_addr) {
+        exit(EXIT_FAILURE);
+    }
+
+    // mprotect for future segv handling
+    mprotect(_trace_ptr + trace_written_pos, TRACE_FD_SIZE_STEP, PROT_NONE);
+    trace_written_pos += TRACE_FD_SIZE_STEP;
+
+    // resolve current segv with mprotect
+    mprotect(_trace_ptr + trace_written_pos, TRACE_FD_SIZE_STEP, PROT_WRITE);
+
+    // now this should be safe:
+    volatile long long *next_ptr = _trace_ptr + trace_written_pos;
+    while (*next_ptr != 0ll) {
+        __builtin_ia32_pause();
+    }
+    *next_ptr = 1;
+
+    // inform write process to write on the disk
+#ifdef _TRACE_USE_PTHREAD
+    // TODO
+#else
+    kill(writer_pid, SIGPOLL);
+#endif
+}
+
 
 static void create_trace_process(void) {
     // reserve memory for the trace buffer
@@ -56,10 +89,16 @@ static void create_trace_process(void) {
     }
 
 #ifdef _TRACE_USE_PTHREAD
-    pthread_create(&thread_id, NULL, &forked_write, trace_fname);
+    pthread_create(&writer_tid, NULL, &forked_write, trace_fname);
 #else
+    // block SIGPOLL (for child)
+    sigset_t sigset, oldset;
+    sigemptyset(&sigset);
+    sigaddset(&sigset, SIGPOLL);
+    sigprocmask(SIG_BLOCK, &sigset, &oldset);
+
     // bsd style daemon + close all fd
-    if (my_fork() == 0) {
+    if ((writer_pid = my_fork()) == 0) {
         // child process
         // new name
         prctl(PR_SET_NAME, (unsigned long)"src_tracer");
@@ -78,7 +117,27 @@ static void create_trace_process(void) {
         forked_write(trace_fname);
         // will never return
     }
+
+    // unblock SIGPOLL only in parent
+    sigprocmask(SIG_SETMASK, &oldset, NULL);
 #endif
+
+    // segv interrupt
+    // when reaching the mprotect area, segv handler calls writes
+    struct sigaction sa;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_sigaction = segv_handler;
+    if (sigaction(SIGSEGV, &sa, NULL) == -1) {
+        perror("sigaction");
+        return;
+    }
+
+    // mprotect to generate the segv
+    if (mprotect(_trace_ptr + TRACE_FD_SIZE_STEP, 65536 - TRACE_FD_SIZE_STEP, PROT_NONE)) {
+        perror("mprotect");
+        return;
+    }
 }
 
 void _trace_open(const char *fname) {
@@ -178,7 +237,9 @@ void _trace_close(void) {
 
 #ifdef _TRACE_USE_PTHREAD
     // FIXME
-    pthread_join(thread_id, NULL);
+    pthread_join(writer_tid, NULL);
+#else
+    kill(writer_pid, SIGPOLL);
 #endif
 }
 

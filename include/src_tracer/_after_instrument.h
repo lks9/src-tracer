@@ -253,8 +253,8 @@ extern unsigned char _trace_ie_byte;
     _TRACE_IE_FINISH \
     _TRACE_PUT(_TRACE_SET_END); \
     /* put a -1ll sign to the next page */ \
-    _trace_pos += 16383; \
-    _trace_pos &= ~16383; \
+    _trace_pos += 32767; \
+    _trace_pos &= ~32767; \
     *((long long*)&_trace_buf[_trace_pos]) = -1ll; \
 }
 
