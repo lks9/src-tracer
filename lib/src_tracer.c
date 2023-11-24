@@ -14,6 +14,9 @@
 #include <string.h>
 #include <sys/prctl.h>
 #include <pthread.h>
+#include <sys/syscall.h>
+#include <linux/futex.h>
+#include <limits.h>
 
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
@@ -64,18 +67,14 @@ static void segv_handler(int nr, siginfo_t *si, void *unused) {
     mprotect(_trace_ptr + trace_written_pos, TRACE_FD_SIZE_STEP, PROT_WRITE);
 
     // now this should be safe:
-    volatile long long *next_ptr = _trace_ptr + trace_written_pos;
-    while (*next_ptr != 0ll) {
-        __builtin_ia32_pause();
+    volatile int *next_ptr = _trace_ptr + trace_written_pos;
+    while (*next_ptr != 0) {
+        syscall(SYS_futex, next_ptr, FUTEX_WAIT, *next_ptr);
     }
-    *next_ptr = 1;
 
     // inform write process to write on the disk
-#ifdef _TRACE_USE_PTHREAD
-    // TODO
-#else
-    kill(writer_pid, SIGPOLL);
-#endif
+    *next_ptr = 1;
+    syscall(SYS_futex, next_ptr, FUTEX_WAKE, INT_MAX);
 }
 
 
@@ -92,10 +91,10 @@ static void create_trace_process(void) {
     pthread_create(&writer_tid, NULL, &forked_write, trace_fname);
 #else
     // block SIGPOLL (for child)
-    sigset_t sigset, oldset;
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGPOLL);
-    sigprocmask(SIG_BLOCK, &sigset, &oldset);
+    //sigset_t sigset, oldset;
+    //sigemptyset(&sigset);
+    //sigaddset(&sigset, SIGPOLL);
+    //sigprocmask(SIG_BLOCK, &sigset, &oldset);
 
     // bsd style daemon + close all fd
     if ((writer_pid = my_fork()) == 0) {
@@ -119,7 +118,7 @@ static void create_trace_process(void) {
     }
 
     // unblock SIGPOLL only in parent
-    sigprocmask(SIG_SETMASK, &oldset, NULL);
+    //sigprocmask(SIG_SETMASK, &oldset, NULL);
 #endif
 
     // segv interrupt
@@ -227,20 +226,24 @@ void _trace_close(void) {
         // already closed, paused or never successfully opened
         return;
     }
-    _TRACE_END();
     // stop tracing
-    _trace_buf = dummy;
+    _TRACE_END();
+    trace_written_pos += TRACE_FD_SIZE_STEP;
+    mprotect(_trace_ptr + trace_written_pos, TRACE_FD_SIZE_STEP, PROT_WRITE);
+
+    // now this should be safe:
+    volatile int *next_ptr = _trace_ptr + trace_written_pos;
+    while (*next_ptr != 0) {
+        syscall(SYS_futex, next_ptr, FUTEX_WAIT, *next_ptr);
+    }
+
+    // trace end marker -1
+    *next_ptr = -1;
+    syscall(SYS_futex, next_ptr, FUTEX_WAKE, INT_MAX);
 
     // now we can safely call library functions
     munmap(_trace_ptr, 65536);
     _trace_ptr = dummy;
-
-#ifdef _TRACE_USE_PTHREAD
-    // FIXME
-    pthread_join(writer_tid, NULL);
-#else
-    kill(writer_pid, SIGPOLL);
-#endif
 }
 
 

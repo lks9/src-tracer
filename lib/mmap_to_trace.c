@@ -13,6 +13,9 @@
 #include <string.h>
 #include <time.h>
 #include <signal.h>
+#include <sys/syscall.h>
+#include <linux/futex.h>
+#include <limits.h>
 
 // editable constant definitions
 #ifndef TIMEOUT_NSEC
@@ -122,31 +125,6 @@ static void write_and_exit(unsigned char *ptr, int len) {
 #define O_LARGEFILE 0
 #endif
 
-static volatile long long *next_ptr;
-
-#if 0
-static int counter = 0;
-static int prev_counter = 0;
-static volatile bool timeout = false;
-
-static void counter_handler(int nr) {
-    if (counter == prev_counter) {
-        // timeout
-        timeout = true;
-    }
-    prev_counter = counter;
-}
-
-static void my_sleep(long nsec) {
-    const struct timespec sleep_time = {0, nsec};
-#ifdef _TRACE_USE_POSIX
-    nanosleep(&sleep_time);
-#else
-    syscall_1(SYS_nanosleep, (long)&sleep_time);
-#endif
-}
-#endif
-
 void *forked_write (char *trace_fname) {
     int trace_fd = open(trace_fname,
                         O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE | O_NOCTTY,
@@ -159,47 +137,32 @@ void *forked_write (char *trace_fname) {
     unsigned short next_pos = WRITE_BLOCK_SIZE;
     unsigned short pos = 0;
 
-#if 0
-    // timer to interrupt
-    struct sigevent sev;
-    sev.sigev_notify = SIGEV_SIGNAL;
-    sev.sigev_signo = SIGRTMIN;
-    timer_t timerid;
-    sev.sigev_value.sival_ptr = &timerid;
-    syscall_3(SYS_timer_create, CLOCK_BOOTTIME, (long)&sev, (long)&timerid);
-
-    signal(SIGRTMIN, counter_handler);
-
-    struct itimerspec interv = {{secs,nsecs}, {secs,nsecs}};
-    syscall_4(SYS_timer_settime, (long)timerid, (long)0, (long)&interv, (long)NULL);
-#endif
     time_t secs = TIMEOUT_NSEC / 1000000000;
     long nsecs  = TIMEOUT_NSEC % 1000000000;
     struct timespec wait_timeout = {secs, nsecs};
 
-    // SIGPOLL (send from the trace producer process)
-    sigset_t sig_set;
-    sigemptyset(&sig_set);
-    sigaddset(&sig_set, SIGPOLL);
-
     while (true) {
-        next_ptr = (long long *)&(ptr[next_pos]);
-        unsigned char *this_ptr = &(ptr[pos]);
-        long long next_ll;
+        volatile int *next_ptr = (int *)&(ptr[next_pos]);
+        volatile int *this_ptr = (int *)&(ptr[pos]);
+        int next;
 
         // wait in for loop until tracer in parent writes to next page
-        sigtimedwait(&sig_set, NULL, &wait_timeout);
-        next_ll = *next_ptr;
+        next = *next_ptr;
+        if (next == 0) {
+            syscall(SYS_futex, next_ptr, FUTEX_WAIT, 0, &wait_timeout);
+            next = *next_ptr;
+        }
 
-        if (next_ll == 0ll || next_ll == -1ll) {
-            // timeout == 0ll or parent wrote trace end marker -1ll
+        if (next == 0 || next == -1) {
+            // timeout == 0 or parent wrote trace end marker -1
             write_and_exit(this_ptr, WRITE_BLOCK_SIZE);
         }
 
         my_write(this_ptr, WRITE_BLOCK_SIZE);
-        // zero page for future access (ringbuffer!)
-        *(long long *)this_ptr = 0ll;
-        //__builtin_memset(this_ptr, 0, WRITE_BLOCK_SIZE);
+
+        // zero for future access (ringbuffer!)
+        *this_ptr = 0;
+        syscall(SYS_futex, this_ptr, FUTEX_WAKE, INT_MAX);
 
         pos = next_pos;
         next_pos += WRITE_BLOCK_SIZE;
