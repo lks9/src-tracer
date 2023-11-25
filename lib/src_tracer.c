@@ -69,12 +69,12 @@ static void segv_handler(int nr, siginfo_t *si, void *unused) {
     // now this should be safe:
     volatile int *next_ptr = _trace_ptr + trace_written_pos;
     while (*next_ptr != 0) {
-        syscall(SYS_futex, next_ptr, FUTEX_WAIT, *next_ptr);
+        syscall(SYS_futex, next_ptr, FUTEX_WAIT, *next_ptr, NULL, NULL, 0);
     }
 
     // inform write process to write on the disk
     *next_ptr = 1;
-    syscall(SYS_futex, next_ptr, FUTEX_WAKE, INT_MAX);
+    syscall(SYS_futex, next_ptr, FUTEX_WAKE, INT_MAX, NULL, NULL, 0);
 }
 
 

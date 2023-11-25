@@ -63,6 +63,17 @@ static __inline long syscall_4(long n, long a1, long a2, long a3, long a4)
        return ret;
 }
 
+static __inline long syscall_6(long n, long a1, long a2, long a3, long a4, long a5, long a6)
+{
+	unsigned long ret;
+	register long r10 __asm__("r10") = a4;
+	register long r8 __asm__("r8") = a5;
+	register long r9 __asm__("r9") = a6;
+	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
+						  "d"(a3), "r"(r10), "r"(r8), "r"(r9) : "rcx", "r11", "memory");
+	return ret;
+}
+
 #define SYS_write        1
 #define SYS_madvise     28
 #define SYS_nanosleep   35
@@ -149,7 +160,7 @@ void *forked_write (char *trace_fname) {
         // wait in for loop until tracer in parent writes to next page
         next = *next_ptr;
         if (next == 0) {
-            syscall_4(SYS_futex, (long)next_ptr, FUTEX_WAIT, 0, (long)&wait_timeout);
+            syscall_6(SYS_futex, (long)next_ptr, FUTEX_WAIT, 0, (long)&wait_timeout, (long)NULL, 0);
             next = *next_ptr;
         }
 
@@ -162,7 +173,7 @@ void *forked_write (char *trace_fname) {
 
         // zero for future access (ringbuffer!)
         *this_ptr = 0;
-        syscall_3(SYS_futex, (long)this_ptr, FUTEX_WAKE, INT_MAX);
+        syscall_6(SYS_futex, (long)this_ptr, FUTEX_WAKE, INT_MAX, (long)NULL, (long)NULL, 0);
 
         pos = next_pos;
         next_pos += WRITE_BLOCK_SIZE;
