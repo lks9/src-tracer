@@ -58,11 +58,11 @@ static void segv_handler(int nr, siginfo_t *si, void *unused) {
     // write, to the disk
     write(trace_fd, _trace_ptr + trace_written_pos, TRACE_FD_SIZE_STEP);
     // mprotect for future segv handling
-    mprotect(_trace_ptr + trace_written_pos, TRACE_FD_SIZE_STEP, PROT_NONE);
+    mprotect(_trace_ptr + trace_written_pos, 4096, PROT_NONE);
     trace_written_pos += TRACE_FD_SIZE_STEP;
 
     // resolve current segv with mprotect
-    mprotect(_trace_ptr + trace_written_pos, TRACE_FD_SIZE_STEP, PROT_WRITE);
+    mprotect(_trace_ptr + trace_written_pos, 4096, PROT_WRITE);
 }
 
 static void create_trace_process(void) {
@@ -96,8 +96,11 @@ static void create_trace_process(void) {
         return;
     }
 
-    if (mprotect(_trace_ptr + TRACE_FD_SIZE_STEP, 65536 - TRACE_FD_SIZE_STEP, PROT_NONE)) {
-        perror("mprotect");
+    for (unsigned short i = TRACE_FD_SIZE_STEP; i != 0; i += TRACE_FD_SIZE_STEP) {
+       if (mprotect(_trace_ptr + i, 4096, PROT_NONE)) {
+           perror("mprotect");
+           return;
+        }
     }
 }
 
