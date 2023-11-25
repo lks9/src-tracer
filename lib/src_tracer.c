@@ -60,11 +60,11 @@ static void segv_handler(int nr, siginfo_t *si, void *unused) {
     }
 
     // mprotect for future segv handling
-    mprotect(_trace_ptr + trace_written_pos, TRACE_FD_SIZE_STEP, PROT_NONE);
+    mprotect(_trace_ptr + trace_written_pos, 4096, PROT_NONE);
     trace_written_pos += TRACE_FD_SIZE_STEP;
 
     // resolve current segv with mprotect
-    mprotect(_trace_ptr + trace_written_pos, TRACE_FD_SIZE_STEP, PROT_WRITE);
+    mprotect(_trace_ptr + trace_written_pos, 4096, PROT_WRITE);
 
     // now this should be safe:
     volatile int *next_ptr = _trace_ptr + trace_written_pos;
@@ -133,9 +133,11 @@ static void create_trace_process(void) {
     }
 
     // mprotect to generate the segv
-    if (mprotect(_trace_ptr + TRACE_FD_SIZE_STEP, 65536 - TRACE_FD_SIZE_STEP, PROT_NONE)) {
-        perror("mprotect");
-        return;
+    for (unsigned short i = TRACE_FD_SIZE_STEP; i != 0; i += TRACE_FD_SIZE_STEP) {
+        if (mprotect(_trace_ptr + i, 4096, PROT_NONE)) {
+            perror("mprotect");
+            return;
+        }
     }
 }
 
@@ -229,7 +231,7 @@ void _trace_close(void) {
     // stop tracing
     _TRACE_END();
     trace_written_pos += TRACE_FD_SIZE_STEP;
-    mprotect(_trace_ptr + trace_written_pos, TRACE_FD_SIZE_STEP, PROT_WRITE);
+    mprotect(_trace_ptr + trace_written_pos, 4096, PROT_WRITE);
 
     // now this should be safe:
     volatile int *next_ptr = _trace_ptr + trace_written_pos;
