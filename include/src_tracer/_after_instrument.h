@@ -33,6 +33,7 @@ struct _trace_ctx {
 // _trace_ptr points to a proper trace buf even when tracing paused
 extern __attribute__((aligned(4096))) unsigned char *restrict _trace_buf;
 extern __attribute__((aligned(4096))) void *_trace_ptr;
+extern int *_trace_futex;
 extern unsigned short _trace_pos;
 
 extern void _trace_open(const char *fname);

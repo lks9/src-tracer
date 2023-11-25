@@ -31,6 +31,8 @@ void __attribute__((aligned(4096))) *_trace_ptr = dummy;
 unsigned short _trace_pos;
 unsigned char _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 
+int *_trace_futex;
+
 static __attribute__((aligned(4096))) void *temp_trace_buf = dummy;
 static unsigned short temp_trace_pos;
 static unsigned char temp_trace_ie_byte = _TRACE_IE_BYTE_INIT;
@@ -59,33 +61,45 @@ static void segv_handler(int nr, siginfo_t *si, void *unused) {
         exit(EXIT_FAILURE);
     }
 
+    // inform write process to write on the disk
+    int num = trace_written_pos / TRACE_FD_SIZE_STEP;
+    _trace_futex[num] = 1;
+    syscall(SYS_futex, &_trace_futex[num], FUTEX_WAKE, INT_MAX, NULL, NULL, 0);
+
     // mprotect for future segv handling
     mprotect(_trace_ptr + trace_written_pos, 4096, PROT_NONE);
+ 
     trace_written_pos += TRACE_FD_SIZE_STEP;
+    num = trace_written_pos / TRACE_FD_SIZE_STEP;
+
+    // wait until write process finished current writing
+    int val = _trace_futex[num];
+    while (val != 0) {
+        int ret = syscall(SYS_futex, &_trace_futex[num], FUTEX_WAIT, val, NULL, NULL, 0);
+        val = _trace_futex[num];
+        if (val != 0 && ret != 0) {
+            // timeout? don't care about tracing anymore
+            _trace_buf = dummy;
+            perror("futex");
+            break;
+        }
+    }
 
     // resolve current segv with mprotect
     mprotect(_trace_ptr + trace_written_pos, 4096, PROT_WRITE);
-
-    // now this should be safe:
-    volatile int *next_ptr = _trace_ptr + trace_written_pos;
-    while (*next_ptr != 0) {
-        syscall(SYS_futex, next_ptr, FUTEX_WAIT, *next_ptr, NULL, NULL, 0);
-    }
-
-    // inform write process to write on the disk
-    *next_ptr = 1;
-    syscall(SYS_futex, next_ptr, FUTEX_WAKE, INT_MAX, NULL, NULL, 0);
 }
 
 
 static void create_trace_process(void) {
     // reserve memory for the trace buffer
-    _trace_ptr = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    _trace_ptr = mmap(NULL, 65536 + 4096, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (_trace_ptr == MAP_FAILED) {
         _trace_ptr = dummy;
         perror("mmap");
         return;
     }
+
+    _trace_futex = _trace_ptr + 65536;
 
 #ifdef _TRACE_USE_PTHREAD
     pthread_create(&writer_tid, NULL, &forked_write, trace_fname);
@@ -231,17 +245,11 @@ void _trace_close(void) {
     // stop tracing
     _TRACE_END();
     trace_written_pos += TRACE_FD_SIZE_STEP;
-    mprotect(_trace_ptr + trace_written_pos, 4096, PROT_WRITE);
-
-    // now this should be safe:
-    volatile int *next_ptr = _trace_ptr + trace_written_pos;
-    while (*next_ptr != 0) {
-        syscall(SYS_futex, next_ptr, FUTEX_WAIT, *next_ptr);
-    }
 
     // trace end marker -1
-    *next_ptr = -1;
-    syscall(SYS_futex, next_ptr, FUTEX_WAKE, INT_MAX);
+    int num = trace_written_pos / TRACE_FD_SIZE_STEP;
+    _trace_futex[num] = -1;
+    syscall(SYS_futex, &_trace_futex[num], FUTEX_WAKE, INT_MAX, NULL, NULL, 0);
 
     // now we can safely call library functions
     munmap(_trace_ptr, 65536);

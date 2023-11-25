@@ -15,6 +15,7 @@
 #include <signal.h>
 #include <linux/futex.h>
 #include <limits.h>
+#include <sys/time.h>
 
 // editable constant definitions
 #ifndef TIMEOUT_NSEC
@@ -122,7 +123,7 @@ static void my_write(void *ptr, int len) {
     }
 }
 
-static void write_and_exit(unsigned char *ptr, int len) {
+static void write_and_exit(char *ptr, int len) {
     // find were the trace ended
     int end = len;
     while (end > 0 && ptr[end-1] != 'E') end--;
@@ -144,7 +145,7 @@ void *forked_write (char *trace_fname) {
         my_exit();
     }
 
-    unsigned char *const ptr = _trace_ptr;
+    char *const ptr = _trace_ptr;
     unsigned short next_pos = WRITE_BLOCK_SIZE;
     unsigned short pos = 0;
 
@@ -153,27 +154,27 @@ void *forked_write (char *trace_fname) {
     struct timespec wait_timeout = {secs, nsecs};
 
     while (true) {
-        volatile int *next_ptr = (int *)&(ptr[next_pos]);
-        volatile int *this_ptr = (int *)&(ptr[pos]);
-        int next;
+        char *this_ptr = &(ptr[pos]);
 
-        // wait in for loop until tracer in parent writes to next page
-        next = *next_ptr;
-        if (next == 0) {
-            syscall_6(SYS_futex, (long)next_ptr, FUTEX_WAIT, 0, (long)&wait_timeout, (long)NULL, 0);
-            next = *next_ptr;
+        // wait until trace producer finished current segment
+        int num = pos / WRITE_BLOCK_SIZE;
+        int val = _trace_futex[num];
+        while (val == 0) {
+            int ret = syscall_6(SYS_futex, (long)&_trace_futex[val], FUTEX_WAIT, 0, (long)&wait_timeout, (long)NULL, 0);
+            val = _trace_futex[num];
+            if (ret != 0) break;
         }
 
-        if (next == 0 || next == -1) {
+        if (val == 0 || val == -1) {
             // timeout == 0 or parent wrote trace end marker -1
-            write_and_exit((unsigned char*)this_ptr, WRITE_BLOCK_SIZE);
+            write_and_exit(this_ptr, WRITE_BLOCK_SIZE);
         }
 
-        my_write((unsigned char*)this_ptr, WRITE_BLOCK_SIZE);
+        my_write(this_ptr, WRITE_BLOCK_SIZE);
 
         // zero for future access (ringbuffer!)
-        *this_ptr = 0;
-        syscall_6(SYS_futex, (long)this_ptr, FUTEX_WAKE, INT_MAX, (long)NULL, (long)NULL, 0);
+        _trace_futex[num] = 0;
+        syscall_6(SYS_futex, (long)&_trace_futex[num], FUTEX_WAKE, INT_MAX, (long)NULL, (long)NULL, 0);
 
         pos = next_pos;
         next_pos += WRITE_BLOCK_SIZE;
