@@ -37,7 +37,7 @@ struct _trace_ctx _trace = {
 
 static char trace_fname[200];
 
-extern void *forked_write(char *);
+extern void *forked_write(void *);
 #ifdef _TRACE_USE_PTHREAD
 static pthread_t thread_id;
 #endif
@@ -173,13 +173,12 @@ void _trace_close(void) {
     _trace_buf = dummy;
 
     // now we can safely call library functions
-    munmap(_trace_ptr, 65536);
-    _trace_ptr = dummy;
-
 #ifdef _TRACE_USE_PTHREAD
     // FIXME
     pthread_join(thread_id, NULL);
 #endif
+    munmap(_trace_ptr, 65536);
+    _trace_ptr = dummy;
 }
 
 

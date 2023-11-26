@@ -14,6 +14,8 @@
 #include <time.h>
 #include <signal.h>
 
+#include <zstd.h>
+
 // editable constant definitions
 #ifndef SHORT_SLEEP_NSEC
 #define SHORT_SLEEP_NSEC 20000
@@ -30,6 +32,9 @@
 #endif
 #ifndef WRITE_BLOCK_SIZE
 #define WRITE_BLOCK_SIZE 16384
+#endif
+#ifndef COMPRESSION_LEVEL
+#define COMPRESSION_LEVEL 3
 #endif
 
 // computed constants
@@ -82,10 +87,27 @@ static __inline long syscall_4(long n, long a1, long a2, long a3, long a4)
 // end musl code
 #endif
 
+// other macros
+#define EXIT_WHEN(cond) \
+    if (cond) { \
+        my_exit(); \
+    }
+
+#define CHECK_ZSTD(fn) \
+    EXIT_WHEN(ZSTD_isError(fn))
+
 static int trace_fd;
+
+static char buffIn[ZSTD_BLOCKSIZE_MAX];
+static ZSTD_inBuffer input = { buffIn, 0, 0 };
+static char buffOut[ZSTD_BLOCKSIZE_MAX];
+static ZSTD_outBuffer output = { buffOut, ZSTD_BLOCKSIZE_MAX, 0 };
+static ZSTD_CCtx* cctx;
 
 __attribute__((noreturn))
 static void my_exit(void) {
+    close(trace_fd);
+    ZSTD_freeCCtx(cctx);
 #ifdef _TRACE_USE_PTHREAD
     pthread_exit((void *)0);
 #else
@@ -104,31 +126,35 @@ pid_t my_fork(void) {
 #endif
 }
 
-static void my_write(void *ptr, int len) {
-#ifdef _TRACE_USE_POSIX
-    ssize_t written = write(trace_fd, ptr, len);
-#else
-    long written = syscall_3(SYS_write, (long)trace_fd, (long)ptr, (long)len);
-#endif
-    if (unlikely(written != len)) {
-        // some write error occured
-        // abort trace recording
-        close(trace_fd);
-        my_exit();
+// write and compress
+static void my_write(void *ptr, int len, bool last) {
+    memcpy(&buffIn[input.pos], ptr, len);
+
+    input.size += len;
+    last = last || input.size == ZSTD_BLOCKSIZE_MAX;
+    ZSTD_EndDirective const mode = last ? ZSTD_e_end : ZSTD_e_continue;
+
+    size_t remaining = 1;
+    while (remaining) {
+        size_t oldpos = output.pos;
+        remaining = ZSTD_compressStream2(cctx, &output, &input, mode);
+        ssize_t written = write(trace_fd, &buffOut[oldpos], output.pos - oldpos);
+        // abort trace recording when write error
+        EXIT_WHEN(written != output.pos - oldpos);
+    }
+    if (last) {
+        input.pos = 0;
+        input.size = 0;
+        output.pos = 0;
     }
 }
 
 static void write_and_exit(unsigned char *ptr, int len) {
     // find were the trace ended
     while (len > 0 && ptr[len-1] == 0) len--;
-    my_write(ptr, len);
-    close(trace_fd);
+    my_write(ptr, len, true);
     my_exit();
 }
-
-#ifndef O_LARGEFILE
-#define O_LARGEFILE 0
-#endif
 
 static volatile long long *next_ptr;
 
@@ -159,10 +185,13 @@ static void my_sleep(long nsec) {
 
 #endif // BUSY_WAITING
 
-void *forked_write (char *trace_fname) {
-    int trace_fd = open(trace_fname,
-                        O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE | O_NOCTTY,
-                        S_IRUSR | S_IWUSR);
+void *forked_write (void *trace_fname) {
+    char fname_zstd[200];
+    strncat(fname_zstd, (char*)trace_fname, 195);
+    strncat(fname_zstd, ".zst", 5);
+    trace_fd = open(fname_zstd,
+                    O_WRONLY | O_CREAT | O_EXCL | O_NOCTTY,
+                    S_IRUSR | S_IWUSR);
     if (trace_fd < 0) {
         my_exit();
     }
@@ -189,6 +218,11 @@ void *forked_write (char *trace_fname) {
 #else
     bool slept_before = false;
 #endif
+    // initialize zstd compression
+    cctx = ZSTD_createCCtx();
+    EXIT_WHEN(cctx == NULL);
+    CHECK_ZSTD(ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, COMPRESSION_LEVEL));
+    CHECK_ZSTD(ZSTD_CCtx_setParameter(cctx, ZSTD_c_checksumFlag, 0));
 
     while (true) {
         next_ptr = (long long *)&(ptr[next_pos]);
@@ -225,7 +259,7 @@ void *forked_write (char *trace_fname) {
             write_and_exit(this_ptr, WRITE_BLOCK_SIZE);
         }
 
-        my_write(this_ptr, WRITE_BLOCK_SIZE);
+        my_write(this_ptr, WRITE_BLOCK_SIZE, false);
         // zero page for future access (ringbuffer!)
         __builtin_memset(this_ptr, 0, WRITE_BLOCK_SIZE);
 
