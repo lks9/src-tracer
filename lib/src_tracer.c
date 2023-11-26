@@ -62,44 +62,52 @@ static void segv_handler(int nr, siginfo_t *si, void *unused) {
     }
 
     // inform write process to write on the disk
-    int num = trace_written_pos / TRACE_FD_SIZE_STEP;
-    _trace_futex[num] = 1;
-    syscall(SYS_futex, &_trace_futex[num], FUTEX_WAKE, INT_MAX, NULL, NULL, 0);
+    int num_old = trace_written_pos / TRACE_FD_SIZE_STEP;
+    _trace_futex[num_old] = 1;
 
     // mprotect for future segv handling
     mprotect(_trace_ptr + trace_written_pos, 4096, PROT_NONE);
  
     trace_written_pos += TRACE_FD_SIZE_STEP;
-    num = trace_written_pos / TRACE_FD_SIZE_STEP;
+    int num_new = trace_written_pos / TRACE_FD_SIZE_STEP;
+
+    // resolve current segv with mprotect
+    mprotect(_trace_ptr + trace_written_pos, 4096, PROT_WRITE);
 
     // wait until write process finished current writing
-    int val = _trace_futex[num];
+    int val = _trace_futex[num_new];
     while (val != 0) {
-        int ret = syscall(SYS_futex, &_trace_futex[num], FUTEX_WAIT, val, NULL, NULL, 0);
-        val = _trace_futex[num];
+        int ret = syscall(SYS_futex, &_trace_futex[num_new], FUTEX_WAIT, val, NULL, NULL, 0);
+        val = _trace_futex[num_new];
         if (val != 0 && ret != 0) {
             // timeout? don't care about tracing anymore
             _trace_buf = dummy;
-            perror("futex");
             break;
         }
     }
 
-    // resolve current segv with mprotect
-    mprotect(_trace_ptr + trace_written_pos, 4096, PROT_WRITE);
+    // apparently it is more efficient to wake up later
+    syscall(SYS_futex, &_trace_futex[num_old], FUTEX_WAKE, INT_MAX, NULL, NULL, 0);
 }
 
 
 static void create_trace_process(void) {
     // reserve memory for the trace buffer
-    _trace_ptr = mmap(NULL, 65536 + 4096, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    _trace_ptr = mmap(NULL, 65536, PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (_trace_ptr == MAP_FAILED) {
         _trace_ptr = dummy;
         perror("mmap");
         return;
     }
 
-    _trace_futex = _trace_ptr + 65536;
+    // mmap/mprotect to generate the segv
+    mmap(_trace_ptr, 4096, PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    for (unsigned short i = TRACE_FD_SIZE_STEP; i != 0; i += TRACE_FD_SIZE_STEP) {
+        mmap(_trace_ptr + i, 4096, PROT_READ, MAP_SHARED | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    }
+
+    _trace_futex = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    mlock(_trace_futex, 4096);
 
 #ifdef _TRACE_USE_PTHREAD
     pthread_create(&writer_tid, NULL, &forked_write, trace_fname);
@@ -144,14 +152,6 @@ static void create_trace_process(void) {
     if (sigaction(SIGSEGV, &sa, NULL) == -1) {
         perror("sigaction");
         return;
-    }
-
-    // mprotect to generate the segv
-    for (unsigned short i = TRACE_FD_SIZE_STEP; i != 0; i += TRACE_FD_SIZE_STEP) {
-        if (mprotect(_trace_ptr + i, 4096, PROT_NONE)) {
-            perror("mprotect");
-            return;
-        }
     }
 }
 
