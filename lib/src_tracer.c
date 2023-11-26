@@ -1,6 +1,7 @@
 #include <src_tracer/_after_instrument.h>
 #include <src_tracer/ghost.h>
 
+#define _GNU_SOURCE
 #include <stdbool.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -17,15 +18,19 @@
 #include <sys/syscall.h>
 #include <linux/futex.h>
 #include <limits.h>
+#include <linux/userfaultfd.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
 
-#ifndef O_LARGEFILE
-#define O_LARGEFILE 0
+// definitions missing on my computer
+#ifndef UFFD_USER_MODE_ONLY
+#define UFFD_USER_MODE_ONLY 1
 #endif
 
 static unsigned char dummy[65536] __attribute__ ((aligned (4096)));
 #define TRACE_FD_SIZE_STEP 32768
-static unsigned short trace_written_pos;
 
+int _trace_uffd;
 __attribute__((aligned(4096))) unsigned char *restrict _trace_buf = dummy;
 void __attribute__((aligned(4096))) *_trace_ptr = dummy;
 unsigned short _trace_pos;
@@ -44,7 +49,7 @@ struct _trace_ctx _trace = {
 
 static char trace_fname[200];
 
-extern void *forked_write(char *);
+extern void *forked_write(void *);
 #ifdef _TRACE_USE_PTHREAD
 static pthread_t writer_tid;
 #else
@@ -55,59 +60,57 @@ extern
 __attribute__((returns_twice))
 pid_t my_fork(void);
 
-static void segv_handler(int nr, siginfo_t *si, void *unused) {
-    // is it even in the addr range of the trace?
-    if (si->si_addr < _trace_ptr || _trace_ptr + 65536 <= si->si_addr) {
-        exit(EXIT_FAILURE);
-    }
-
-    // inform write process to write on the disk
-    int num_old = trace_written_pos / TRACE_FD_SIZE_STEP;
-    _trace_futex[num_old] = 1;
-
-    // mprotect for future segv handling
-    mprotect(_trace_ptr + trace_written_pos, 4096, PROT_NONE);
- 
-    trace_written_pos += TRACE_FD_SIZE_STEP;
-    int num_new = trace_written_pos / TRACE_FD_SIZE_STEP;
-
-    // resolve current segv with mprotect
-    mprotect(_trace_ptr + trace_written_pos, 4096, PROT_WRITE);
-
-    // wait until write process finished current writing
-    int val = _trace_futex[num_new];
-    while (val != 0) {
-        int ret = syscall(SYS_futex, &_trace_futex[num_new], FUTEX_WAIT, val, NULL, NULL, 0);
-        val = _trace_futex[num_new];
-        if (val != 0 && ret != 0) {
-            // timeout? don't care about tracing anymore
-            _trace_buf = dummy;
-            break;
-        }
-    }
-
-    // apparently it is more efficient to wake up later
-    syscall(SYS_futex, &_trace_futex[num_old], FUTEX_WAKE, INT_MAX, NULL, NULL, 0);
-}
-
-
 static void create_trace_process(void) {
     // reserve memory for the trace buffer
-    _trace_ptr = mmap(NULL, 65536, PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    _trace_ptr = mmap(NULL, 65536 + 4096, PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (_trace_ptr == MAP_FAILED) {
         _trace_ptr = dummy;
         perror("mmap");
         return;
     }
 
-    // mmap/mprotect to generate the segv
-    mmap(_trace_ptr, 4096, PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
-    for (unsigned short i = TRACE_FD_SIZE_STEP; i != 0; i += TRACE_FD_SIZE_STEP) {
-        mmap(_trace_ptr + i, 4096, PROT_READ, MAP_SHARED | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    // we set up uffd events when (half of) trace pages are filled
+    // then trace writer can write in second thread/process
+    _trace_uffd = syscall(SYS_userfaultfd, UFFD_USER_MODE_ONLY);
+    if (_trace_uffd == -1) {
+        _trace_ptr = dummy;
+        perror("userfaultfd");
+        return;
+    }
+    struct uffdio_api uffdio_api;
+    uffdio_api.api = UFFD_API;
+    uffdio_api.features = UFFD_FEATURE_EVENT_UNMAP | UFFD_FEATURE_PAGEFAULT_FLAG_WP;
+    if (ioctl(_trace_uffd, UFFDIO_API, &uffdio_api) == -1) {
+        perror("uffdio api");
+        _trace_ptr = dummy;
+        return;
     }
 
-    _trace_futex = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    mlock(_trace_futex, 4096);
+    // do not generate page fault for first page
+    *(unsigned char*)_trace_ptr = -1;
+
+    // register page ranges to track
+    struct uffdio_register uffdio_register;
+    uffdio_register.mode = UFFDIO_REGISTER_MODE_WP | UFFDIO_REGISTER_MODE_MISSING;
+    uffdio_register.range.len = 4096;
+    unsigned short i = 0;
+    do {
+        uffdio_register.range.start = (unsigned long) _trace_ptr + i;
+        if (ioctl(_trace_uffd, UFFDIO_REGISTER, &uffdio_register) == -1) {
+            perror("uffdio register");
+            _trace_ptr = dummy;
+            return;
+        }
+        i += TRACE_FD_SIZE_STEP;
+    } while (i != 0);
+
+    // only used as a hack to finish tracing by creating an unmap event
+    uffdio_register.range.start = (unsigned long) _trace_ptr + 65536;
+    if (ioctl(_trace_uffd, UFFDIO_REGISTER, &uffdio_register) == -1) {
+        perror("uffdio register");
+        _trace_ptr = dummy;
+        return;
+    }
 
 #ifdef _TRACE_USE_PTHREAD
     pthread_create(&writer_tid, NULL, &forked_write, trace_fname);
@@ -142,17 +145,6 @@ static void create_trace_process(void) {
     // unblock SIGPOLL only in parent
     //sigprocmask(SIG_SETMASK, &oldset, NULL);
 #endif
-
-    // segv interrupt
-    // when reaching the mprotect area, segv handler calls writes
-    struct sigaction sa;
-    sa.sa_flags = SA_SIGINFO;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_sigaction = segv_handler;
-    if (sigaction(SIGSEGV, &sa, NULL) == -1) {
-        perror("sigaction");
-        return;
-    }
 }
 
 void _trace_open(const char *fname) {
@@ -244,14 +236,14 @@ void _trace_close(void) {
     }
     // stop tracing
     _TRACE_END();
-    trace_written_pos += TRACE_FD_SIZE_STEP;
 
-    // trace end marker -1
-    int num = trace_written_pos / TRACE_FD_SIZE_STEP;
-    _trace_futex[num] = -1;
-    syscall(SYS_futex, &_trace_futex[num], FUTEX_WAKE, INT_MAX, NULL, NULL, 0);
+    // we never use this memory
+    // hack to generate an ufd event to stop the trace writer
+    munmap(_trace_ptr + 65536, 4096);
 
-    // now we can safely call library functions
+#ifdef _TRACE_USE_PTHREAD
+    pthread_join(writer_tid, NULL);
+#endif
     munmap(_trace_ptr, 65536);
     _trace_ptr = dummy;
 }

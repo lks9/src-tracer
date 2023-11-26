@@ -12,6 +12,7 @@
 #define PROP_TRUE           1
 #define PROP_DEFAULT_VALUE  2
 
+#define _TRACE_USE_PTHREAD
 
 // and here comes the rest...
 #ifdef __cplusplus
@@ -31,6 +32,7 @@ struct _trace_ctx {
 };
 // _trace_buf might point to a dummy buffer when tracing paused
 // _trace_ptr points to a proper trace buf even when tracing paused
+extern int _trace_uffd;
 extern __attribute__((aligned(4096))) unsigned char *restrict _trace_buf;
 extern __attribute__((aligned(4096))) void *_trace_ptr;
 extern int *_trace_futex;
