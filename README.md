@@ -53,21 +53,23 @@ Any software which is written in C/C++, with the source code available.
 ### Recording
 * Compile it with `_TRACE_MODE` (you might also want different compiler optimizations for recording/replaying)
   ```
-  gcc -D_TRACE_MODE -O3 -I../include -L../lib checksum_inst.c -o checksum_trace -lsrc_tracer
+  gcc -D_TRACE_MODE -O3 -I../include -L../lib checksum_inst.c -o checksum_trace -lsrc_tracer -lpthread -lzstd
   ```
+  Note: This version uses `-lpthread` and `-lzstd` for smaller traces with lower overhad.
 * Run it (replace `42` to get another trace) 
   ```
   ./checksum_trace 42
   ```
-  The name of the recorded trace corresponds to the current time, e.g. `2023-04-28-143402-checksum.c.trace`.
+  The name of the recorded trace corresponds to the current time, e.g. `2023-04-28-143402-checksum.c.trace.zst`.
 * Display the trace (replace the trace name with the correct one!)
   ```
+  zstd -d 2023-04-28-143402-checksum.c.trace.zst
   python ../print_trace.py 2023-04-28-143402-checksum.c.trace
   ```
 ### Retracing
 * Compile it with `_RETRACE_MODE` (you might also want different compiler optimizations for recording/replaying)
   ```
-  gcc -D_RETRACE_MODE -g -I../include -L../lib checksum_inst.c -o checksum_retrace -lsrc_tracer
+  gcc -D_RETRACE_MODE -g -I../include -L../lib checksum_inst.c -o checksum_retrace -lsrc_tracer -lpthread -lzstd
   ```
 * Retrace it (use `python -i` to work with the traced `state` in the interactive shell)
   ```
@@ -93,7 +95,7 @@ For a more automatic way that works well with make scripts, make use of `cc_wrap
   export SRC_TRACER_DIR=.........
   export CC="gcc"
   export CFLAGS="-Wno-error -L${SRC_TRACER_DIR}/lib -I${SRC_TRACER_DIR}/include -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
-  export LIBS="-lsrc_tracer"
+  export LIBS="-lsrc_tracer -lpthread -lzstd"
   export SRC_TRACER=""
   ```
 * Now you can ./configure your project...
