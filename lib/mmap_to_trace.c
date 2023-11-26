@@ -1,5 +1,3 @@
-#define _GNU_SOURCE
-
 #include <src_tracer/_after_instrument.h>
 
 #include <sys/types.h>
@@ -21,9 +19,14 @@
 #include <sys/syscall.h>
 #include <sys/ioctl.h>
 
+#include <zstd.h>
+
 // editable constant definitions
 #ifndef WRITE_BLOCK_SIZE
 #define WRITE_BLOCK_SIZE 32768
+#endif
+#ifndef COMPRESSION_LEVEL
+#define COMPRESSION_LEVEL 3
 #endif
 
 // somehow missing in the headers on my system
@@ -39,12 +42,28 @@ struct uffdio_writeprotect {
 #define UFFDIO_WRITEPROTECT_MODE_DONTWAKE	((__u64)1<<1)
 #endif
 
+// other macros
+#define EXIT_WHEN(cond) \
+    if (cond) { \
+        my_exit(); \
+    }
+
+#define CHECK_ZSTD(fn) \
+    EXIT_WHEN(ZSTD_isError(fn))
+
 static int trace_fd;
+
+static char buffIn[ZSTD_BLOCKSIZE_MAX];
+static ZSTD_inBuffer input = { buffIn, 0, 0 };
+static char buffOut[ZSTD_BLOCKSIZE_MAX];
+static ZSTD_outBuffer output = { buffOut, ZSTD_BLOCKSIZE_MAX, 0 };
+static ZSTD_CCtx* cctx;
 
 __attribute__((noreturn))
 static void my_exit(void) {
     close(_trace_uffd);
     close(trace_fd);
+    ZSTD_freeCCtx(cctx);
 #ifdef _TRACE_USE_PTHREAD
     pthread_exit((void *)0);
 #else
@@ -59,12 +78,26 @@ pid_t my_fork(void) {
     return (pid_t)syscall(SYS_fork);
 }
 
-static void my_write(void *ptr, int len) {
-    ssize_t written = write(trace_fd, ptr, len);
-    if (unlikely(written != len)) {
-        // some write error occured
-        // abort trace recording
-        my_exit();
+// write and compress
+static void my_write(void *ptr, int len, bool last) {
+    memcpy(&buffIn[input.pos], ptr, len);
+
+    input.size += len;
+    last = last || input.size == ZSTD_BLOCKSIZE_MAX;
+    ZSTD_EndDirective const mode = last ? ZSTD_e_end : ZSTD_e_continue;
+
+    size_t remaining = 1;
+    while (remaining) {
+        size_t oldpos = output.pos;
+        remaining = ZSTD_compressStream2(cctx, &output, &input, mode);
+        ssize_t written = write(trace_fd, &buffOut[oldpos], output.pos - oldpos);
+        // abort trace recording when write error
+        EXIT_WHEN(written != output.pos - oldpos);
+    }
+    if (last) {
+        input.pos = 0;
+        input.size = 0;
+        output.pos = 0;
     }
 }
 
@@ -73,11 +106,14 @@ static void finish_write(char *ptr, int len) {
     int end = len;
     while (end > 0 && ptr[end-1] != 'E') end--;
     if (end == 0) end = len;
-    my_write(ptr, end);
+    my_write(ptr, end, true);
 }
 
 void *forked_write (void *trace_fname) {
-    trace_fd = open((char*)trace_fname,
+    char fname_zstd[200];
+    strncat(fname_zstd, (char*)trace_fname, 195);
+    strncat(fname_zstd, ".zst", 5);
+    trace_fd = open(fname_zstd,
                     O_WRONLY | O_CREAT | O_EXCL | O_NOCTTY,
                     S_IRUSR | S_IWUSR);
     if (trace_fd < 0) {
@@ -87,6 +123,12 @@ void *forked_write (void *trace_fname) {
     char *const ptr = _trace_ptr;
     unsigned short pos = 0;
     unsigned short next_pos = WRITE_BLOCK_SIZE;
+
+    // initialize zstd compression
+    cctx = ZSTD_createCCtx();
+    EXIT_WHEN(cctx == NULL);
+    CHECK_ZSTD(ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, COMPRESSION_LEVEL));
+    CHECK_ZSTD(ZSTD_CCtx_setParameter(cctx, ZSTD_c_checksumFlag, 0));
 
     while (true) {
         char *this_ptr = &(ptr[pos]);
@@ -104,11 +146,9 @@ void *forked_write (void *trace_fname) {
             my_exit();
         }
 
-        if (msg.event != UFFD_EVENT_PAGEFAULT) {
-            // some other event?
-            // should not happen!
-            my_exit();
-        }
+        // some other event?
+        // should not happen!
+        EXIT_WHEN(msg.event != UFFD_EVENT_PAGEFAULT);
 
         // insert the trap for the next page fault
         {
@@ -136,7 +176,7 @@ void *forked_write (void *trace_fname) {
             ioctl(_trace_uffd, UFFDIO_ZEROPAGE, &zp);
         }
 
-        my_write(this_ptr, WRITE_BLOCK_SIZE);
+        my_write(this_ptr, WRITE_BLOCK_SIZE, false);
 
         pos = next_pos;
         next_pos += WRITE_BLOCK_SIZE;
