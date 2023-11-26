@@ -86,15 +86,12 @@ static void my_write(void *ptr, int len, bool last) {
     last = last || input.size == ZSTD_BLOCKSIZE_MAX;
     ZSTD_EndDirective const mode = last ? ZSTD_e_end : ZSTD_e_continue;
 
-    size_t remaining = 1;
-    while (remaining) {
-        size_t oldpos = output.pos;
-        remaining = ZSTD_compressStream2(cctx, &output, &input, mode);
-        ssize_t written = write(trace_fd, &buffOut[oldpos], output.pos - oldpos);
-        // abort trace recording when write error
-        EXIT_WHEN(written != output.pos - oldpos);
-    }
+    CHECK_ZSTD(ZSTD_compressStream2(cctx, &output, &input, mode));
     if (last) {
+        ssize_t written = write(trace_fd, buffOut, output.pos);
+        // abort trace recording when write error
+        EXIT_WHEN(written != output.pos);
+
         input.pos = 0;
         input.size = 0;
         output.pos = 0;
