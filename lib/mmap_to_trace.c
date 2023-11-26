@@ -138,9 +138,9 @@ static void write_and_exit(char *ptr, int len) {
 #endif
 
 void *forked_write (char *trace_fname) {
-    int trace_fd = open(trace_fname,
-                        O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE | O_NOCTTY,
-                        S_IRUSR | S_IWUSR);
+    trace_fd = open(trace_fname,
+                    O_WRONLY | O_CREAT | O_EXCL | O_LARGEFILE | O_NOCTTY,
+                    S_IRUSR | S_IWUSR);
     if (trace_fd < 0) {
         my_exit();
     }
@@ -160,7 +160,7 @@ void *forked_write (char *trace_fname) {
         int num = pos / WRITE_BLOCK_SIZE;
         int val = _trace_futex[num];
         while (val == 0) {
-            int ret = syscall_6(SYS_futex, (long)&_trace_futex[val], FUTEX_WAIT, 0, (long)&wait_timeout, (long)NULL, 0);
+            int ret = syscall_6(SYS_futex, (long)&_trace_futex[num], FUTEX_WAIT, 0, (long)&wait_timeout, (long)NULL, 0);
             val = _trace_futex[num];
             if (ret != 0) break;
         }
