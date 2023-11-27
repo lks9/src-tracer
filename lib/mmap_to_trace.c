@@ -98,10 +98,10 @@ static __inline long syscall_4(long n, long a1, long a2, long a3, long a4)
 
 static int trace_fd;
 
-static char buffIn[ZSTD_BLOCKSIZE_MAX];
-static ZSTD_inBuffer input = { buffIn, 0, 0 };
-static char buffOut[ZSTD_BLOCKSIZE_MAX];
-static ZSTD_outBuffer output = { buffOut, ZSTD_BLOCKSIZE_MAX, 0 };
+static char z_in[ZSTD_BLOCKSIZE_MAX];
+static ZSTD_inBuffer in_desc = { z_in, 0, 0 };
+static char z_out[ZSTD_BLOCKSIZE_MAX];
+static ZSTD_outBuffer out_desc = { z_out, ZSTD_BLOCKSIZE_MAX, 0 };
 static ZSTD_CCtx* cctx;
 
 __attribute__((noreturn))
@@ -128,21 +128,24 @@ pid_t my_fork(void) {
 
 // write and compress
 static void my_write(void *ptr, int len, bool last) {
-    memcpy(&buffIn[input.pos], ptr, len);
+    memcpy(&z_in[in_desc.size], ptr, len);
+    in_desc.size += len;
 
-    input.size += len;
-    last = last || input.size == ZSTD_BLOCKSIZE_MAX;
+    last = last || in_desc.size + WRITE_BLOCK_SIZE > ZSTD_BLOCKSIZE_MAX;
     ZSTD_EndDirective const mode = last ? ZSTD_e_end : ZSTD_e_continue;
 
-    CHECK_ZSTD(ZSTD_compressStream2(cctx, &output, &input, mode));
+    size_t rem;
+    CHECK_ZSTD(rem = ZSTD_compressStream2(cctx, &out_desc, &in_desc, mode));
     if (last) {
-        ssize_t written = write(trace_fd, buffOut, output.pos);
-        // abort trace recording when write error
-        EXIT_WHEN(written != output.pos);
+        // ZSTD_e_end guarantees rem == 0 except when out buffer is full
+        EXIT_WHEN(rem != 0);
+        ssize_t written = write(trace_fd, z_out, out_desc.pos);
+        // abort trace recording on write error
+        EXIT_WHEN(written != out_desc.pos);
 
-        input.pos = 0;
-        input.size = 0;
-        output.pos = 0;
+        in_desc.pos = 0;
+        in_desc.size = 0;
+        out_desc.pos = 0;
     }
 }
 
