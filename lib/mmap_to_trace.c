@@ -128,7 +128,8 @@ pid_t my_fork(void) {
 
 // write and compress
 static void my_write(void *ptr, int len, bool last) {
-    memcpy(&z_in[in_desc.size], ptr, len);
+    __builtin_memcpy(&z_in[in_desc.size], ptr, len);
+    __builtin_memset(ptr, 0, len);
     in_desc.size += len;
 
     last = last || in_desc.size + WRITE_BLOCK_SIZE > ZSTD_BLOCKSIZE_MAX;
@@ -260,8 +261,6 @@ void *forked_write (void *trace_fname) {
         }
 
         my_write(this_ptr, WRITE_BLOCK_SIZE, false);
-        // zero page for future access (ringbuffer!)
-        __builtin_memset(this_ptr, 0, WRITE_BLOCK_SIZE);
 
         pos = next_pos;
         next_pos += WRITE_BLOCK_SIZE;
