@@ -324,7 +324,7 @@ static inline __attribute__((always_inline)) bool _retrace_condition(bool cond) 
 }
 
 #define _RETRACE_SWITCH_CASE(num, bit_cnt) { \
-    for (int i = bit_cnt-1; i >= 0; i++) { \
+    for (int i = bit_cnt-1; i >= 0; i--) { \
         _retrace_condition(num & (1 << i)); \
     } \
 }
@@ -467,7 +467,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
-                                _RETRACE_SWITCH_CASE(num) \
+                                _RETRACE_SWITCH_CASE(num, cnt) \
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
