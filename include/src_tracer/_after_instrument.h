@@ -278,6 +278,15 @@ extern int _trace_buf_pos;
 }
 #endif
 
+#define _TRACE_SWITCH_CASE_TEXT(num, bit_cnt) ; \
+    for (int i = bit_cnt-1; i >= 0; i--) { \
+        if (num & (1 << i)) { \
+            _TRACE_PUT_TEXT('T'); \
+        } else { \
+            _TRACE_PUT_TEXT('N'); \
+        } \
+    }
+
 #define _TRACE_RETURN() { \
     _TRACE_IE_FINISH \
     _TRACE_PUT(_TRACE_SET_RETURN); \
@@ -414,7 +423,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
-                                _IS_RETRACE(_RETRACE_NUM(num), _TRACE_NUM(num)) \
+                                _IS_RETRACE(_RETRACE_SWITCH_CASE(num, cnt), \
+                                            _TRACE_SWITCH_CASE(num, cnt)) \
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
@@ -471,7 +481,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 // experimental version for switch
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
-                                _TRACE_NUM_TEXT('D', ((unsigned int)(num))); \
+                                _TRACE_SWITCH_CASE_TEXT(num, cnt); \
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
