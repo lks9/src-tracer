@@ -258,13 +258,13 @@ class TraceCompact(Trace):
         for elem in it:
             if elem.pos < 0:
                 continue
-            elif elem.letter == 'E':
-                break
             elif elem.pos < self._count_bytes:
                 yield elem
             elif count > 0:
                 yield elem
                 count -= 1
+                if elem.letter == 'E':
+                    break
             else:
                 break
         if count != 0:
