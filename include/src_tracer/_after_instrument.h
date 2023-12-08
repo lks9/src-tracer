@@ -4,16 +4,6 @@
 // Reason: It works on pre-processed files.
 // A "#include <stdbool.h>" would result in double included files!
 
-// editable constant definitions
-#ifndef TRACE_BUF_SIZE
-#define TRACE_BUF_SIZE 4096
-#endif
-#ifndef TRACE_USE_POSIX_WRITE
-// if TRACE_USE_POSIX_WRITE is not set we use the syscall directly
-#endif
-#ifndef EFFICIENT_TEXT_TRACE
-// well it's not for efficiency, more for debugging
-#endif
 // assumes short is 16 bit
 // assumes char is 8 bit
 
@@ -22,6 +12,7 @@
 #define PROP_TRUE           1
 #define PROP_DEFAULT_VALUE  2
 
+#define _TRACE_USE_PTHREAD
 
 // and here comes the rest...
 #ifdef __cplusplus
@@ -35,10 +26,17 @@ extern "C" {
 #endif
 #endif
 
-extern void _trace_write(const void *buf);
-#ifndef EFFICIENT_TEXT_TRACE
-extern void _trace_write_text(const void *buf, unsigned long count);
-#endif
+struct _trace_ctx {
+    int fork_count;
+    int try_count;
+};
+// _trace_buf might point to a dummy buffer when tracing paused
+// _trace_ptr points to a proper trace buf even when tracing paused
+extern int _trace_uffd;
+extern __attribute__((aligned(4096))) unsigned char *restrict _trace_buf;
+extern __attribute__((aligned(4096))) void *_trace_ptr;
+extern int *_trace_futex;
+extern unsigned short _trace_pos;
 
 extern void _trace_open(const char *fname);
 extern void _trace_close(void);
@@ -49,9 +47,6 @@ extern int _trace_after_fork(int pid);
 #define _TRACE_IE_BYTE_INIT         0b11111110
 extern unsigned char _trace_ie_byte;
 #endif
-
-extern unsigned char _trace_buf[TRACE_BUF_SIZE];
-extern int _trace_buf_pos;
 
 #define _TRACE_TEST_IE              0b10000000
  #define _TRACE_SET_IE              0b10000000
@@ -111,23 +106,10 @@ extern int _trace_buf_pos;
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
 
-#define _TRACE_PUT(c) ;{ \
-    _trace_buf[_trace_buf_pos] = (c); \
-    _trace_buf_pos += 1; \
-    if (_trace_buf_pos == TRACE_BUF_SIZE) { \
-        _trace_write(_trace_buf); \
-        _trace_buf_pos = 0; \
-    } \
-}
+#define _TRACE_PUT(c) \
+    _trace_buf[_trace_pos++] = (c)
 
-#ifdef EFFICIENT_TEXT_TRACE
 #define _TRACE_PUT_TEXT     _TRACE_PUT
-#else
-#define _TRACE_PUT_TEXT(c) ;{ \
-    unsigned char buf[1] = { (c) }; \
-    _trace_write_text(buf, 1); \
-}
-#endif
 
 #ifdef BYTE_TRACE
 
@@ -256,27 +238,14 @@ extern int _trace_buf_pos;
 // Shift twice, otherwise we might run into undefined behavior!
 #define NIBBLE_COUNT(n,c)   (((n) >> (c)*3 >> (c)) != 0)
 
-#ifdef EFFICIENT_TEXT_TRACE
-#define _TRACE_NUM_TEXT(type, num) ;{ \
+#define _TRACE_NUM_TEXT(type, num) { \
     int count; \
     _TRACE_PUT(type); \
-    for (count = 0; NIBBLE_COUNT((num), count); count++) {}  \
+    for (count = 0; NIBBLE_COUNT(num, count); count++) {}  \
     for (int i = count-1; i >= 0; i--) { \
-        _TRACE_PUT(NIBBLE_TO_HEX((num), i)); \
+        _TRACE_PUT(NIBBLE_TO_HEX(num, i)); \
     } \
 }
-#else
-#define _TRACE_NUM_TEXT(type, num) ;{ \
-    unsigned char buf[18]; \
-    int count; \
-    buf[0] = (type); \
-    for (count = 0; NIBBLE_COUNT((num), count); count++) {}  \
-    for (int i = 0; i < count; i++) { \
-        buf[count-i] = NIBBLE_TO_HEX((num), i); \
-    } \
-    _trace_write_text(buf, 1+count); \
-}
-#endif
 
 #define _TRACE_SWITCH_CASE_TEXT(num, bit_cnt) ; \
     for (int i = bit_cnt-1; i >= 0; i--) { \
