@@ -94,7 +94,7 @@ static void trace_write_rest(void) {
 void _trace_open(const char *fname) {
     if (trace_fd > 0) {
         // already opened
-        return;
+        _trace_close();
     }
     // Make the file name time dependent
     char timed_fname[160];

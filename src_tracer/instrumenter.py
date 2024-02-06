@@ -8,7 +8,8 @@ from clang.cindex import Index, CursorKind, StorageClass
 class Instrumenter:
 
     def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
-                 return_instrument=True, inline_instrument=False, main_instrument=True, anon_instrument=False,
+                 return_instrument=True, inline_instrument=False, main_instrument=True, main_spelling="main",
+                 anon_instrument=False,
                  function_instrument=True, inner_instrument=True):
         """
         Instrument a C compilation unit (pre-processed C source code).
@@ -21,6 +22,7 @@ class Instrumenter:
         self.return_instrument = return_instrument
         self.inline_instrument = inline_instrument
         self.main_instrument = main_instrument
+        self.main_spelling = main_spelling
         self.anon_instrument = anon_instrument
         self.function_instrument = function_instrument
         self.inner_instrument = inner_instrument
@@ -110,7 +112,7 @@ class Instrumenter:
             self.add_annotation(b"_FUNC_RETURN ", node.extent.end, -1)
 
         # special treatment for main function
-        if self.main_instrument and node.spelling == "main":
+        if self.main_instrument and node.spelling == self.main_spelling:
             if not self.function_instrument:
                 # well, we need something to start...
                 self.add_annotation(b" _FUNC(0) ", body.extent.start, 1)
