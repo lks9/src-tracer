@@ -63,6 +63,20 @@ class AssertResult(Enum):
         else:
             return AssertResult.NEVER_PASSED
 
+    def Union(a1, a2):
+        """
+        Logical Union
+        """
+        if a1 == AssertResult.NEVER_PASSED:
+            return a2
+        elif a2 == AssertResult.NEVER_PASSED:
+            return a1
+        elif a1 == a2:
+            return a1
+        else:
+            return AssertResult.UNSURE
+
+
 class SourceTraceReplayer:
 
     def __init__(self, binary_name, **kwargs):
@@ -129,7 +143,7 @@ class SourceTraceReplayer:
         return res
 
     def check_all_assertions(self, state):
-        res = AssertResult.NEVER_PASSED
+        res = AssertResult.PASSED
         count = state.mem[self.assert_idx_addr].int.concrete
         for index in range(count):
             label = state.mem[self.assert_names_addr + 8*index].deref.string.concrete.decode()
