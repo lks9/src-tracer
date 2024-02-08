@@ -22,7 +22,7 @@ int max (int len, int a[len]) {
 
 #define SOME_CODE /* nothing here */
 
-void process_array(int len, int a[len]) {
+void proc(int len, int a[len]) {
    printf("max: %d\n", max(len, a));
 
    for (int j=1; j < len; j++) {
@@ -34,6 +34,6 @@ void process_array(int len, int a[len]) {
 
 int main(int argc, char **argv) {
    for (int k=0; k < ARRAY_COUNT; k++) {
-      process_array(arrs[k].len, arrs[k].arr);
+      proc(arrs[k].len, arrs[k].arr);
    }
 }
