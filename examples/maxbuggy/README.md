@@ -1,7 +1,13 @@
 # Maxbuggy example
 
-* `maxbuggy.c` (uninstrumented)
-* `maxbuggy_assert.c` (uninstrumented with assertion)
+* `maxbuggy.c` (uninstrumented, buggy version)
+* `maxbuggy_assert.c` (uninstrumented with assertion, buggy version)
+* `maxfixed_assert.c` (uninstrumented with assertion, fixed version)
+* `random_arrarys.h` (100 random-generated input arrays for max)
+
+## Prerequisites
+
+See installation instructions in top-level README.md.
 
 ## Compilation
 
@@ -137,10 +143,10 @@ violations or `POSSIBLY_VIOLATED` results.
 
 ## Results
 
-Version                     | buggy | buggy  | fixed | fixed  |
-Subtrace of                 | max() | proc() | max() | proc() |
-Trace count                 |  100  |  100   |  100  |  100   |
-----------------------------+-------+--------+-------+--------+
-Assertion passed            |   48  |   88   |  100  |  100   |
-Assertion possibly violated |   52  |    2   |    0  |    0   |
-Assertion violated          |    0  |   10   |    0  |    0   |
+| Version                     | buggy | buggy  | fixed | fixed  |
+|-----------------------------|-------|--------|-------|--------|
+| Subtrace of                 |`max()`|`proc()`|`max()`|`proc()`|
+| Trace count                 |  100  |  100   |  100  |  100   |
+| Assertion passed            |   48  |   88   |  100  |  100   |
+| Assertion possibly violated |   52  |    2   |    0  |    0   |
+| Assertion violated          |    0  |   10   |    0  |    0   |
