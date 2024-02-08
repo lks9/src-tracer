@@ -249,3 +249,7 @@ volatile int _retrace_symbolic_idx;
 
 // for both tracing and retracing
 volatile bool _is_retrace_mode = false;
+
+// for assume-based replay
+struct _trace_array_elem _trace_array[TRACE_ARRAY_LEN];
+int _trace_i;

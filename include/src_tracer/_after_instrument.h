@@ -405,6 +405,21 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
     _RETRO_SKIP(normal) \
     _RETRO_ONLY(retro)
 
+
+/*
+ * trace array for symbolic replay using assume(_trace_array[_trace_i++] == ...)
+ * Used in _CBMC_MODE
+ */
+struct _trace_array_elem {
+    char letter;
+    int num;
+};
+
+#define TRACE_ARRAY_LEN 4096
+extern struct _trace_array_elem _trace_array[TRACE_ARRAY_LEN];
+extern int _trace_i;
+
+
 /*
  * Macros used in the instrumentation.
  * 2 versions: _TRACE_MODE and _RETRACE_MODE
@@ -524,6 +539,45 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _RETRO_ONLY(code)   code
 #define _RETRO_SKIP(code)   /* nothing here */
 
+#elif _CBMC_MODE
+
+#define _TRACE_CBMC(l, n) { \
+    __CPROVER_assume(_trace_array[_trace_i].letter = l); \
+    __CPROVER_assume(_trace_array[_trace_i].num == n); \
+    _trace_i += 1; \
+}
+
+#define _TRACE_SWITCH_CASE_CBMC(num, bit_cnt) ; \
+    for (int i = bit_cnt-1; i >= 0; i--) { \
+        if (num & (1 << i)) { \
+            _TRACE_CBMC('T', 0); \
+        } else { \
+            _TRACE_CBMC('N', 0); \
+        } \
+    }
+
+#define _IF                 _TRACE_CBMC('T', 0)
+#define _ELSE               _TRACE_CBMC('N', 0)
+#define _CONDITION(cond)    cond
+#define _FUNC(num)          _TRACE_CBMC('F', num)
+#define _FUNC_RETURN        _TRACE_CBMC('R', 0)
+#define _SWITCH(num)        _TRACE_CBMC('D', num)
+#define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
+#define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
+                                _TRACE_SWITCH_CASE_CBMC(num, cnt); \
+                                _cflow_switch_##id = 0; \
+                            };
+#define _LOOP_START(id)     /* nothing here */
+#define _LOOP_BODY(id)      _TRACE_CBMC('T', 0)
+#define _LOOP_END(id)       _TRACE_CBMC('N', 0)
+
+#define _TRACE_OPEN(fname)  /* nothing here */
+#define _TRACE_CLOSE        /* nothing here */
+
+#define _FORK(fork_stmt)    fork_stmt
+
+#define _RETRO_ONLY(code)   code
+#define _RETRO_SKIP(code)   /* nothing here */
 
 #else // neither _TRACE_MODE nor _RETRACE_MODE
 
