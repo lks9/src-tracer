@@ -405,21 +405,6 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
     _RETRO_SKIP(normal) \
     _RETRO_ONLY(retro)
 
-
-/*
- * trace array for symbolic replay using assume(_trace_array[_trace_i++] == ...)
- * Used in _CBMC_MODE
- */
-struct _trace_array_elem {
-    char letter;
-    int num;
-};
-
-#define TRACE_ARRAY_LEN 4096
-extern struct _trace_array_elem _trace_array[TRACE_ARRAY_LEN];
-extern int _trace_i;
-
-
 /*
  * Macros used in the instrumentation.
  * 2 versions: _TRACE_MODE and _RETRACE_MODE
@@ -541,10 +526,13 @@ extern int _trace_i;
 
 #elif _CBMC_MODE
 
+#include "retrace.h"
+
 #define _TRACE_CBMC(l, n) { \
-    __CPROVER_assume(_trace_array[_trace_i].letter = l); \
-    __CPROVER_assume(_trace_array[_trace_i].num == n); \
-    _trace_i += 1; \
+    __CPROVER_assume(retrace_i < retrace_arr_len); \
+    __CPROVER_assume(retrace_arr[retrace_i].letter == l); \
+    __CPROVER_assume(retrace_arr[retrace_i].num == n); \
+    retrace_i += 1; \
 }
 
 #define _TRACE_SWITCH_CASE_CBMC(num, bit_cnt) ; \
@@ -571,8 +559,8 @@ extern int _trace_i;
 #define _LOOP_BODY(id)      _TRACE_CBMC('T', 0)
 #define _LOOP_END(id)       _TRACE_CBMC('N', 0)
 
-#define _TRACE_OPEN(fname)  /* nothing here */
-#define _TRACE_CLOSE        /* nothing here */
+#define _TRACE_OPEN(fname)  ;retrace_i = 0;
+#define _TRACE_CLOSE        ;__CPROVER_assume(retrace_i == retrace_arr_len);
 
 #define _FORK(fork_stmt)    fork_stmt
 
