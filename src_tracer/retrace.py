@@ -15,14 +15,14 @@ from enum import Enum, auto
 
 class AssertResult(Enum):
     """
-    Basically the usual three valued logic VIOLATED (= False), UNSURE and PASSED (= True).
+    Basically the usual three valued logic VIOLATED (= False), POSSIBLY_VIOLATED and PASSED (= True).
     Extra element NEVER_PASSED is neutral to all operations.
     """
 
     NEVER_PASSED = auto()
     PASSED = auto()
     VIOLATED = auto()
-    UNSURE = auto()
+    POSSIBLY_VIOLATED = auto()
 
     def And(a1, a2):
         """
@@ -30,8 +30,8 @@ class AssertResult(Enum):
         """
         if AssertResult.VIOLATED in (a1, a2):
             return AssertResult.VIOLATED
-        elif AssertResult.UNSURE in (a1, a2):
-            return AssertResult.UNSURE
+        elif AssertResult.POSSIBLY_VIOLATED in (a1, a2):
+            return AssertResult.POSSIBLY_VIOLATED
         elif AssertResult.PASSED in (a1, a2):
             return AssertResult.PASSED
         else:
@@ -43,8 +43,8 @@ class AssertResult(Enum):
         """
         if AssertResult.PASSED in (a1, a2):
             return AssertResult.PASSED
-        elif AssertResult.UNSURE in (a1, a2):
-            return AssertResult.UNSURE
+        elif AssertResult.POSSIBLY_VIOLATED in (a1, a2):
+            return AssertResult.POSSIBLY_VIOLATED
         elif AssertResult.VIOLATED in (a1, a2):
             return AssertResult.VIOLATED
         else:
@@ -56,12 +56,26 @@ class AssertResult(Enum):
         """
         if a == AssertResult.PASSED:
             return AssertResult.VIOLATED
-        elif a == AssertResult.UNSURE:
-            return AssertResult.UNSURE
+        elif a == AssertResult.POSSIBLY_VIOLATED:
+            return AssertResult.POSSIBLY_VIOLATED
         elif a == AssertResult.VIOLATED:
             return AssertResult.PASSED
         else:
             return AssertResult.NEVER_PASSED
+
+    def Union(a1, a2):
+        """
+        Logical Union
+        """
+        if a1 == AssertResult.NEVER_PASSED:
+            return a2
+        elif a2 == AssertResult.NEVER_PASSED:
+            return a1
+        elif a1 == a2:
+            return a1
+        else:
+            return AssertResult.POSSIBLY_VIOLATED
+
 
 class SourceTraceReplayer:
 
@@ -111,7 +125,7 @@ class SourceTraceReplayer:
         val = state.mem[self.asserts_addr + index].bool.resolved
         solver_res = state.solver.eval_upto(val, 2)
         if (False in solver_res) and (True in solver_res):
-            return AssertResult.UNSURE
+            return AssertResult.POSSIBLY_VIOLATED
         elif False in solver_res:
             return AssertResult.VIOLATED
         elif True in solver_res:
@@ -129,7 +143,7 @@ class SourceTraceReplayer:
         return res
 
     def check_all_assertions(self, state):
-        res = AssertResult.NEVER_PASSED
+        res = AssertResult.PASSED
         count = state.mem[self.assert_idx_addr].int.concrete
         for index in range(count):
             label = state.mem[self.assert_names_addr + 8*index].deref.string.concrete.decode()
