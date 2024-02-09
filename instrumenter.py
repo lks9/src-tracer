@@ -29,6 +29,8 @@ ap.add_argument("--no-main", action='store_true',
                 help="do not instrument the main function to start trace recording")
 ap.add_argument("--record",
                 help="start trace recording in other function than main (implies --no-main)")
+ap.add_argument("--close", action='store_true',
+                help="stop trace recording in main (or other) function")
 ap.add_argument("--anon", action='store_true',
                 help="instrument all functions without a number")
 ap.add_argument("--no-functions", action='store_true',
@@ -61,7 +63,8 @@ if args.record:
 # do the instrumentation
 instrumenter = Instrumenter(database, store_dir, case_instrument=args.cases, boolop_instrument=args.short_circuit,
                             return_instrument=not args.no_return, inline_instrument=args.inline,
-                            main_instrument=main_instrument, main_spelling=main_spelling, anon_instrument=args.anon,
+                            main_instrument=main_instrument, main_spelling=main_spelling, main_close=args.close,
+                            anon_instrument=args.anon,
                             function_instrument=not args.no_functions, inner_instrument=not args.no_inner)
 instrumenter.parse(args.filename)
 instrumenter.annotate_all(args.filename)

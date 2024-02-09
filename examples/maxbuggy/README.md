@@ -17,7 +17,7 @@ See installation instructions in top-level README.md.
   ```
 * Instrument it (the pre-processed version)
   ```
-  ../../instrumenter.py maxbuggy_instru.c --record max
+  ../../instrumenter.py maxbuggy_instru.c --record max --close
   ```
 * Compile for recording with `_TRACE_MODE`
   ```

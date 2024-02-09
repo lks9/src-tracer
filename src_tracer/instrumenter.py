@@ -9,7 +9,7 @@ class Instrumenter:
 
     def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
                  return_instrument=True, inline_instrument=False, main_instrument=True, main_spelling="main",
-                 anon_instrument=False,
+                 main_close=False, anon_instrument=False,
                  function_instrument=True, inner_instrument=True):
         """
         Instrument a C compilation unit (pre-processed C source code).
@@ -23,6 +23,7 @@ class Instrumenter:
         self.inline_instrument = inline_instrument
         self.main_instrument = main_instrument
         self.main_spelling = main_spelling
+        self.main_close = main_close
         self.anon_instrument = anon_instrument
         self.function_instrument = function_instrument
         self.inner_instrument = inner_instrument
@@ -125,6 +126,13 @@ class Instrumenter:
             trace_fname = "%F-%H%M%S-%%lx-" + os.path.basename(orig_fname) + ".trace"
             trace_path = os.path.join(os.path.abspath(self.trace_store_dir), trace_fname)
             self.prepent_annotation(b' _TRACE_OPEN("' + bytes(trace_path, "utf8") + b'") ', body.extent.start, 1)
+
+            if self.main_close:
+                for descendant in node.walk_preorder():
+                    if descendant.kind == CursorKind.RETURN_STMT:
+                        self.add_annotation(b"_TRACE_CLOSE ", descendant.extent.start)
+                self.add_annotation(b"_TRACE_CLOSE ", node.extent.end, -1)
+
 
     def get_content(self, start, end):
         filename = self.filename(start)
