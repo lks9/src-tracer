@@ -560,7 +560,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _LOOP_END(id)       _TRACE_CBMC('N', 0)
 
 #define _TRACE_OPEN(fname)  ;retrace_i = 0;
-#define _TRACE_CLOSE        ;__CPROVER_assume(retrace_i == retrace_arr_len);
+#define _TRACE_CLOSE        ;_TRACE_CBMC('E', 0); __CPROVER_assume(retrace_i == retrace_arr_len);
 
 #define _FORK(fork_stmt)    fork_stmt
 
