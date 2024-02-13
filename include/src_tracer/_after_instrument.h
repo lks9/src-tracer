@@ -524,6 +524,48 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _RETRO_ONLY(code)   code
 #define _RETRO_SKIP(code)   /* nothing here */
 
+#elif _CBMC_MODE
+
+#include "retrace.h"
+
+#define _TRACE_CBMC(l, n) { \
+    __CPROVER_assume(retrace_i < retrace_arr_len); \
+    __CPROVER_assume(retrace_arr[retrace_i].letter == l); \
+    __CPROVER_assume(retrace_arr[retrace_i].num == n); \
+    retrace_i += 1; \
+}
+
+#define _TRACE_SWITCH_CASE_CBMC(num, bit_cnt) ; \
+    for (int i = bit_cnt-1; i >= 0; i--) { \
+        if (num & (1 << i)) { \
+            _TRACE_CBMC('T', 0); \
+        } else { \
+            _TRACE_CBMC('N', 0); \
+        } \
+    }
+
+#define _IF                 _TRACE_CBMC('T', 0)
+#define _ELSE               _TRACE_CBMC('N', 0)
+#define _CONDITION(cond)    cond
+#define _FUNC(num)          _TRACE_CBMC('F', num)
+#define _FUNC_RETURN        _TRACE_CBMC('R', 0)
+#define _SWITCH(num)        _TRACE_CBMC('D', num)
+#define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
+#define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
+                                _TRACE_SWITCH_CASE_CBMC(num, cnt); \
+                                _cflow_switch_##id = 0; \
+                            };
+#define _LOOP_START(id)     /* nothing here */
+#define _LOOP_BODY(id)      _TRACE_CBMC('T', 0)
+#define _LOOP_END(id)       _TRACE_CBMC('N', 0)
+
+#define _TRACE_OPEN(fname)  ;retrace_i = 0;
+#define _TRACE_CLOSE        ;_TRACE_CBMC('E', 0); __CPROVER_assume(retrace_i == retrace_arr_len);
+
+#define _FORK(fork_stmt)    fork_stmt
+
+#define _RETRO_ONLY(code)   code
+#define _RETRO_SKIP(code)   /* nothing here */
 
 #else // neither _TRACE_MODE nor _RETRACE_MODE
 
