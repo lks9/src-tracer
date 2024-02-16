@@ -33,6 +33,7 @@ else:
     out = None
 
 print("#include <assert.h>", file=out)
+print("#include <stdbool.h>", file=out)
 print("", file=out)
 print("#include <src_tracer/retrace.h>", file=out)
 print("struct retrace_elem retrace_arr [RETRACE_ARR_LEN_MAX] = {", file=out)
@@ -43,3 +44,7 @@ for elem in trace:
 print("};", file=out)
 print(f"int retrace_arr_len = {retrace_arr_len};", file=out)
 print("int retrace_i = 0;", file=out)
+print("", file=out)
+print("char *_retrace_assert_names[ASSERT_BUF_SIZE];", file=out)
+print("bool _retrace_asserts[ASSERT_BUF_SIZE];", file=out)
+print("int _retrace_assert_idx;", file=out)

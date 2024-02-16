@@ -544,23 +544,36 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
         } \
     }
 
-#define _IF                 _TRACE_CBMC('T', 0)
-#define _ELSE               _TRACE_CBMC('N', 0)
+#define _TRACE_END_CBMC() { \
+    _TRACE_CBMC('E', 0); \
+    __CPROVER_assume(retrace_i == retrace_arr_len); \
+    /* now check all past assertions */ \
+    for (int i = 0; i < _retrace_assert_idx; i++) { \
+        /* does not work: \
+        __CPROVER_assert(_retrace_asserts[i], \
+                         _retrace_assert_names[i]); \
+         * alternative: */ \
+        assert(_retrace_asserts[i]); \
+    } \
+}
+
+#define _IF                 ;_TRACE_CBMC('T', 0);
+#define _ELSE               ;_TRACE_CBMC('N', 0);
 #define _CONDITION(cond)    cond
-#define _FUNC(num)          _TRACE_CBMC('F', num)
-#define _FUNC_RETURN        _TRACE_CBMC('R', 0)
-#define _SWITCH(num)        _TRACE_CBMC('D', num)
+#define _FUNC(num)          ;_TRACE_CBMC('F', num);
+#define _FUNC_RETURN        ;_TRACE_CBMC('R', 0);
+#define _SWITCH(num)        ;_TRACE_CBMC('D', num);
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
                                 _TRACE_SWITCH_CASE_CBMC(num, cnt); \
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
-#define _LOOP_BODY(id)      _TRACE_CBMC('T', 0)
-#define _LOOP_END(id)       _TRACE_CBMC('N', 0)
+#define _LOOP_BODY(id)      ;_TRACE_CBMC('T', 0);
+#define _LOOP_END(id)       ;_TRACE_CBMC('N', 0);
 
 #define _TRACE_OPEN(fname)  ;retrace_i = 0;
-#define _TRACE_CLOSE        ;_TRACE_CBMC('E', 0); __CPROVER_assume(retrace_i == retrace_arr_len);
+#define _TRACE_CLOSE        ;_TRACE_END_CBMC();
 
 #define _FORK(fork_stmt)    fork_stmt
 

@@ -143,9 +143,10 @@
     )
 
 // extern variables and functions
+extern volatile bool _retrace_in_ghost;
+
 extern void _retrace_ghost_start(void);
 extern void _retrace_ghost_end(void);
-extern volatile bool _retrace_in_ghost;
 
 extern char *volatile _retrace_assert_names[ASSERT_BUF_SIZE];
 extern volatile bool  _retrace_asserts[ASSERT_BUF_SIZE];
@@ -169,11 +170,6 @@ extern void  _retrace_dump_passed(void);
 extern long long *volatile _retrace_symbolic[RETRACE_SYMBOLIC_SIZE];
 extern volatile int _retrace_symbolic_idx;
 
-// helper macros
-#define STR_(t)     #t
-#define STR(t)      STR_(t)
-#define LOCATION    (__FILE__ ":" STR(__LINE__))
-
 #else // _CBMC_MODE
 
 // RETRO_SYMBOLIC( type, default_value )
@@ -192,10 +188,23 @@ extern volatile int _retrace_symbolic_idx;
 
 // RETRO_ASSERT(condition)
 
+#if 0 // gives false negatives, depending on later assumptions
 #define RETRO_ASSERT(condition) \
     RETRO_ONLY( \
         assert(condition); \
     )
+#else // avoids false negatives, depending on later assumptions
+
+// evaluate assertion, check it later
+#define RETRO_ASSERT(condition) { \
+    RETRO_ONLY( \
+        _retrace_assert_names[_retrace_assert_idx] = LOCATION; \
+        _retrace_asserts[_retrace_assert_idx] = (condition); \
+        _retrace_assert_idx += 1; \
+    ) \
+}
+
+#endif
 
 // RETRO_ASSUME(condition)
 
@@ -204,4 +213,16 @@ extern volatile int _retrace_symbolic_idx;
         __CPROVER_assume(condition); \
     )
 
+// extern variables and functions
+extern char *_retrace_assert_names[ASSERT_BUF_SIZE];
+extern bool  _retrace_asserts[ASSERT_BUF_SIZE];
+extern int   _retrace_assert_idx;
+
 #endif // _CBMC_MODE
+
+// helper macros
+#define STR_(t)     #t
+#define STR(t)      STR_(t)
+#define LOCATION    (__FILE__ ":" STR(__LINE__))
+
+
