@@ -45,6 +45,7 @@ SET_TRY         = 0b01010011 # 'S'
 SET_CATCH       = 0b01001100 # 'L'
 SET_FORK        = 0b01000111 # 'G'
 SET_PAUSE       = 0b01010000 # 'P'
+SET_SWITCH      = 0b01010111 # 'W'
 #/* 'T' and 'N' could be used instead of
 # * _TRACE_IE_BYTE_INIT for faster trace writing */
 SET_IF          = 0b01010100 # 'T'

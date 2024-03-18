@@ -27,6 +27,8 @@ static unsigned char temp_trace_buf[TRACE_BUF_SIZE];
 static int temp_trace_buf_pos;
 static int temp_trace_fd;
 
+unsigned long long int _trace_setjmp_idx;
+
 #ifndef _TRACE_USE_POSIX_WRITE
 // taken from musl (arch/x86_64/syscall_arch.h)
 static __inline long __syscall3(long n, long a1, long a2, long a3)
@@ -129,7 +131,7 @@ void _trace_before_fork(void) {
         return;
     }
     trace_fork_count += 1;
-    _TRACE_NUM(trace_fork_count);
+    _TRACE_NUM('G', trace_fork_count);
 
     // stop tracing
     for (int k = 0; k < TRACE_BUF_SIZE; k++) {
@@ -157,7 +159,7 @@ int _trace_after_fork(int pid) {
         trace_fd = temp_trace_fd;
         temp_trace_fd = 0;
 
-        _TRACE_NUM(pid < 0 ? -1 : 1);
+        // _TRACE_NUM(pid < 0 ? -1 : 1);
         return pid;
     }
     // we are in a fork
@@ -177,7 +179,7 @@ int _trace_after_fork(int pid) {
     _trace_buf_pos = 0;
     _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 
-    _TRACE_NUM(pid);
+    // _TRACE_NUM(pid);
     return pid;
 }
 
@@ -214,6 +216,7 @@ volatile int _retrace_fun_num;
 void _retrace_fun_call(void) { barrier(); }
 void _retrace_return(void) { barrier(); }
 
+volatile char _retrace_type;
 volatile long long int _retrace_int;
 void _retrace_wrote_int(void) { barrier(); }
 
