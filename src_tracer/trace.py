@@ -300,8 +300,17 @@ class TraceCompact(Trace):
                 length = byte_length[b]
                 bs = trace[i:i+length]
             elif b & TEST_OTHER in (SET_ELEM_AO, SET_ELEM_PZ):
-                length = 0
-                bs = b''
+                if i == len(trace):
+                    b2 = 0
+                else:
+                    b2 = trace[i]
+                if b2 & TEST_OTHER == SET_DATA:
+                    i += 1
+                    length = byte_length[b2]
+                    bs = trace[i:i+length]
+                else:
+                    length = 0
+                    bs = b''
             else:
                 # function number
                 endian = "big"
