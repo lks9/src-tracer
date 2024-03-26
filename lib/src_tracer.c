@@ -131,7 +131,7 @@ void _trace_before_fork(void) {
         return;
     }
     trace_fork_count += 1;
-    _TRACE_NUM('G', trace_fork_count);
+    _TRACE_NUM(_TRACE_SET_FORK, trace_fork_count);
 
     // stop tracing
     for (int k = 0; k < TRACE_BUF_SIZE; k++) {
@@ -154,12 +154,13 @@ int _trace_after_fork(int pid) {
         for (int k = 0; k < TRACE_BUF_SIZE; k++) {
             _trace_buf[k] = temp_trace_buf[k];
         }
-        _trace_buf_pos = temp_trace_buf_pos;
-        _trace_ie_byte = 0;
         trace_fd = temp_trace_fd;
         temp_trace_fd = 0;
+        _trace_buf_pos = temp_trace_buf_pos;
+        _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 
         // _TRACE_NUM(pid < 0 ? -1 : 1);
+        _TRACE_IF();
         return pid;
     }
     // we are in a fork
@@ -180,6 +181,7 @@ int _trace_after_fork(int pid) {
     _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 
     // _TRACE_NUM(pid);
+    _TRACE_ELSE();
     return pid;
 }
 
