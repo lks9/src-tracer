@@ -358,52 +358,58 @@ static inline __attribute__((always_inline)) bool _text_trace_condition(bool con
 }
 
 // for retracing
-extern void _retrace_if(void);
-extern void _retrace_else(void);
 
-extern volatile int _retrace_fun_num;
-extern void _retrace_fun_call(void);
-extern void _retrace_return(void);
-
-extern volatile char _retrace_type;
+extern volatile char _retrace_letter;
 extern volatile long long int _retrace_int;
-extern void _retrace_wrote_int(void);
+extern void _retrace_compare_letter(void);
 
 extern volatile int _retrace_fork_count;
 
-#define _RETRACE_FUN_CALL(num) ;{ \
-    _retrace_fun_num = (num); \
-    _retrace_fun_call(); \
+#define _RETRACE_NUM(type, num) ;{ \
+    _retrace_letter = (type); \
+    _retrace_int = (num); \
+    _retrace_compare_letter(); \
 }
 
-#define _RETRACE_NUM(type, num) ;{ \
-    _retrace_type = (type); \
-    _retrace_int = (num); \
-    _retrace_wrote_int(); \
-}
+#define _RETRACE_FUN_CALL(num) \
+    _RETRACE_NUM('F', num)
+
+#define _RETRACE_RETURN() \
+    _RETRACE_NUM('R', 0)
+
+#define _RETRACE_IF() \
+    _RETRACE_NUM('T', 0)
+
+#define _RETRACE_ELSE() \
+    _RETRACE_NUM('N', 0)
+
+#define _RETRACE_END() \
+    _RETRACE_NUM('E', 0)
 
 static inline __attribute__((always_inline)) long long int _retrace_num(char type, long long int num) {
-    _retrace_type = type;
-    _retrace_int = num;
-    _retrace_wrote_int();
+    _RETRACE_NUM(type, num);
     return num;
 }
 
 static inline __attribute__((always_inline)) bool _retrace_condition(bool cond) {
     if (cond) {
-        _retrace_if();
+        _retrace_letter = 'T';
     } else {
-        _retrace_else();
+        _retrace_letter = 'N';
     }
+    _retrace_int = 0;
+    _retrace_compare_letter();
     return cond;
 }
 
 static inline __attribute__((always_inline)) int _retrace_after_fork(int fork_val) {
     if (fork_val != 0) {
-        _retrace_if();
+        _retrace_letter = 'T';
     } else {
-        _retrace_else();
+        _retrace_letter = 'N';
     }
+    _retrace_int = 0;
+    _retrace_compare_letter();
     return fork_val;
 }
 
@@ -425,9 +431,9 @@ extern volatile bool _is_retrace_mode;
 
 static inline __attribute__((always_inline)) bool _is_retrace_condition(bool cond) {
     if (cond) {
-        _IS_RETRACE(_retrace_if(), _TRACE_IF());
+        _IS_RETRACE(_RETRACE_IF(), _TRACE_IF());
     } else {
-        _IS_RETRACE(_retrace_else(), _TRACE_ELSE());
+        _IS_RETRACE(_RETRACE_ELSE(), _TRACE_ELSE());
     }
     return cond;
 }
@@ -457,11 +463,11 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #if defined _TRACE_MODE && defined _RETRACE_MODE
 /* combined trace/retrace mode, experimental */
 
-#define _IF                 _IS_RETRACE(_retrace_if(), _TRACE_IF())
-#define _ELSE               _IS_RETRACE(_retrace_else(), _TRACE_ELSE())
+#define _IF                 _IS_RETRACE(_RETRACE_IF(), _TRACE_IF())
+#define _ELSE               _IS_RETRACE(_RETRACE_ELSE(), _TRACE_ELSE())
 #define _CONDITION(cond)    _is_retrace_condition(cond)
 #define _FUNC(num)          _IS_RETRACE(_RETRACE_FUN_CALL(num), _TRACE_FUNC(num))
-#define _FUNC_RETURN        _IS_RETRACE(_retrace_return(), _TRACE_RETURN())
+#define _FUNC_RETURN        _IS_RETRACE(_RETRACE_RETURN(), _TRACE_RETURN())
 // non-macro version for switch
 #define _SWITCH(num)        _is_retrace_switch(num)
 // experimental version for switch
@@ -472,11 +478,11 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
-#define _LOOP_BODY(id)      _IS_RETRACE(_retrace_if(), _TRACE_IF())
-#define _LOOP_END(id)       _IS_RETRACE(_retrace_else(), _TRACE_ELSE())
+#define _LOOP_BODY(id)      _IS_RETRACE(_RETRACE_IF(), _TRACE_IF())
+#define _LOOP_END(id)       _IS_RETRACE(_RETRACE_ELSE(), _TRACE_ELSE())
 
 #define _TRACE_OPEN(fname)  _IS_RETRACE( ,_trace_open((fname)))
-#define _TRACE_CLOSE        _IS_RETRACE( ,_trace_close())
+#define _TRACE_CLOSE        _IS_RETRACE(_RETRACE_END() ,_trace_close())
 
 #define _RETRO_ONLY(code)   _IS_RETRACE(code, )
 #define _RETRO_SKIP(code)   _IS_RETRACE(, code)
@@ -554,11 +560,11 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #elif defined _RETRACE_MODE
 /* retrace mode */
 
-#define _IF                 ;_retrace_if();
-#define _ELSE               ;_retrace_else();
+#define _IF                 ;_RETRACE_IF();
+#define _ELSE               ;_RETRACE_ELSE();
 #define _CONDITION(cond)    _retrace_condition(cond)
 #define _FUNC(num)          _RETRACE_FUN_CALL(num)
-#define _FUNC_RETURN        ;_retrace_return();
+#define _FUNC_RETURN        ;_RETRACE_RETURN();
 // non-macro version for switch
 #define _SWITCH(num)        _retrace_num('D', num)
 // experimental version for switch
@@ -568,11 +574,11 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
-#define _LOOP_BODY(id)      ;_retrace_if();
-#define _LOOP_END(id)       ;_retrace_else();
+#define _LOOP_BODY(id)      ;_RETRACE_IF();
+#define _LOOP_END(id)       ;_RETRACE_ELSE();
 
 #define _TRACE_OPEN(fname)  /* nothing here */
-#define _TRACE_CLOSE        /* nothing here */
+#define _TRACE_CLOSE        ;_RETRACE_END();
 
 #define _FORK(fork_stmt)    (_retrace_num('G', _retrace_fork_count), \
                              _retrace_after_fork(fork_stmt))

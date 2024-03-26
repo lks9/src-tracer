@@ -82,13 +82,10 @@ class SourceTraceReplayer:
     def __init__(self, binary_name, **kwargs):
         self.p = angr.Project(binary_name, **kwargs)
 
-        self.if_addr = self.addr("_retrace_if")
-        self.else_addr = self.addr("_retrace_else")
-        self.return_addr = self.addr("_retrace_return")
-        self.fun_call_addr = self.addr("_retrace_fun_call")
-        self.fun_num_addr = self.addr("_retrace_fun_num")
-        self.wrote_int_addr = self.addr("_retrace_wrote_int")
+        self.letter_addr = self.addr("_retrace_letter")
         self.int_addr = self.addr("_retrace_int")
+        self.compare_letter_addr = self.addr("_retrace_compare_letter")
+
         self.is_retrace_addr = self.addr("_is_retrace_mode")
 
         # ghost code
@@ -182,26 +179,9 @@ class SourceTraceReplayer:
         self.make_globals_symbolic(state)
         return state
 
-    def find_letter(self, letter):
-        if letter == 'T':
-            return self.if_addr
-        elif letter == 'N':
-            return self.else_addr
-        elif letter == 'R':
-            return self.return_addr
-        elif letter == 'F' or letter == 'A':
-            return self.fun_call_addr
-        elif letter == 'D':
-            return self.wrote_int_addr
-        else:
-            raise ValueError(f'Trace contains unsupported element "{letter}"')
-
-    def find(self, elem):
-        return {self.find_letter(elem.letter)}
-
     @property
     def reals(self):
-        return {self.if_addr, self.else_addr, self.wrote_int_addr, self.return_addr, self.fun_call_addr}
+        return {self.compare_letter_addr}
 
     @property
     def ghosts(self):
@@ -354,7 +334,7 @@ class SourceTraceReplayer:
             simgr.move(from_stash='reals', to_stash='active')
 
             # PART 2: find next element
-            find = self.find(elem)
+            find = { self.compare_letter_addr }
             avoid = self.reals.difference(find)
             while simgr.active != [] or simgr.unconstrained != []:
                 while simgr.active != []:
@@ -376,17 +356,13 @@ class SourceTraceReplayer:
             self.merge(simgr, 'traced', merging)
 
             # PART 5: add constraints for functions and data
-            if elem.letter == 'D':
-                # add the constrain for the int
-                trace_int = elem.num
-                for state in simgr.traced:
-                    mem_int = state.mem[self.int_addr].with_type(parse_type("long long int")).resolved
-                    state.solver.add(mem_int == trace_int)
-            elif elem.letter == 'F':
-                fun_num = elem.num
-                for state in simgr.traced:
-                    mem_num = state.mem[self.fun_num_addr].int.resolved
-                    state.solver.add(mem_num == fun_num)
+            trace_letter = ord(elem.letter)
+            trace_int = elem.num
+            for state in simgr.traced:
+                mem_letter = state.mem[self.letter_addr].char.resolved
+                mem_int = state.mem[self.int_addr].with_type(parse_type("long long int")).resolved
+                state.solver.add(mem_int == trace_int)
+                state.solver.add(mem_letter == trace_letter)
 
             # PART 6: debugging
             if debug:

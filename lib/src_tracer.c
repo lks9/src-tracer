@@ -211,16 +211,9 @@ void _trace_close(void) {
 #define barrier() __asm__ __volatile__("": : :"memory")
 
 
-void _retrace_if(void) { barrier(); }
-void _retrace_else(void) { barrier(); }
-
-volatile int _retrace_fun_num;
-void _retrace_fun_call(void) { barrier(); }
-void _retrace_return(void) { barrier(); }
-
-volatile char _retrace_type;
+volatile char _retrace_letter;
 volatile long long int _retrace_int;
-void _retrace_wrote_int(void) { barrier(); }
+void _retrace_compare_letter(void) { barrier(); }
 
 volatile int _retrace_fork_count;
 
