@@ -10,7 +10,7 @@ class Instrumenter:
     def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
                  return_instrument=True, inline_instrument=False, main_instrument=True, main_spelling="main",
                  main_close=False, anon_instrument=False,
-                 function_instrument=True, inner_instrument=True):
+                 function_instrument=True, inner_instrument=True, call_instrument=True):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
@@ -27,6 +27,7 @@ class Instrumenter:
         self.anon_instrument = anon_instrument
         self.function_instrument = function_instrument
         self.inner_instrument = inner_instrument
+        self.call_instrument = call_instrument
 
         self.ifs = []
         self.loops = []
@@ -382,6 +383,15 @@ class Instrumenter:
             self.add_annotation(b"_SWITCH(", switch_num.extent.start)
             self.add_annotation(b")", switch_num.extent.end, 1)
 
+    def visit_call(self, node):
+        # Some calls need to be anotated
+        if node.spelling == "fork":
+            self.add_annotation(b"_FORK(", node.extent.start)
+            self.prepent_annotation(b")", node.extent.end)
+        elif node.spelling in ("setjmp", "sigsetjmp", "_setjmp", "__sigsetjmp"):
+            self.add_annotation(b"_SETJMP(", node.extent.start)
+            self.prepent_annotation(b")", node.extent.end)
+
     def parse(self, filename):
         index = Index.create()
         tu = index.parse(filename)
@@ -451,6 +461,9 @@ class Instrumenter:
                 self.visit_loop(node)
             elif node.kind == CursorKind.SWITCH_STMT:
                 self.visit_switch(node)
+            elif node.kind == CursorKind.CALL_EXPR:
+                if self.call_instrument:
+                    self.visit_call(node)
             elif node.type.is_const_qualified():
                 # skip constants
                 return

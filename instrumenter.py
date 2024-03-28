@@ -35,6 +35,8 @@ ap.add_argument("--anon", action='store_true',
                 help="instrument all functions without a number")
 ap.add_argument("--no-functions", action='store_true',
                 help="do not instrument functions at all")
+ap.add_argument("--no-calls", action='store_true',
+                help="do not instrument any calls, currently we instrument only fork() and setjmp()")
 args = ap.parse_args()
 
 # trace store dir
@@ -65,7 +67,8 @@ instrumenter = Instrumenter(database, store_dir, case_instrument=args.cases, boo
                             return_instrument=not args.no_return, inline_instrument=args.inline,
                             main_instrument=main_instrument, main_spelling=main_spelling, main_close=args.close,
                             anon_instrument=args.anon,
-                            function_instrument=not args.no_functions, inner_instrument=not args.no_inner)
+                            function_instrument=not args.no_functions, inner_instrument=not args.no_inner,
+                            call_instrument=not args.no_calls)
 instrumenter.parse(args.filename)
 instrumenter.annotate_all(args.filename)
 database.close_connection()

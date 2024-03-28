@@ -583,6 +583,17 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _FORK(fork_stmt)    (_retrace_num('G', _retrace_fork_count), \
                              _retrace_after_fork(fork_stmt))
 
+#define _SETJMP(setjmp_stmt) ({ \
+    _retrace_num('S', 0); \
+    _trace_setjmp_idx ++; \
+    int cur_setjmp_idx = _trace_setjmp_idx; \
+    int setjmp_res = setjmp_stmt; \
+    if (setjmp_res != 0) { \
+        _retrace_num('L', _trace_setjmp_idx - cur_setjmp_idx); \
+    } \
+    setjmp_res; \
+})
+
 #define _RETRO_ONLY(code)   code
 #define _RETRO_SKIP(code)   /* nothing here */
 
