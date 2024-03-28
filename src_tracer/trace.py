@@ -5,57 +5,66 @@ SET_IE           = 0b10000000
 TEST_IE_INIT     = 0b11111111
 SET_IE_INIT      = 0b11111110
 
+TEST_FUNC       = 0b11000000
+SET_FUNC        = 0b00000000
+
 TEST_OTHER      = 0b11110000
 SET_FUNC_4      = 0b00000000
 SET_FUNC_12     = 0b00010000
 SET_FUNC_20     = 0b00100000
-SET_DATA        = 0b00110000
+SET_FUNC_28     = 0b00110000
 SET_ELEM_AO     = 0b01000000
 SET_ELEM_PZ     = 0b01010000
-SET_FUNC_28     = 0b01100000
-SET_FUNC_32     = 0b01110000
+SET_ELEM2_ao    = 0b01100000
+SET_ELEM2_pz    = 0b01110000
 
-TEST_LEN          = 0b11111111
-TEST_LEN_BYTECOUNT= 0b00001111
-SET_LEN_0         = 0b00110000
-SET_LEN_8         = 0b00110001
-SET_LEN_16        = 0b00110010
-SET_LEN_reserved3 = 0b00110011
-SET_LEN_32        = 0b00110100
-SET_LEN_reserved5 = 0b00110101
-SET_LEN_reserved6 = 0b00110110
-SET_LEN_reserved7 = 0b00110111
-SET_LEN_64        = 0b00111000
-SET_LEN_reserved9 = 0b00111001
-SET_LEN_reserved10= 0b00111010
-SET_LEN_reserved11= 0b00111011
-SET_LEN_reserved12= 0b00111100
-SET_LEN_PREFIX_res= 0b00111101
-SET_LEN_STRING_res= 0b00111110
-SET_LEN_reserved15= 0b00111111
+TEST_LEN          = 0b00000111
+SET_LEN_0         = 0b00000000
+SET_LEN_8         = 0b00000001
+SET_LEN_16        = 0b00000010
+SET_LEN_32        = 0b00000011
+SET_LEN_64        = 0b00000100
+SET_LEN_PREFIX_res= 0b00000101
+SET_LEN_STRING_res= 0b00000110
+SET_LEN_BYTECOUNT = 0b00000111
 
-TEST_IS_ELEM     = 0b11100000
-SET_IS_ELEM      = 0b01000000
+TEST_IS_ELEM    = 0b11100000
+SET_IS_ELEM     = 0b01000000
 
-TEST_ELEM        = 0b11111111
+TEST_ELEM       = 0b11111111
 SET_END         = 0b01000101 # 'E'
 SET_RETURN      = 0b01010010 # 'R'
 SET_FUNC_ANON   = 0b01000001 # 'A'
 SET_TRY         = 0b01010011 # 'S'
-SET_CATCH       = 0b01001100 # 'L'
-SET_FORK        = 0b01000111 # 'G'
 SET_PAUSE       = 0b01010000 # 'P'
+#/* FUNC_32 always comes with 4 bytes, a 32 bit function number! */
+SET_FUNC_32     = 0b01000110 # 'F'
 #/* 'T' and 'N' could be used instead of
 # * _TRACE_IE_BYTE_INIT for faster trace writing */
 SET_IF          = 0b01010100 # 'T'
 SET_ELSE        = 0b01001110 # 'N'
-#/* 'F' and 'D' are reserved, since
-# * _SET_FUNC_x and _SET_LEN_x are used instead */
-SET_FUNC_reserved  =  0b01000110 # 'F'
-SET_DATA_reserved  = 0b01000100 # 'D'
+#/* 'G' is reserved, use _TRACE_SET_FORK */
+SET_FORK_res    = 0b01000111 # 'G'
+#/* 'L' is reserved, use _TRACE_SET_CATCH */
+SET_CATCH_res   = 0b01001100 # 'L'
+#/* 'D' is reserved, use _TRACE_SET_DATA */
+SET_DATA_res    = 0b01000100 # 'D'
 #/* 'M' and 'B' are currently not supported */
-SET_FUNC_STRING_res = 0b01001101 # 'M'
-SET_DATA_STRING_res = 0b01000010 # 'B'
+SET_FUNC_STR_res = 0b01001101 # 'M'
+SET_DATA_STR_res = 0b01000010 # 'B'
+
+#/* 'X' to '_' are reserved */
+TEST_ELEM_res   = 0b11111000
+SET_ELEM_res    = 0b01011000
+
+TEST_IS_ELEM2   = 0b11100000
+SET_IS_ELEM2    = 0b01100000
+
+TEST_ELEM2      = 0b11111000
+SET_FORK        = 0b01100000
+SET_CATCH       = 0b01101000
+SET_DATA        = 0b01110000
+SET_ELEM2_res   = 0b01111000
 
 
 bit_length = {
@@ -92,12 +101,16 @@ def letter(b, count=0):
             return 'T'
         else:
             return 'N'
-    elif b & TEST_OTHER == SET_DATA:
-        return 'D'
-    elif b & TEST_OTHER in (SET_FUNC_4, SET_FUNC_12, SET_FUNC_20, SET_FUNC_28, SET_FUNC_32):
+    elif b & TEST_FUNC == SET_FUNC:
         return 'F'
-    elif b & TEST_OTHER in (SET_ELEM_AO, SET_ELEM_PZ):
+    elif b & TEST_IS_ELEM == SET_IS_ELEM:
         return chr(b)
+    elif b & TEST_ELEM2 == SET_FORK:
+        return 'G'
+    elif b & TEST_ELEM2 == SET_CATCH:
+        return 'L'
+    elif b & TEST_ELEM2 == SET_DATA:
+        return 'D'
     raise ValueError(f"There is no letter for {bin(b)}")
 
 
@@ -295,12 +308,18 @@ class TraceCompact(Trace):
                 continue
 
             endian = "little"
-            if b & TEST_OTHER == SET_DATA:
-                length = byte_length[b]
+            if b & TEST_IS_ELEM2 == SET_IS_ELEM2:
+                length = byte_length[b & TEST_LEN]
                 bs = trace[i:i+length]
-            elif b & TEST_OTHER in (SET_ELEM_AO, SET_ELEM_PZ):
-                length = 0
-                bs = b''
+            elif b & TEST_IS_ELEM == SET_IS_ELEM:
+                if b == SET_FUNC_32:
+                    # function number
+                    endian = "big"
+                    length = 4
+                    bs = trace[i:i+length]
+                else:
+                    length = 0
+                    bs = b''
             else:
                 # function number
                 endian = "big"
@@ -318,12 +337,18 @@ class TraceCompact(Trace):
             i += 1
             if b & TEST_IE == SET_IE:
                 continue
-            elif b & TEST_OTHER == (SET_ELEM_AO, SET_ELEM_PZ):
-                continue
-
-            if b & TEST_OTHER == SET_DATA:
-                length = byte_length[b]
+            elif b & TEST_IS_ELEM == SET_IS_ELEM:
+                if b == SET_FUNC_32:
+                    # function number
+                    length = 4
+                    bs = self._trace[i:i+length]
+                    yield TraceElem(letter(b), bs, pos, endian="big")
+                else:
+                    continue
+            elif b & TEST_IS_ELEM2 == SET_IS_ELEM2:
+                length = byte_length[b & TEST_LEN]
             else:
+                # function number
                 length = byte_length[b & TEST_OTHER]
                 bs = (b &~ TEST_OTHER).to_bytes(1, "big") + self._trace[i:i+length]
                 yield TraceElem(letter(b), bs, pos, endian="big")

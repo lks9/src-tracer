@@ -95,6 +95,8 @@ if args.pretty == -1:
         print(elem)
     sys.exit()
 
+setjmp_indent = []
+
 for elem in trace:
     if elem.letter == 'T' or elem.letter == 'N':
         print_with_count(f"{elem.letter}")
@@ -105,6 +107,18 @@ for elem in trace:
         # anonymous function call
         print_extra(elem.pretty(show_pos=args.show_pos))
         indent += 1
+    elif elem.letter == 'S':
+        # setjmp, try
+        # save current indent
+        setjmp_indent.append(indent)
+        # print as usual
+        print_extra(elem.pretty(show_pos=args.show_pos))
+    elif elem.letter == 'L':
+        # longjmp, catch
+        # restore indent
+        indent = setjmp_indent[-elem.num -1]
+        # print as usual
+        print_extra(elem.pretty(show_pos=args.show_pos))
     elif elem.bs == b'':
         print_extra(elem.pretty(show_pos=args.show_pos))
     else:
