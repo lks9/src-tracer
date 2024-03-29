@@ -330,6 +330,18 @@ extern int _trace_buf_pos;
     _TRACE_PUT(_TRACE_SET_END); \
 }
 
+#define _TRACE_SETJMP(setjmp_stmt) ({ \
+    _TRACE_IE_FINISH \
+    _TRACE_PUT('S'); \
+    _trace_setjmp_idx ++; \
+    int cur_setjmp_idx = _trace_setjmp_idx; \
+    int setjmp_res = setjmp_stmt; \
+    if (setjmp_res != 0) { \
+        _TRACE_NUM(_TRACE_SET_CATCH, _trace_setjmp_idx - cur_setjmp_idx); \
+    } \
+    setjmp_res; \
+})
+
 // same as the macro version
 // but returns num
 // can be used inside switch conditions
@@ -385,6 +397,17 @@ extern volatile int _retrace_fork_count;
 
 #define _RETRACE_END() \
     _RETRACE_NUM('E', 0)
+
+#define _RETRACE_SETJMP(setjmp_stmt) ({ \
+    _RETRACE_NUM('S', 0); \
+    _trace_setjmp_idx ++; \
+    int cur_setjmp_idx = _trace_setjmp_idx; \
+    int setjmp_res = setjmp_stmt; \
+    if (setjmp_res != 0) { \
+        _RETRACE_NUM('L', _trace_setjmp_idx - cur_setjmp_idx); \
+    } \
+    setjmp_res; \
+})
 
 static inline __attribute__((always_inline)) long long int _retrace_num(char type, long long int num) {
     _RETRACE_NUM(type, num);
@@ -481,6 +504,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _LOOP_BODY(id)      _IS_RETRACE(_RETRACE_IF(), _TRACE_IF())
 #define _LOOP_END(id)       _IS_RETRACE(_RETRACE_ELSE(), _TRACE_ELSE())
 
+#define _SETJMP(stmt)       _IS_RETRACE(_RETRACE_SETJMP(stmt), _TRACE_SETJMP(stmt))
+
 #define _TRACE_OPEN(fname)  _IS_RETRACE( ,_trace_open((fname)))
 #define _TRACE_CLOSE        _IS_RETRACE(_RETRACE_END() ,_trace_close())
 
@@ -513,18 +538,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _FORK(fork_stmt)    (_trace_before_fork(), \
                              _trace_after_fork(fork_stmt))
-
-#define _SETJMP(setjmp_stmt) ({ \
-    _TRACE_IE_FINISH \
-    _TRACE_PUT('S'); \
-    _trace_setjmp_idx ++; \
-    int cur_setjmp_idx = _trace_setjmp_idx; \
-    int setjmp_res = setjmp_stmt; \
-    if (setjmp_res != 0) { \
-        _TRACE_NUM(_TRACE_SET_CATCH, _trace_setjmp_idx - cur_setjmp_idx); \
-    } \
-    setjmp_res; \
-})
+#define _SETJMP(stmt)       ;_TRACE_SETJMP(stmt);
 
 #define _RETRO_ONLY(code)   /* nothing here */
 #define _RETRO_SKIP(code)   code
@@ -582,17 +596,6 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _FORK(fork_stmt)    (_retrace_num('G', _retrace_fork_count), \
                              _retrace_after_fork(fork_stmt))
-
-#define _SETJMP(setjmp_stmt) ({ \
-    _retrace_num('S', 0); \
-    _trace_setjmp_idx ++; \
-    int cur_setjmp_idx = _trace_setjmp_idx; \
-    int setjmp_res = setjmp_stmt; \
-    if (setjmp_res != 0) { \
-        _retrace_num('L', _trace_setjmp_idx - cur_setjmp_idx); \
-    } \
-    setjmp_res; \
-})
 
 #define _RETRO_ONLY(code)   code
 #define _RETRO_SKIP(code)   /* nothing here */
