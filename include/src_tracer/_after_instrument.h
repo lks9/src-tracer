@@ -538,7 +538,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _FORK(fork_stmt)    (_trace_before_fork(), \
                              _trace_after_fork(fork_stmt))
-#define _SETJMP(stmt)       ;_TRACE_SETJMP(stmt);
+#define _SETJMP(stmt)       _TRACE_SETJMP(stmt)
 
 #define _RETRO_ONLY(code)   /* nothing here */
 #define _RETRO_SKIP(code)   code
@@ -591,6 +591,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _LOOP_BODY(id)      ;_RETRACE_IF();
 #define _LOOP_END(id)       ;_RETRACE_ELSE();
 
+#define _SETJMP(stmt)       _RETRACE_SETJMP(stmt)
+
 #define _TRACE_OPEN(fname)  /* nothing here */
 #define _TRACE_CLOSE        ;_RETRACE_END();
 
@@ -604,24 +606,24 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #include "retrace.h"
 
-#define _TRACE_CBMC(l, n) { \
+#define _RETRACE_CBMC(l, n) { \
     __CPROVER_assume(retrace_i < retrace_arr_len); \
     __CPROVER_assume(retrace_arr[retrace_i].letter == l); \
     __CPROVER_assume(retrace_arr[retrace_i].num == n); \
     retrace_i += 1; \
 }
 
-#define _TRACE_CASE_CBMC(num, bit_cnt) ; \
+#define _RETRACE_CASE_CBMC(num, bit_cnt) ; \
     for (int i = bit_cnt-1; i >= 0; i--) { \
         if (num & (1 << i)) { \
-            _TRACE_CBMC('T', 0); \
+            _RETRACE_CBMC('T', 0); \
         } else { \
-            _TRACE_CBMC('N', 0); \
+            _RETRACE_CBMC('N', 0); \
         } \
     }
 
-#define _TRACE_END_CBMC() { \
-    _TRACE_CBMC('E', 0); \
+#define _RETRACE_END_CBMC() { \
+    _RETRACE_CBMC('E', 0); \
     __CPROVER_assume(retrace_i == retrace_arr_len); \
     /* now check all past assertions */ \
     for (int i = 0; i < _retrace_assert_idx; i++) { \
@@ -633,23 +635,36 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
     } \
 }
 
-#define _IF                 ;_TRACE_CBMC('T', 0);
-#define _ELSE               ;_TRACE_CBMC('N', 0);
+#define _RETRACE_SETJMP_CBMC(setjmp_stmt) ({ \
+    _RETRACE_CBMC('S', 0); \
+    _trace_setjmp_idx ++; \
+    int cur_setjmp_idx = _trace_setjmp_idx; \
+    int setjmp_res = setjmp_stmt; \
+    if (setjmp_res != 0) { \
+        _RETRACE_CBMC('L', _trace_setjmp_idx - cur_setjmp_idx); \
+    } \
+    setjmp_res; \
+})
+
+#define _IF                 ;_RETRACE_CBMC('T', 0);
+#define _ELSE               ;_RETRACE_CBMC('N', 0);
 #define _CONDITION(cond)    cond
-#define _FUNC(num)          ;_TRACE_CBMC('F', num);
-#define _FUNC_RETURN        ;_TRACE_CBMC('R', 0);
-#define _SWITCH(num)        ;_TRACE_CBMC('D', num);
+#define _FUNC(num)          ;_RETRACE_CBMC('F', num);
+#define _FUNC_RETURN        ;_RETRACE_CBMC('R', 0);
+#define _SWITCH(num)        ;_RETRACE_CBMC('D', num);
 #define _SWITCH_START(id)   ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
-                                _TRACE_CASE_CBMC(num, cnt); \
+                                _RETRACE_CASE_CBMC(num, cnt); \
                                 _cflow_switch_##id = 0; \
                             };
 #define _LOOP_START(id)     /* nothing here */
-#define _LOOP_BODY(id)      ;_TRACE_CBMC('T', 0);
-#define _LOOP_END(id)       ;_TRACE_CBMC('N', 0);
+#define _LOOP_BODY(id)      ;_RETRACE_CBMC('T', 0);
+#define _LOOP_END(id)       ;_RETRACE_CBMC('N', 0);
+
+#define _SETJMP(stmt)       _RETRACE_SETJMP_CBMC(stmt)
 
 #define _TRACE_OPEN(fname)  ;retrace_i = 0;
-#define _TRACE_CLOSE        ;_TRACE_END_CBMC();
+#define _TRACE_CLOSE        ;_RETRACE_END_CBMC();
 
 #define _FORK(fork_stmt)    fork_stmt
 
