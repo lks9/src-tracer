@@ -391,6 +391,8 @@ class Instrumenter:
         elif node.spelling in ("setjmp", "sigsetjmp", "_setjmp", "__sigsetjmp"):
             self.add_annotation(b"_SETJMP(", node.extent.start)
             self.prepent_annotation(b")", node.extent.end)
+        elif node.spelling in ("exit", "_Exit", "abort"):
+            self.add_annotation(b"_TRACE_CLOSE ", node.extent.start)
 
     def parse(self, filename):
         index = Index.create()
