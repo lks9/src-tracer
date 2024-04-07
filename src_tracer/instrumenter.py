@@ -368,11 +368,11 @@ class Instrumenter:
         if self.case_instrument:
             # experimental
             switch_id = bytes(hex(len(self.switchis) - 1), "utf-8")
-            self.add_annotation(b" _SWITCH_START(" + switch_id + b") ", node.extent.start)
             case_node_list = []
             self.accumulate_cases(node, case_node_list)
             case_count = len(case_node_list)
             bits_needed = bytes(hex(int.bit_length(case_count-1)), "utf-8")
+            self.add_annotation(b" _SWITCH_START(" + switch_id + b", " + bits_needed + b") ", node.extent.start)
             for case_index in range(case_count):
                 case_node = case_node_list[case_index]
                 case_id = bytes(hex(case_index), "utf-8")

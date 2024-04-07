@@ -17,8 +17,8 @@ ap.add_argument("--database",
                 help="custom database path")
 ap.add_argument("--no-return", action='store_true',
                 help="do not instrument returns")
-ap.add_argument("--cases", action='store_true',
-                help="instrument all switch cases instead of switch number (experimental)")
+ap.add_argument("--switch-number", action='store_true',
+                help="instrument to record switch number instead of case based bit-tracing")
 ap.add_argument("--short-circuit", action='store_true',
                 help="instrument short circuit operators (experimental)")
 ap.add_argument("--no-inner", action='store_true',
@@ -63,7 +63,8 @@ if args.record:
     main_spelling = args.record
 
 # do the instrumentation
-instrumenter = Instrumenter(database, store_dir, case_instrument=args.cases, boolop_instrument=args.short_circuit,
+instrumenter = Instrumenter(database, store_dir, case_instrument=not args.switch_number,
+                            boolop_instrument=args.short_circuit,
                             return_instrument=not args.no_return, inline_instrument=args.inline,
                             main_instrument=main_instrument, main_spelling=main_spelling, main_close=args.close,
                             anon_instrument=args.anon,

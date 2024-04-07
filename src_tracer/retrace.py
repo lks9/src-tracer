@@ -364,7 +364,12 @@ class SourceTraceReplayer:
                 state.solver.add(mem_int == trace_int)
                 state.solver.add(mem_letter == trace_letter)
 
-            # PART 6: debugging
+            # PART 6: drop all states not in traced
+            simgr.drop(stash="avoid")
+            simgr.drop(stash="unsat")
+            simgr.drop(stash="traced", filter_func=lambda state: not state.satisfiable())
+
+            # PART 7: debugging
             if debug:
                 name = None
                 if not elem.bs == b'':
@@ -375,10 +380,6 @@ class SourceTraceReplayer:
                     log.debug(elem.pretty(name=name) + f" (found {len(simgr.traced)})")
                 else:
                     log.debug(elem.pretty(name=name))
-
-            # PART 7: drop all states not in traced
-            simgr.drop(stash="avoid")
-            simgr.drop(stash="unsat")
 
         if finish_dead:
             simgr.step('traced')
