@@ -1,6 +1,6 @@
 import logging
+from enum import Enum, auto
 
-import claripy
 import angr
 
 from angr.sim_type import parse_signature, parse_type
@@ -9,8 +9,6 @@ from angr.sim_type import parse_signature, parse_type
 from .trace import Trace
 
 log = logging.getLogger(__name__)
-
-from enum import Enum, auto
 
 
 class AssertResult(Enum):
@@ -84,7 +82,7 @@ class SourceTraceReplayer:
 
         self.letter_addr = self.addr("_retrace_letter")
         self.int_addr = self.addr("_retrace_int")
-        self.compare_letter_addr = self.addr("_retrace_compare_letter")
+        self.compare_elem_addr = self.addr("_retrace_compare_elem")
 
         self.is_retrace_addr = self.addr("_is_retrace_mode")
 
@@ -159,7 +157,7 @@ class SourceTraceReplayer:
         for obj in self.p.loader.all_elf_objects:
             for section in obj.sections:
                 if section.name == ".data" or section.name == ".bss":
-                    for i in range(section.max_addr- section.min_addr):
+                    for i in range(section.max_addr - section.min_addr):
                         data = state.solver.BVS("data" + str(i) + section.name, 8)
                         state.memory.store(section.min_addr + i, data)
         if self.is_retrace_addr:
@@ -181,7 +179,7 @@ class SourceTraceReplayer:
 
     @property
     def reals(self):
-        return {self.compare_letter_addr}
+        return {self.compare_elem_addr}
 
     @property
     def ghosts(self):
@@ -334,7 +332,7 @@ class SourceTraceReplayer:
             simgr.move(from_stash='reals', to_stash='active')
 
             # PART 2: find next element
-            find = { self.compare_letter_addr }
+            find = {self.compare_elem_addr}
             avoid = self.reals.difference(find)
             while simgr.active != [] or simgr.unconstrained != []:
                 while simgr.active != []:
