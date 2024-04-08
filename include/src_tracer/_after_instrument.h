@@ -379,37 +379,37 @@ static inline __attribute__((always_inline)) bool _text_trace_condition(bool con
 // for retracing
 
 extern volatile char _retrace_letter;
-extern volatile long long int _retrace_int;
+extern volatile long long int _retrace_num;
 extern void _retrace_compare_elem(void);
 
 extern volatile int _retrace_fork_count;
 
-#define _RETRACE_NUM(type, num) ;{ \
+#define _RETRACE_ELEM(type, num) ;{ \
     _retrace_letter = (type); \
-    _retrace_int = (num); \
+    _retrace_num = (num); \
     _retrace_compare_elem(); \
 }
 
-#define _RETRACE_FUN_CALL(num) \
-    _RETRACE_NUM('F', num)
+#define _RETRACE_FUNC(num) \
+    _RETRACE_ELEM('F', num)
 
 #define _RETRACE_RETURN() \
-    _RETRACE_NUM('R', 0)
+    _RETRACE_ELEM('R', 0)
 
 #define _RETRACE_IF() \
-    _RETRACE_NUM('T', 0)
+    _RETRACE_ELEM('T', 0)
 
 #define _RETRACE_ELSE() \
-    _RETRACE_NUM('N', 0)
+    _RETRACE_ELEM('N', 0)
 
 #define _RETRACE_END() \
-    _RETRACE_NUM('E', 0)
+    _RETRACE_ELEM('E', 0)
 
 #define _RETRACE_TRY() \
-    _RETRACE_NUM('S', 0)
+    _RETRACE_ELEM('S', 0)
 
 #define _RETRACE_CATCH(idx) \
-    _RETRACE_NUM('L', _trace_setjmp_idx - (idx))
+    _RETRACE_ELEM('L', _trace_setjmp_idx - (idx))
 
 #define _RETRACE_SETJMP(setjmp_stmt) ({ \
     _trace_setjmp_idx ++; \
@@ -422,8 +422,8 @@ extern volatile int _retrace_fork_count;
     setjmp_res; \
 })
 
-static inline __attribute__((always_inline)) long long int _retrace_num(char type, long long int num) {
-    _RETRACE_NUM(type, num);
+static inline __attribute__((always_inline)) long long int _retrace_elem(char type, long long int num) {
+    _RETRACE_ELEM(type, num);
     return num;
 }
 
@@ -433,7 +433,7 @@ static inline __attribute__((always_inline)) bool _retrace_condition(bool cond) 
     } else {
         _retrace_letter = 'N';
     }
-    _retrace_int = 0;
+    _retrace_num = 0;
     _retrace_compare_elem();
     return cond;
 }
@@ -444,7 +444,7 @@ static inline __attribute__((always_inline)) int _retrace_after_fork(int fork_va
     } else {
         _retrace_letter = 'N';
     }
-    _retrace_int = 0;
+    _retrace_num = 0;
     _retrace_compare_elem();
     return fork_val;
 }
@@ -481,7 +481,7 @@ static inline __attribute__((always_inline)) bool _is_retrace_condition(bool con
  * The makro _SWITCH might translate to _is_retrace_switch.
  */
 static inline __attribute__((always_inline)) long long int _is_retrace_switch(long long int num) {
-    _IS_RETRACE(_RETRACE_NUM('D', num),
+    _IS_RETRACE(_RETRACE_ELEM('D', num),
                 _TRACE_NUM(_TRACE_SET_DATA, num)
     )
     return num;
@@ -502,7 +502,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _IF                 _IS_RETRACE(_RETRACE_IF(), _TRACE_IF())
 #define _ELSE               _IS_RETRACE(_RETRACE_ELSE(), _TRACE_ELSE())
 #define _CONDITION(cond)    _is_retrace_condition(cond)
-#define _FUNC(num)          _IS_RETRACE(_RETRACE_FUN_CALL(num), _TRACE_FUNC(num))
+#define _FUNC(num)          _IS_RETRACE(_RETRACE_FUNC(num), _TRACE_FUNC(num))
 #define _FUNC_RETURN        _IS_RETRACE(_RETRACE_RETURN(), _TRACE_RETURN())
 // non-macro version for switch
 #define _SWITCH(num)        _is_retrace_switch(num)
@@ -594,10 +594,10 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _IF                 ;_RETRACE_IF();
 #define _ELSE               ;_RETRACE_ELSE();
 #define _CONDITION(cond)    _retrace_condition(cond)
-#define _FUNC(num)          _RETRACE_FUN_CALL(num)
+#define _FUNC(num)          ;_RETRACE_FUNC(num);
 #define _FUNC_RETURN        ;_RETRACE_RETURN();
 // non-macro version for switch
-#define _SWITCH(num)        _retrace_num('D', num)
+#define _SWITCH(num)        _retrace_elem('D', num)
 // bit-trace version for switch
 #define _SWITCH_START(id,cnt) ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
@@ -615,7 +615,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _TRACE_OPEN(fname)  /* nothing here */
 #define _TRACE_CLOSE        ;_RETRACE_END();
 
-#define _FORK(fork_stmt)    (_retrace_num('G', _retrace_fork_count), \
+#define _FORK(fork_stmt)    (_retrace_elem('G', _retrace_fork_count), \
                              _retrace_after_fork(fork_stmt))
 
 #define _RETRO_ONLY(code)   code

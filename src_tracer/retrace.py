@@ -81,7 +81,7 @@ class SourceTraceReplayer:
         self.p = angr.Project(binary_name, **kwargs)
 
         self.letter_addr = self.addr("_retrace_letter")
-        self.int_addr = self.addr("_retrace_int")
+        self.int_addr = self.addr("_retrace_num")
         self.compare_elem_addr = self.addr("_retrace_compare_elem")
 
         self.is_retrace_addr = self.addr("_is_retrace_mode")
