@@ -8,8 +8,11 @@
 #ifndef TRACE_BUF_SIZE
 #define TRACE_BUF_SIZE 4096
 #endif
-#ifndef TRACE_USE_POSIX_WRITE
-// if TRACE_USE_POSIX_WRITE is not set we use the syscall directly
+#ifndef TRACE_USE_SYSCALLS
+  // if TRACE_USE_POSIX_WRITE is not set we use the syscall directly
+  #ifndef TRACE_USE_POSIX_WRITE
+  #define TRACE_USE_POSIX_WRITE
+  #endif
 #endif
 #ifndef EFFICIENT_TEXT_TRACE
 // well it's not for efficiency, more for debugging
