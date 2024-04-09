@@ -37,7 +37,6 @@ class Instrumenter:
 
         self.annotations = {}
 
-
     def filename(self, location):
         filename = location.file.name
         if filename not in self.annotations:
@@ -65,8 +64,8 @@ class Instrumenter:
     def func_num(self, node):
         (file, line) = self.orig_file_and_line(node.extent.start)
         name = node.spelling
-        pre_file = self.filename(node.extent.start)
-        offset = node.extent.start.offset
+        # pre_file = self.filename(node.extent.start)
+        # offset = node.extent.start.offset
         try:
             self.database.insert_to_table(file, line, name)
         except sqlite3.OperationalError:
@@ -134,7 +133,6 @@ class Instrumenter:
                     if descendant.kind == CursorKind.RETURN_STMT:
                         self.add_annotation(b"_TRACE_CLOSE ", descendant.extent.start)
                 self.add_annotation(b"_TRACE_CLOSE ", node.extent.end, -1)
-
 
     def get_content(self, start, end):
         filename = self.filename(start)
@@ -396,15 +394,14 @@ class Instrumenter:
             self.add_annotation(b"_TRACE_CLOSE ", node.extent.start)
 
     def visit_try(self, node):
-        try_id = bytes(hex(len(self.trys)), "utf-8")
-        self.trys.append(node)
         childs = [c for c in node.get_children()]
-        if len(childs) != 2:
-            print(str(len(childs)) + " childs for try")
-            return
-        self.add_annotation(b" int _trace_try_idx_" + try_id + b" = ++_trace_setjmp_idx; _TRY ", node.extent.start)
-        self.visit_catch(childs[1], try_id)
-        self.prepent_annotation(b" _TRY_END ", node.extent.end)
+        for i in range(1, len(childs)):
+            try_id = bytes(hex(len(self.trys)), "utf-8")
+            self.trys.append(node)
+            self.prepent_annotation(b" { int _trace_try_idx_" + try_id + b" = ++_trace_setjmp_idx; _TRY ",
+                                    node.extent.start)
+            self.visit_catch(childs[i], try_id)
+            self.prepent_annotation(b" _TRY_END } ", node.extent.end)
 
     def visit_catch(self, node, try_id):
         childs = [c for c in node.get_children()]
@@ -495,7 +492,8 @@ class Instrumenter:
             elif node.type.is_const_qualified():
                 # skip constants
                 return
-            elif node.storage_class == StorageClass.STATIC and not node.kind in (CursorKind.FUNCTION_DECL, CursorKind.COMPOUND_STMT):
+            elif node.storage_class == StorageClass.STATIC and node.kind not in (CursorKind.FUNCTION_DECL,
+                                                                                 CursorKind.COMPOUND_STMT):
                 # something static, not a function declaration smells like a constant expression
                 # anyway, static means it cannot be function local
                 function_scope = False

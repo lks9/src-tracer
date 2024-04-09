@@ -47,6 +47,10 @@ int main()
         std::cout << "Accessing the 11th element of the vector...\n";
         std::cout << v.at(10); // vector::at() throws std::out_of_range
     }
+    catch (int i)
+    {
+        std::cout << "Integer exception was caught, with value: " << i << '\n';
+    }
     catch (const std::exception& e) // caught by reference to base
     {
         std::cout << "Standard exception was caught, with message: '"
