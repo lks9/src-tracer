@@ -338,8 +338,20 @@ extern int _trace_buf_pos;
     _TRACE_PUT(_TRACE_SET_TRY); \
 }
 
-#define _TRACE_CATCH(cur_idx) \
-    _TRACE_NUM_16(_TRACE_SET_CATCH, _trace_setjmp_idx - (cur_idx))
+#define _TRACE_CATCH(cur_idx) { \
+    _TRACE_NUM_16(_TRACE_SET_CATCH, _trace_setjmp_idx - (cur_idx)); \
+    /* _trace_setjmp_idx = cur_idx; */ \
+}
+
+#if 0
+#define _TRACE_TRY_END() { \
+    _TRACE_IE_FINISH \
+    _TRACE_PUT(_TRACE_SET_UNTRY); \
+    _trace_setjmp_idx --; \
+}
+#else
+#define _TRACE_TRY_END() /* nothing here */
+#endif
 
 #define _TRACE_SETJMP(setjmp_stmt) ({ \
     _trace_setjmp_idx ++; \
@@ -411,8 +423,19 @@ extern volatile int _retrace_fork_count;
 #define _RETRACE_TRY() \
     _RETRACE_ELEM('S', 0)
 
-#define _RETRACE_CATCH(idx) \
-    _RETRACE_ELEM('L', _trace_setjmp_idx - (idx))
+#define _RETRACE_CATCH(cur_idx) { \
+    _RETRACE_ELEM('L', _trace_setjmp_idx - (cur_idx)); \
+    /* _trace_setjmp_idx = cur_idx; */ \
+}
+
+#if 0
+#define _RETRACE_TRY_END() { \
+    _RETRACE_ELEM('U', 0) \
+    _trace_setjmp_idx --; \
+}
+#else
+#define _RETRACE_TRY_END() /* nothing here */
+#endif
 
 #define _RETRACE_SETJMP(setjmp_stmt) ({ \
     _trace_setjmp_idx ++; \
@@ -522,6 +545,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _TRY                _IS_RETRACE(_RETRACE_TRY(), _TRACE_TRY())
 #define _CATCH(idx)         _IS_RETRACE(_RETRACE_CATCH(idx), _TRACE_CATCH(idx))
+#define _TRY_END            _IS_RETRACE(_RETRACE_TRY_END(), _TRACE_TRY_END())
 #define _SETJMP(stmt)       _IS_RETRACE(_RETRACE_SETJMP(stmt), _TRACE_SETJMP(stmt))
 
 #define _TRACE_OPEN(fname)  _IS_RETRACE( ,_trace_open((fname)))
@@ -558,6 +582,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
                              _trace_after_fork(fork_stmt))
 #define _TRY                ;_TRACE_TRY();
 #define _CATCH(idx)         ;_TRACE_CATCH(idx);
+#define _TRY_END            ;_TRACE_TRY_END();
 #define _SETJMP(stmt)       _TRACE_SETJMP(stmt)
 
 #define _RETRO_ONLY(code)   /* nothing here */
@@ -613,6 +638,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 #define _TRY                ;_RETRACE_TRY();
 #define _CATCH(idx)         ;_RETRACE_CATCH(idx);
+#define _TRY_END            ;_RETRACE_TRY_END();
 #define _SETJMP(stmt)       _RETRACE_SETJMP(stmt)
 
 #define _TRACE_OPEN(fname)  /* nothing here */
@@ -713,6 +739,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _FORK(fork_stmt)    fork_stmt
 #define _TRY                /* nothing here */
 #define _CATCH(idx)         /* nothing here */
+#define _TRY_END            /* nothing here */
 #define _SETJMP(setjmp_stmt) setjmp_stmt
 
 #define _RETRO_ONLY(code)   /* nothing here */

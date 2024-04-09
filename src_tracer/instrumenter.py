@@ -32,6 +32,7 @@ class Instrumenter:
         self.ifs = []
         self.loops = []
         self.switchis = []
+        self.trys = []
         self.check_locations = []
 
         self.annotations = {}
@@ -394,6 +395,28 @@ class Instrumenter:
         elif node.spelling in ("exit", "_Exit", "abort"):
             self.add_annotation(b"_TRACE_CLOSE ", node.extent.start)
 
+    def visit_try(self, node):
+        try_id = bytes(hex(len(self.trys)), "utf-8")
+        self.trys.append(node)
+        childs = [c for c in node.get_children()]
+        if len(childs) != 2:
+            print(str(len(childs)) + " childs for try")
+            return
+        self.add_annotation(b" int _trace_try_idx_" + try_id + b" = ++_trace_setjmp_idx; _TRY ", node.extent.start)
+        self.visit_catch(childs[1], try_id)
+        self.prepent_annotation(b" _TRY_END ", node.extent.end)
+
+    def visit_catch(self, node, try_id):
+        childs = [c for c in node.get_children()]
+        if len(childs) == 2:
+            inside = childs[1]
+        elif len(childs) == 1:
+            inside = childs[0]
+        else:
+            print(str(len(childs)) + " childs for catch")
+            return
+        self.add_annotation(b" _CATCH(_trace_try_idx_" + try_id + b") ", inside.extent.start, 1)
+
     def parse(self, filename):
         index = Index.create()
         tu = index.parse(filename)
@@ -466,6 +489,9 @@ class Instrumenter:
             elif node.kind == CursorKind.CALL_EXPR:
                 if self.call_instrument:
                     self.visit_call(node)
+            elif node.kind == CursorKind.CXX_TRY_STMT:
+                if self.call_instrument:
+                    self.visit_try(node)
             elif node.type.is_const_qualified():
                 # skip constants
                 return
