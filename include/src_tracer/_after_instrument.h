@@ -395,14 +395,14 @@ static inline __attribute__((always_inline)) bool _text_trace_condition(bool con
 
 extern volatile char _retrace_letter;
 extern volatile long long int _retrace_num;
-extern void _retrace_compare_elem(void);
+extern void _retrace_breakpoint(void);
 
 extern volatile int _retrace_fork_count;
 
 #define _RETRACE_ELEM(type, num) ;{ \
     _retrace_letter = (type); \
     _retrace_num = (num); \
-    _retrace_compare_elem(); \
+    _retrace_breakpoint(); \
 }
 
 #define _RETRACE_FUNC(num) \
@@ -460,7 +460,7 @@ static inline __attribute__((always_inline)) bool _retrace_condition(bool cond) 
         _retrace_letter = 'N';
     }
     _retrace_num = 0;
-    _retrace_compare_elem();
+    _retrace_breakpoint();
     return cond;
 }
 
@@ -471,7 +471,7 @@ static inline __attribute__((always_inline)) int _retrace_after_fork(int fork_va
         _retrace_letter = 'N';
     }
     _retrace_num = 0;
-    _retrace_compare_elem();
+    _retrace_breakpoint();
     return fork_val;
 }
 

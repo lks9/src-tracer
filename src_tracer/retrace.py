@@ -82,7 +82,7 @@ class SourceTraceReplayer:
 
         self.letter_addr = self.addr("_retrace_letter")
         self.int_addr = self.addr("_retrace_num")
-        self.compare_elem_addr = self.addr("_retrace_compare_elem")
+        self.breakpoint_addr = self.addr("_retrace_breakpoint")
 
         self.is_retrace_addr = self.addr("_is_retrace_mode")
 
@@ -179,7 +179,7 @@ class SourceTraceReplayer:
 
     @property
     def reals(self):
-        return {self.compare_elem_addr}
+        return {self.breakpoint_addr}
 
     @property
     def ghosts(self):
@@ -332,7 +332,7 @@ class SourceTraceReplayer:
             simgr.move(from_stash='reals', to_stash='active')
 
             # PART 2: find next element
-            find = {self.compare_elem_addr}
+            find = {self.breakpoint_addr}
             avoid = self.reals.difference(find)
             while simgr.active != [] or simgr.unconstrained != []:
                 while simgr.active != []:

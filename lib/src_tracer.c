@@ -213,7 +213,7 @@ void _trace_close(void) {
 
 volatile char _retrace_letter;
 volatile long long int _retrace_num;
-void _retrace_compare_elem(void) { barrier(); }
+void _retrace_breakpoint(void) { barrier(); }
 
 volatile int _retrace_fork_count;
 
