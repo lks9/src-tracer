@@ -165,6 +165,8 @@ class Trace:
                     trace_tail = ""
                     count_elems = 0
             return TraceText(trace_str, seek_elems=seek_elems, count_elems=count_elems, trace_tail=trace_tail)
+        elif filename[-4:] == '.zst':
+            raise ValueError("Uncompress trace file first! Use: zstd -d")
         else:
             with open(filename, 'rb') as f:
                 f.seek(seek_bytes)
