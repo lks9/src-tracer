@@ -18,15 +18,15 @@ ap.add_argument("--seek", type=int, default=0,
                 help="skip bytes in the beginning of the tracefile")
 ap.add_argument("--count", type=int, default=-1,
                 help="read count bytes from the trace (default: read all)")
-ap.add_argument("--count-elems", type=int, default=1,
+ap.add_argument("--count-elems", metavar="ELEMS", type=int, default=1,
                 help="read extra elems after count (default: 1)")
 ap.add_argument("--database",
                 help="path to the function database")
 ap.add_argument("--pretty", type=int, default=5,
-    help="5: pretty (default), 5+4: indent, 5+3: function names, 1 compact, 0: no newline, -1: informative list")
+    help="5: pretty (default), 5,4: indent, 5,3: function names, 2: basic, 1: compact, 0: no newline, -1: informative")
 ap.add_argument("--show-pos", action='store_true',
                 help="for each element show its count offset in the trace")
-ap.add_argument("--extra-indent", type=int, default=0,
+ap.add_argument("--extra-indent", metavar="IND", type=int, default=0,
                 help="print extra indent")
 args = ap.parse_args()
 
@@ -95,6 +95,8 @@ if args.pretty == -1:
         print(elem)
     sys.exit()
 
+setjmp_indent = []
+
 for elem in trace:
     if elem.letter == 'T' or elem.letter == 'N':
         print_with_count(f"{elem.letter}")
@@ -105,6 +107,23 @@ for elem in trace:
         # anonymous function call
         print_extra(elem.pretty(show_pos=args.show_pos))
         indent += 1
+    elif elem.letter == 'S':
+        # setjmp, try
+        # save current indent
+        setjmp_indent.append(indent)
+        # print as usual
+        print_extra(elem.pretty(show_pos=args.show_pos))
+    elif elem.letter == 'U':
+        # try end
+        setjmp_indent.pop()
+        # print as usual
+        print_extra(elem.pretty(show_pos=args.show_pos))
+    elif elem.letter == 'L':
+        # longjmp, catch
+        # restore indent
+        indent = setjmp_indent[-elem.num -1]
+        # print as usual
+        print_extra(elem.pretty(show_pos=args.show_pos))
     elif elem.bs == b'':
         print_extra(elem.pretty(show_pos=args.show_pos))
     else:

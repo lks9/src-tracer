@@ -8,8 +8,9 @@ from clang.cindex import Index, CursorKind, StorageClass
 class Instrumenter:
 
     def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
-                 return_instrument=True, inline_instrument=False, main_instrument=True, anon_instrument=False,
-                 function_instrument=True, inner_instrument=True):
+                 return_instrument=True, inline_instrument=False, main_instrument=True, main_spelling="main",
+                 main_close=False, anon_instrument=False,
+                 function_instrument=True, inner_instrument=True, call_instrument=True):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
@@ -21,17 +22,20 @@ class Instrumenter:
         self.return_instrument = return_instrument
         self.inline_instrument = inline_instrument
         self.main_instrument = main_instrument
+        self.main_spelling = main_spelling
+        self.main_close = main_close
         self.anon_instrument = anon_instrument
         self.function_instrument = function_instrument
         self.inner_instrument = inner_instrument
+        self.call_instrument = call_instrument
 
         self.ifs = []
         self.loops = []
         self.switchis = []
+        self.trys = []
         self.check_locations = []
 
         self.annotations = {}
-
 
     def filename(self, location):
         filename = location.file.name
@@ -60,8 +64,8 @@ class Instrumenter:
     def func_num(self, node):
         (file, line) = self.orig_file_and_line(node.extent.start)
         name = node.spelling
-        pre_file = self.filename(node.extent.start)
-        offset = node.extent.start.offset
+        # pre_file = self.filename(node.extent.start)
+        # offset = node.extent.start.offset
         try:
             self.database.insert_to_table(file, line, name)
         except sqlite3.OperationalError:
@@ -110,7 +114,7 @@ class Instrumenter:
             self.add_annotation(b"_FUNC_RETURN ", node.extent.end, -1)
 
         # special treatment for main function
-        if self.main_instrument and node.spelling == "main":
+        if self.main_instrument and node.spelling == self.main_spelling:
             if not self.function_instrument:
                 # well, we need something to start...
                 self.add_annotation(b" _FUNC(0) ", body.extent.start, 1)
@@ -123,6 +127,12 @@ class Instrumenter:
             trace_fname = "%F-%H%M%S-%%lx-" + os.path.basename(orig_fname) + ".trace"
             trace_path = os.path.join(os.path.abspath(self.trace_store_dir), trace_fname)
             self.prepent_annotation(b' _TRACE_OPEN("' + bytes(trace_path, "utf8") + b'") ', body.extent.start, 1)
+
+            if self.main_close:
+                for descendant in node.walk_preorder():
+                    if descendant.kind == CursorKind.RETURN_STMT:
+                        self.add_annotation(b"_TRACE_CLOSE ", descendant.extent.start)
+                self.add_annotation(b"_TRACE_CLOSE ", node.extent.end, -1)
 
     def get_content(self, start, end):
         filename = self.filename(start)
@@ -341,11 +351,17 @@ class Instrumenter:
             print(b"Failed to annotate _CASE(" + case_id + b", " + switch_id + b", " + bits_needed + b") ")
 
     def accumulate_cases(self, node, case_node_list):
-        if node.kind in (CursorKind.CASE_STMT, CursorKind.DEFAULT_STMT):
+        has_default = False
+        if node.kind == CursorKind.CASE_STMT:
+            case_node_list.append(node)
+        elif node.kind == CursorKind.DEFAULT_STMT:
+            has_default = True
             case_node_list.append(node)
         for child in node.get_children():
             if (child.kind != CursorKind.SWITCH_STMT):
-                self.accumulate_cases(child, case_node_list)
+                res = self.accumulate_cases(child, case_node_list)
+                has_default = has_default or res
+        return has_default
 
     def visit_switch(self, node):
         self.switchis.append(node)
@@ -357,20 +373,63 @@ class Instrumenter:
         if self.case_instrument:
             # experimental
             switch_id = bytes(hex(len(self.switchis) - 1), "utf-8")
-            self.add_annotation(b" _SWITCH_START(" + switch_id + b") ", node.extent.start)
             case_node_list = []
-            self.accumulate_cases(node, case_node_list)
+            has_default = self.accumulate_cases(node, case_node_list)
             case_count = len(case_node_list)
+            if not has_default:
+                # we will add an extra case below
+                case_count = case_count + 1
             bits_needed = bytes(hex(int.bit_length(case_count-1)), "utf-8")
-            for case_index in range(case_count):
+            self.add_annotation(b" _SWITCH_START(" + switch_id + b", " + bits_needed + b") ", node.extent.start)
+
+            for case_index in range(len(case_node_list)):
                 case_node = case_node_list[case_index]
                 case_id = bytes(hex(case_index), "utf-8")
                 self.visit_case(case_node, switch_id, case_id, bits_needed)
+
+            # append missing default if necessary
+            if not has_default:
+                case_id = bytes(hex(case_count - 1), "utf-8")
+                self.add_annotation(b" break; default: _CASE(" + case_id + b", "
+                                                               + switch_id + b", " + bits_needed + b") ",
+                                    node.extent.end, -1)
         else:
             # simpler, default
             switch_num = children[0]
             self.add_annotation(b"_SWITCH(", switch_num.extent.start)
             self.add_annotation(b")", switch_num.extent.end, 1)
+
+    def visit_call(self, node):
+        # Some calls need to be anotated
+        if node.spelling == "fork":
+            self.add_annotation(b"_FORK(", node.extent.start)
+            self.prepent_annotation(b")", node.extent.end)
+        elif node.spelling in ("setjmp", "sigsetjmp", "_setjmp", "__sigsetjmp"):
+            self.add_annotation(b"_SETJMP(", node.extent.start)
+            self.prepent_annotation(b")", node.extent.end)
+        elif node.spelling in ("exit", "_Exit", "abort"):
+            self.add_annotation(b"_TRACE_CLOSE ", node.extent.start)
+
+    def visit_try(self, node):
+        childs = [c for c in node.get_children()]
+        for i in range(1, len(childs)):
+            try_id = bytes(hex(len(self.trys)), "utf-8")
+            self.trys.append(node)
+            self.prepent_annotation(b" { int _trace_try_idx_" + try_id + b" = ++_trace_setjmp_idx; _TRY ",
+                                    node.extent.start)
+            self.visit_catch(childs[i], try_id)
+            self.prepent_annotation(b" _TRY_END } ", node.extent.end)
+
+    def visit_catch(self, node, try_id):
+        childs = [c for c in node.get_children()]
+        if len(childs) == 2:
+            inside = childs[1]
+        elif len(childs) == 1:
+            inside = childs[0]
+        else:
+            print(str(len(childs)) + " childs for catch")
+            return
+        self.add_annotation(b" _CATCH(_trace_try_idx_" + try_id + b") ", inside.extent.start, 1)
 
     def parse(self, filename):
         index = Index.create()
@@ -441,10 +500,17 @@ class Instrumenter:
                 self.visit_loop(node)
             elif node.kind == CursorKind.SWITCH_STMT:
                 self.visit_switch(node)
+            elif node.kind == CursorKind.CALL_EXPR:
+                if self.call_instrument:
+                    self.visit_call(node)
+            elif node.kind == CursorKind.CXX_TRY_STMT:
+                if self.call_instrument:
+                    self.visit_try(node)
             elif node.type.is_const_qualified():
                 # skip constants
                 return
-            elif node.storage_class == StorageClass.STATIC and not node.kind in (CursorKind.FUNCTION_DECL, CursorKind.COMPOUND_STMT):
+            elif node.storage_class == StorageClass.STATIC and node.kind not in (CursorKind.FUNCTION_DECL,
+                                                                                 CursorKind.COMPOUND_STMT):
                 # something static, not a function declaration smells like a constant expression
                 # anyway, static means it cannot be function local
                 function_scope = False

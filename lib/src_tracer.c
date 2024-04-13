@@ -31,21 +31,18 @@ static unsigned char dummy[65536] __attribute__ ((aligned (4096)));
 #define TRACE_FD_SIZE_STEP 32768
 
 int _trace_uffd;
-__attribute__((aligned(4096))) unsigned char *restrict _trace_buf = dummy;
+__attribute__((aligned(4096))) unsigned char *_trace_buf = dummy;
 void __attribute__((aligned(4096))) *_trace_ptr = dummy;
 unsigned short _trace_pos;
 unsigned char _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 
-int *_trace_futex;
+static int trace_fork_count = 0;
+
+unsigned long long int _trace_setjmp_idx;
 
 static __attribute__((aligned(4096))) void *temp_trace_buf = dummy;
 static unsigned short temp_trace_pos;
 static unsigned char temp_trace_ie_byte = _TRACE_IE_BYTE_INIT;
-
-struct _trace_ctx _trace = {
-    .fork_count = 0,
-    .try_count = 0,
-};
 
 static char trace_fname[200];
 
@@ -140,6 +137,7 @@ static void create_trace_process(void) {
 
         forked_write(trace_fname);
         // will never return
+        __builtin_unreachable();
     }
 
     // unblock SIGPOLL only in parent
@@ -150,7 +148,7 @@ static void create_trace_process(void) {
 void _trace_open(const char *fname) {
     if (_trace_ptr != dummy) {
         // already opened
-        return;
+        _trace_close();
     }
     // Make the file name time dependent
     char timed_fname[160];
@@ -177,8 +175,8 @@ void _trace_before_fork(void) {
         // tracing has already been aborted!
         return;
     }
-    _trace.fork_count += 1;
-    _TRACE_NUM(_trace.fork_count);
+    trace_fork_count += 1;
+    _TRACE_NUM(_TRACE_SET_FORK, trace_fork_count);
 
     temp_trace_buf = _trace_buf;
     temp_trace_pos = _trace_pos;
@@ -200,7 +198,8 @@ int _trace_after_fork(int pid) {
         _trace_pos = temp_trace_pos;
         _trace_ie_byte = temp_trace_ie_byte;
 
-        _TRACE_NUM(pid < 0 ? -1 : 1);
+        // _TRACE_NUM(pid < 0 ? -1 : 1);
+        _TRACE_IF();
         return pid;
     }
     // we are in a fork
@@ -214,7 +213,7 @@ int _trace_after_fork(int pid) {
     _trace_ptr = dummy;
 
     char fname_suffix[20];
-    snprintf(fname_suffix, 20, "-fork-%d.trace", _trace.fork_count);
+    snprintf(fname_suffix, 20, "-fork-%d.trace", trace_fork_count);
     strncat(trace_fname, fname_suffix, 20);
     //printf("Trace to: %s\n", trace_fname);
 
@@ -225,7 +224,8 @@ int _trace_after_fork(int pid) {
     _trace_pos = 0;
     _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 
-    _TRACE_NUM(pid);
+    // _TRACE_NUM(pid);
+    _TRACE_ELSE();
     return pid;
 }
 
@@ -236,6 +236,7 @@ void _trace_close(void) {
     }
     // stop tracing
     _TRACE_END();
+    _trace_buf = dummy;
 
     // we never use this memory
     // hack to generate an ufd event to stop the trace writer
@@ -257,15 +258,9 @@ void _trace_close(void) {
 #define barrier() __asm__ __volatile__("": : :"memory")
 
 
-void _retrace_if(void) { barrier(); }
-void _retrace_else(void) { barrier(); }
-
-volatile int _retrace_fun_num;
-void _retrace_fun_call(void) { barrier(); }
-void _retrace_return(void) { barrier(); }
-
-volatile long long int _retrace_int;
-void _retrace_wrote_int(void) { barrier(); }
+volatile char _retrace_letter;
+volatile long long int _retrace_num;
+void _retrace_breakpoint(void) { barrier(); }
 
 volatile int _retrace_fork_count;
 

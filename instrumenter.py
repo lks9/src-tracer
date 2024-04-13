@@ -17,8 +17,8 @@ ap.add_argument("--database",
                 help="custom database path")
 ap.add_argument("--no-return", action='store_true',
                 help="do not instrument returns")
-ap.add_argument("--cases", action='store_true',
-                help="instrument all switch cases instead of switch number (experimental)")
+ap.add_argument("--switch-number", action='store_true',
+                help="instrument to record switch number instead of case based bit-tracing")
 ap.add_argument("--short-circuit", action='store_true',
                 help="instrument short circuit operators (experimental)")
 ap.add_argument("--no-inner", action='store_true',
@@ -26,11 +26,17 @@ ap.add_argument("--no-inner", action='store_true',
 ap.add_argument("--inline", action='store_true',
                 help="instrument inline function calls and returns")
 ap.add_argument("--no-main", action='store_true',
-                help="do not instrument the main function to start tracing")
+                help="do not instrument the main function to start trace recording")
+ap.add_argument("--record",
+                help="start trace recording in other function than main (implies --no-main)")
+ap.add_argument("--no-close", action='store_true',
+                help="do not stop trace recording in main (or other) function")
 ap.add_argument("--anon", action='store_true',
                 help="instrument all functions without a number")
 ap.add_argument("--no-functions", action='store_true',
                 help="do not instrument functions at all")
+ap.add_argument("--no-calls", action='store_true',
+                help="do not instrument any calls, currently we instrument only fork() and setjmp()")
 args = ap.parse_args()
 
 # trace store dir
@@ -49,11 +55,21 @@ except sqlite3.OperationalError:
     error = "the given path is not correct, make sure the dir exists beforehand"
     raise Exception(error)
 
+# custom trace recording start?
+main_instrument = not args.no_main
+main_spelling = "main"
+if args.record:
+    main_instrument = True
+    main_spelling = args.record
+
 # do the instrumentation
-instrumenter = Instrumenter(database, store_dir, case_instrument=args.cases, boolop_instrument=args.short_circuit,
+instrumenter = Instrumenter(database, store_dir, case_instrument=not args.switch_number,
+                            boolop_instrument=args.short_circuit,
                             return_instrument=not args.no_return, inline_instrument=args.inline,
-                            main_instrument=not args.no_main, anon_instrument=args.anon,
-                            function_instrument=not args.no_functions, inner_instrument=not args.no_inner)
+                            main_instrument=main_instrument, main_spelling=main_spelling, main_close=not args.no_close,
+                            anon_instrument=args.anon,
+                            function_instrument=not args.no_functions, inner_instrument=not args.no_inner,
+                            call_instrument=not args.no_calls)
 instrumenter.parse(args.filename)
 instrumenter.annotate_all(args.filename)
 database.close_connection()

@@ -15,6 +15,25 @@
 #define RETRACE_SYMBOLIC_SIZE 4096
 #endif
 
+// RETRO_ONLY( code; )
+// Same as retro ghost, but also includeded in nested ghost code
+//
+// Example:
+// RETRO_GHOST(RETRO_GHOST(dosomething)) /* dosomething is never executed */
+// RETRO_GHOST(RETRO_ONLY( dosomething)) /* dosomething is executed in retrace mode */
+#define RETRO_ONLY(code) \
+    _RETRO_ONLY(code)
+
+// RETRO_SKIP( code; )
+// Counterpart to RETRO_ONLY()
+#define RETRO_SKIP(code) \
+    _RETRO_SKIP(code)
+
+#define RETRO(normal_code, retro_code) \
+    _RETRO(normal_code, retro_code)
+
+#ifndef _CBMC_MODE // special treatment for CBMC further below
+
 // RETRO_GHOST( code; )
 // You can annotate your software with ghost code that will only be
 // executed in retrace mode.
@@ -34,23 +53,6 @@
 
 #define RETRO_GHOST(code) \
     _RETRO_ONLY_NONREC(code, __COUNTER__)
-
-// RETRO_ONLY( code; )
-// Same as retro ghost, but also includeded in nested ghost code
-//
-// Example:
-// RETRO_GHOST(RETRO_GHOST(dosomething)) /* dosomething is never executed */
-// RETRO_GHOST(RETRO_ONLY( dosomething)) /* dosomething is executed in retrace mode */
-#define RETRO_ONLY(code) \
-    _RETRO_ONLY(code)
-
-// RETRO_SKIP( code; )
-// Counterpart to RETRO_ONLY()
-#define RETRO_SKIP(code) \
-    _RETRO_SKIP(code)
-
-#define RETRO(normal_code, retro_code) \
-    _RETRO(normal_code, retro_code)
 
 
 // RETRO_SYMBOLIC( type, default_value )
@@ -141,9 +143,10 @@
     )
 
 // extern variables and functions
+extern volatile bool _retrace_in_ghost;
+
 extern void _retrace_ghost_start(void);
 extern void _retrace_ghost_end(void);
-extern volatile bool _retrace_in_ghost;
 
 extern char *volatile _retrace_assert_names[ASSERT_BUF_SIZE];
 extern volatile bool  _retrace_asserts[ASSERT_BUF_SIZE];
@@ -167,7 +170,59 @@ extern void  _retrace_dump_passed(void);
 extern long long *volatile _retrace_symbolic[RETRACE_SYMBOLIC_SIZE];
 extern volatile int _retrace_symbolic_idx;
 
+#else // _CBMC_MODE
+
+// RETRO_SYMBOLIC( type, default_value )
+// Get a fresh symbolic value in retrace mode. Outside retrace mode, the default value is taken.
+//
+// Example:
+//      int x = 42;
+// Modified as retro symbolic:
+//      int x = RETRO_SYMBOLIC(int, 42);
+#define RETRO_SYMBOLIC(type, default_value) \
+    RETRO(default_value, \
+          nondet_ ## type ()  \
+    )
+
+// check assertions in retrace mode
+
+// RETRO_ASSERT(condition)
+
+#if 0 // gives false negatives, depending on later assumptions
+#define RETRO_ASSERT(condition) \
+    RETRO_ONLY( \
+        assert(condition); \
+    )
+#else // avoids false negatives, depending on later assumptions
+
+// evaluate assertion, check it later
+#define RETRO_ASSERT(condition) { \
+    RETRO_ONLY( \
+        _retrace_assert_names[_retrace_assert_idx] = LOCATION; \
+        _retrace_asserts[_retrace_assert_idx] = (condition); \
+        _retrace_assert_idx += 1; \
+    ) \
+}
+
+#endif
+
+// RETRO_ASSUME(condition)
+
+#define RETRO_ASSUME(condition) \
+    RETRO_ONLY( \
+        __CPROVER_assume(condition); \
+    )
+
+// extern variables and functions
+extern char *_retrace_assert_names[ASSERT_BUF_SIZE];
+extern bool  _retrace_asserts[ASSERT_BUF_SIZE];
+extern int   _retrace_assert_idx;
+
+#endif // _CBMC_MODE
+
 // helper macros
 #define STR_(t)     #t
 #define STR(t)      STR_(t)
 #define LOCATION    (__FILE__ ":" STR(__LINE__))
+
+

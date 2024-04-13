@@ -1,6 +1,6 @@
 import logging
+from enum import Enum, auto
 
-import claripy
 import angr
 
 from angr.sim_type import parse_signature, parse_type
@@ -10,19 +10,17 @@ from .trace import Trace
 
 log = logging.getLogger(__name__)
 
-from enum import Enum, auto
-
 
 class AssertResult(Enum):
     """
-    Basically the usual three valued logic VIOLATED (= False), UNSURE and PASSED (= True).
+    Basically the usual three valued logic VIOLATED (= False), POSSIBLY_VIOLATED and PASSED (= True).
     Extra element NEVER_PASSED is neutral to all operations.
     """
 
     NEVER_PASSED = auto()
     PASSED = auto()
     VIOLATED = auto()
-    UNSURE = auto()
+    POSSIBLY_VIOLATED = auto()
 
     def And(a1, a2):
         """
@@ -30,8 +28,8 @@ class AssertResult(Enum):
         """
         if AssertResult.VIOLATED in (a1, a2):
             return AssertResult.VIOLATED
-        elif AssertResult.UNSURE in (a1, a2):
-            return AssertResult.UNSURE
+        elif AssertResult.POSSIBLY_VIOLATED in (a1, a2):
+            return AssertResult.POSSIBLY_VIOLATED
         elif AssertResult.PASSED in (a1, a2):
             return AssertResult.PASSED
         else:
@@ -43,8 +41,8 @@ class AssertResult(Enum):
         """
         if AssertResult.PASSED in (a1, a2):
             return AssertResult.PASSED
-        elif AssertResult.UNSURE in (a1, a2):
-            return AssertResult.UNSURE
+        elif AssertResult.POSSIBLY_VIOLATED in (a1, a2):
+            return AssertResult.POSSIBLY_VIOLATED
         elif AssertResult.VIOLATED in (a1, a2):
             return AssertResult.VIOLATED
         else:
@@ -56,25 +54,36 @@ class AssertResult(Enum):
         """
         if a == AssertResult.PASSED:
             return AssertResult.VIOLATED
-        elif a == AssertResult.UNSURE:
-            return AssertResult.UNSURE
+        elif a == AssertResult.POSSIBLY_VIOLATED:
+            return AssertResult.POSSIBLY_VIOLATED
         elif a == AssertResult.VIOLATED:
             return AssertResult.PASSED
         else:
             return AssertResult.NEVER_PASSED
+
+    def Union(a1, a2):
+        """
+        Logical Union
+        """
+        if a1 == AssertResult.NEVER_PASSED:
+            return a2
+        elif a2 == AssertResult.NEVER_PASSED:
+            return a1
+        elif a1 == a2:
+            return a1
+        else:
+            return AssertResult.POSSIBLY_VIOLATED
+
 
 class SourceTraceReplayer:
 
     def __init__(self, binary_name, **kwargs):
         self.p = angr.Project(binary_name, **kwargs)
 
-        self.if_addr = self.addr("_retrace_if")
-        self.else_addr = self.addr("_retrace_else")
-        self.return_addr = self.addr("_retrace_return")
-        self.fun_call_addr = self.addr("_retrace_fun_call")
-        self.fun_num_addr = self.addr("_retrace_fun_num")
-        self.wrote_int_addr = self.addr("_retrace_wrote_int")
-        self.int_addr = self.addr("_retrace_int")
+        self.letter_addr = self.addr("_retrace_letter")
+        self.int_addr = self.addr("_retrace_num")
+        self.breakpoint_addr = self.addr("_retrace_breakpoint")
+
         self.is_retrace_addr = self.addr("_is_retrace_mode")
 
         # ghost code
@@ -111,7 +120,7 @@ class SourceTraceReplayer:
         val = state.mem[self.asserts_addr + index].bool.resolved
         solver_res = state.solver.eval_upto(val, 2)
         if (False in solver_res) and (True in solver_res):
-            return AssertResult.UNSURE
+            return AssertResult.POSSIBLY_VIOLATED
         elif False in solver_res:
             return AssertResult.VIOLATED
         elif True in solver_res:
@@ -129,7 +138,7 @@ class SourceTraceReplayer:
         return res
 
     def check_all_assertions(self, state):
-        res = AssertResult.NEVER_PASSED
+        res = AssertResult.PASSED
         count = state.mem[self.assert_idx_addr].int.concrete
         for index in range(count):
             label = state.mem[self.assert_names_addr + 8*index].deref.string.concrete.decode()
@@ -148,7 +157,7 @@ class SourceTraceReplayer:
         for obj in self.p.loader.all_elf_objects:
             for section in obj.sections:
                 if section.name == ".data" or section.name == ".bss":
-                    for i in range(section.max_addr- section.min_addr):
+                    for i in range(section.max_addr - section.min_addr):
                         data = state.solver.BVS("data" + str(i) + section.name, 8)
                         state.memory.store(section.min_addr + i, data)
         if self.is_retrace_addr:
@@ -168,26 +177,9 @@ class SourceTraceReplayer:
         self.make_globals_symbolic(state)
         return state
 
-    def find_letter(self, letter):
-        if letter == 'T':
-            return self.if_addr
-        elif letter == 'N':
-            return self.else_addr
-        elif letter == 'R':
-            return self.return_addr
-        elif letter == 'F' or letter == 'A':
-            return self.fun_call_addr
-        elif letter == 'D':
-            return self.wrote_int_addr
-        else:
-            raise ValueError(f'Trace contains unsupported element "{letter}"')
-
-    def find(self, elem):
-        return {self.find_letter(elem.letter)}
-
     @property
     def reals(self):
-        return {self.if_addr, self.else_addr, self.wrote_int_addr, self.return_addr, self.fun_call_addr}
+        return {self.breakpoint_addr}
 
     @property
     def ghosts(self):
@@ -340,7 +332,7 @@ class SourceTraceReplayer:
             simgr.move(from_stash='reals', to_stash='active')
 
             # PART 2: find next element
-            find = self.find(elem)
+            find = {self.breakpoint_addr}
             avoid = self.reals.difference(find)
             while simgr.active != [] or simgr.unconstrained != []:
                 while simgr.active != []:
@@ -362,19 +354,20 @@ class SourceTraceReplayer:
             self.merge(simgr, 'traced', merging)
 
             # PART 5: add constraints for functions and data
-            if elem.letter == 'D':
-                # add the constrain for the int
-                trace_int = elem.num
-                for state in simgr.traced:
-                    mem_int = state.mem[self.int_addr].with_type(parse_type("long long int")).resolved
-                    state.solver.add(mem_int == trace_int)
-            elif elem.letter == 'F':
-                fun_num = elem.num
-                for state in simgr.traced:
-                    mem_num = state.mem[self.fun_num_addr].int.resolved
-                    state.solver.add(mem_num == fun_num)
+            trace_letter = ord(elem.letter)
+            trace_int = elem.num
+            for state in simgr.traced:
+                mem_letter = state.mem[self.letter_addr].char.resolved
+                mem_int = state.mem[self.int_addr].with_type(parse_type("long long int")).resolved
+                state.solver.add(mem_int == trace_int)
+                state.solver.add(mem_letter == trace_letter)
 
-            # PART 6: debugging
+            # PART 6: drop all states not in traced
+            simgr.drop(stash="avoid")
+            simgr.drop(stash="unsat")
+            simgr.drop(stash="traced", filter_func=lambda state: not state.satisfiable())
+
+            # PART 7: debugging
             if debug:
                 name = None
                 if not elem.bs == b'':
@@ -385,10 +378,6 @@ class SourceTraceReplayer:
                     log.debug(elem.pretty(name=name) + f" (found {len(simgr.traced)})")
                 else:
                     log.debug(elem.pretty(name=name))
-
-            # PART 7: drop all states not in traced
-            simgr.drop(stash="avoid")
-            simgr.drop(stash="unsat")
 
         if finish_dead:
             simgr.step('traced')
