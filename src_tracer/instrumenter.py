@@ -351,11 +351,17 @@ class Instrumenter:
             print(b"Failed to annotate _CASE(" + case_id + b", " + switch_id + b", " + bits_needed + b") ")
 
     def accumulate_cases(self, node, case_node_list):
-        if node.kind in (CursorKind.CASE_STMT, CursorKind.DEFAULT_STMT):
+        has_default = False
+        if node.kind == CursorKind.CASE_STMT:
+            case_node_list.append(node)
+        elif node.kind == CursorKind.DEFAULT_STMT:
+            has_default = True
             case_node_list.append(node)
         for child in node.get_children():
             if (child.kind != CursorKind.SWITCH_STMT):
-                self.accumulate_cases(child, case_node_list)
+                res = self.accumulate_cases(child, case_node_list)
+                has_default = has_default or res
+        return has_default
 
     def visit_switch(self, node):
         self.switchis.append(node)
@@ -368,14 +374,25 @@ class Instrumenter:
             # experimental
             switch_id = bytes(hex(len(self.switchis) - 1), "utf-8")
             case_node_list = []
-            self.accumulate_cases(node, case_node_list)
+            has_default = self.accumulate_cases(node, case_node_list)
             case_count = len(case_node_list)
+            if not has_default:
+                # we will add an extra case below
+                case_count = case_count + 1
             bits_needed = bytes(hex(int.bit_length(case_count-1)), "utf-8")
             self.add_annotation(b" _SWITCH_START(" + switch_id + b", " + bits_needed + b") ", node.extent.start)
-            for case_index in range(case_count):
+
+            for case_index in range(len(case_node_list)):
                 case_node = case_node_list[case_index]
                 case_id = bytes(hex(case_index), "utf-8")
                 self.visit_case(case_node, switch_id, case_id, bits_needed)
+
+            # append missing default if necessary
+            if not has_default:
+                case_id = bytes(hex(case_count - 1), "utf-8")
+                self.add_annotation(b" break; default: _CASE(" + case_id + b", "
+                                                               + switch_id + b", " + bits_needed + b") ",
+                                    node.extent.end, -1)
         else:
             # simpler, default
             switch_num = children[0]
