@@ -42,7 +42,7 @@ extern "C" {
 // _trace_buf might point to a dummy buffer when tracing paused
 // _trace_ptr points to a proper trace buf even when tracing paused
 extern int _trace_uffd;
-extern __attribute__((aligned(4096))) unsigned char *_trace_buf;
+extern __attribute__((aligned(4096))) unsigned char *restrict _trace_buf;
 extern __attribute__((aligned(4096))) void *_trace_ptr;
 extern unsigned short _trace_pos;
 

@@ -31,7 +31,7 @@ static unsigned char dummy[65536] __attribute__ ((aligned (4096)));
 #define TRACE_FD_SIZE_STEP 32768
 
 int _trace_uffd;
-__attribute__((aligned(4096))) unsigned char *_trace_buf = dummy;
+__attribute__((aligned(4096))) unsigned char *restrict _trace_buf = dummy;
 void __attribute__((aligned(4096))) *_trace_ptr = dummy;
 unsigned short _trace_pos;
 unsigned char _trace_ie_byte = _TRACE_IE_BYTE_INIT;
