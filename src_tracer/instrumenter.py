@@ -361,7 +361,13 @@ class Instrumenter:
             prev_end = self.case_pos_after(prev_node)
             try:
                 between = self.get_content(prev_end, node.extent.start)
-                if re.match(rb'\A(?:default)?\s*:[\s;]*\Z', between):
+                # In between 'case prev' and 'case next', are there only spaces?
+                # (re is complicated since we also handle 'default' and ';' and lines starting with '#')
+                if re.match(rb'\A'
+                            rb'(?:default)?(?:\s|[\n\r]#[^\n\r]*(?=[\n\r]))*'
+                            rb':'
+                            rb'(?:[\s;]|[\n\r]#[^\n\r]*(?=[\n\r]))*'
+                            rb'\Z', between):
                     # it is a fall-through
                     case_node_list.pop()
             except IndexError:
