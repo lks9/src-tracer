@@ -407,7 +407,10 @@ class Instrumenter:
         elif node.spelling in ("setjmp", "sigsetjmp", "_setjmp", "__sigsetjmp"):
             self.add_annotation(b"_SETJMP(", node.extent.start)
             self.prepent_annotation(b")", node.extent.end)
-        elif node.spelling in ("exit", "_Exit", "abort"):
+        elif node.spelling in ("exit", "_Exit", "_exit"):
+            self.add_annotation(b"(({int exitcode = ", node.extent.start, len(node.spelling))
+            self.add_annotation(b"; _TRACE_CLOSE; exitcode; }))", node.extent.end)
+        elif node.spelling == "abort":
             self.add_annotation(b"_TRACE_CLOSE ", node.extent.start)
 
     def visit_try(self, node):
