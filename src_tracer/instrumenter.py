@@ -338,25 +338,44 @@ class Instrumenter:
 #            if (descendant.kind in (CursorKind.RETURN_STMT, CursorKind.GOTO_STMT)):
 #                self.add_annotation(b"_LOOP_END(" + loop_id + b") ", descendant.extent.start)
 
-    def visit_case(self, node, switch_id, case_id, bits_needed):
+    def case_pos_after(self, node):
         if node.kind == CursorKind.CASE_STMT:
             number_end = [c for c in node.get_children()][0].extent.end
         else:
             number_end = node.extent.start
+        return number_end
+
+    def visit_case(self, node, switch_id, case_id, bits_needed):
+        number_end = self.case_pos_after(node)
         try:
             colon_off = self.find_next_colon(number_end)
-            self.add_annotation(b" _CASE(" + case_id + b", " + switch_id + b", " + bits_needed + b") ",
-                                number_end, colon_off+1)
         except IndexError:
             print(b"Failed to annotate _CASE(" + case_id + b", " + switch_id + b", " + bits_needed + b") ")
+        self.add_annotation(b" _CASE(" + case_id + b", " + switch_id + b", " + bits_needed + b") ",
+                                number_end, colon_off+1)
+
+    def append_case(self, node, case_node_list):
+        # when the prev node is a fall-through, we can skip annotation of prev node
+        if len(case_node_list) > 0:
+            prev_node = case_node_list[-1]
+            prev_end = self.case_pos_after(prev_node)
+            try:
+                between = self.get_content(prev_end, node.extent.start)
+                if re.match(rb'\A\s*:\s*\Z', between):
+                    # it is a fall-through
+                    case_node_list.pop()
+            except IndexError:
+                pass
+        # do the actual append
+        case_node_list.append(node)
 
     def accumulate_cases(self, node, case_node_list):
         has_default = False
         if node.kind == CursorKind.CASE_STMT:
-            case_node_list.append(node)
+            self.append_case(node, case_node_list)
         elif node.kind == CursorKind.DEFAULT_STMT:
             has_default = True
-            case_node_list.append(node)
+            self.append_case(node, case_node_list)
         for child in node.get_children():
             if (child.kind != CursorKind.SWITCH_STMT):
                 res = self.accumulate_cases(child, case_node_list)
