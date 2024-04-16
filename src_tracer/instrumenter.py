@@ -412,6 +412,20 @@ class Instrumenter:
             self.add_annotation(b"; _TRACE_CLOSE; exitcode; }))", node.extent.end)
         elif node.spelling == "abort":
             self.add_annotation(b"_TRACE_CLOSE ", node.extent.start)
+        else:
+            # check for pointer call
+            childs = [c for c in node.get_children()]
+            normal_call = False
+            if len(childs) > 0:
+                unexp = childs[0]
+                childs = [c for c in unexp.get_children()]
+                if len(childs) > 0 and childs[0].kind == CursorKind.DECL_REF_EXPR:
+                    ref = childs[0].referenced
+                    if ref and ref.kind == CursorKind.FUNCTION_DECL:
+                        normal_call = True
+            if not normal_call:
+                self.add_annotation(b"_POINTER_CALL(", node.extent.start)
+                self.prepent_annotation(b")", node.extent.end)
 
     def visit_try(self, node):
         childs = [c for c in node.get_children()]
