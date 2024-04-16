@@ -361,7 +361,7 @@ class Instrumenter:
             prev_end = self.case_pos_after(prev_node)
             try:
                 between = self.get_content(prev_end, node.extent.start)
-                if re.match(rb'\A\s*:\s*\Z', between):
+                if re.match(rb'\A\s*:[\s;]*\Z', between):
                     # it is a fall-through
                     case_node_list.pop()
             except IndexError:
