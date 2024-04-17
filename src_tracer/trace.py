@@ -278,9 +278,9 @@ class TraceCompact(Trace):
             elif count > 0:
                 yield elem
                 count -= 1
-                if elem.letter == 'E':
-                    break
             else:
+                break
+            if elem.letter == 'E':
                 break
         if count != 0:
             raise ValueError(f"Trace ended, could not yield {count} elements")
