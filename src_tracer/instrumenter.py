@@ -139,6 +139,9 @@ class Instrumenter:
         content = self.annotations[filename]["content"]
         return content[start.offset: end.offset]
 
+    def node_content(self, node):
+        return self.get_content(node.extent.start, node.extent.end)
+
     def find_next_semi(self, location):
         filename = self.filename(location)
         content = self.annotations[filename]["content"]
@@ -305,6 +308,12 @@ class Instrumenter:
         if not self.check_location(node.extent.start, [b"for", b"while", b"do"]):
             print("Check location failed for loop")
             return
+        if node.kind == CursorKind.DO_STMT:
+            childs = [c for c in node.get_children()]
+            condition = childs[-1]
+            if condition.kind == CursorKind.INTEGER_LITERAL and self.node_content(condition) == b'0':
+                # one-time loop with "do { ... } while(0);", no need to instrument
+                return
         body = None
         for child in node.get_children():
             if (child.kind == CursorKind.COMPOUND_STMT):
