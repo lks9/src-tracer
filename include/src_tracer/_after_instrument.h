@@ -531,7 +531,10 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 extern bool _trace_pointer_call;
 
 #define _TRACE_FUNC_INIT \
-    bool _trace_local_return = 0;
+    bool _trace_local_return __attribute__((unused)) = 0;
+
+#define _TRACE_POINTER_CALL_SET \
+    _trace_pointer_call = 1;
 
 #define _TRACE_POINTER_CALL_RESET \
     _trace_pointer_call = 0; \
@@ -541,18 +544,19 @@ extern bool _trace_pointer_call;
 #define _TRACE_RETURN_CHECK _trace_local_return
 
 #define _TRACE_POINTER_CALL(call) ({ \
-    _trace_pointer_call = 1; \
+    _TRACE_POINTER_CALL_SET; \
     call; \
 })
 #define _TRACE_POINTER_CALL_AFTER(type, call) ({ \
     type _trace_call_tmp = call; \
-    _trace_pointer_call = 1; \
+    _TRACE_POINTER_CALL_SET; \
     _trace_call_tmp; \
 })
 
 #else
 #define _TRACE_FUNC_INIT /* nothing here */
 #define _TRACE_CALL_CHECK 1
+#define _TRACE_POINTER_CALL_SET /* nothing here */
 #define _TRACE_POINTER_CALL_RESET /* nothing here */
 #define _TRACE_POINTER_CALL(call) call
 #define _TRACE_POINTER_CALL_AFTER(type, call) call
@@ -590,7 +594,7 @@ extern bool _trace_pointer_call;
 #define _TRY_END            _IS_RETRACE(_RETRACE_TRY_END(), _TRACE_TRY_END())
 #define _SETJMP(stmt)       _IS_RETRACE(_RETRACE_SETJMP(stmt), _TRACE_SETJMP(stmt))
 
-#define _TRACE_OPEN(fname)  _IS_RETRACE( ,_trace_open((fname)))
+#define _TRACE_OPEN(fname)  _TRACE_POINTER_CALL_SET; _IS_RETRACE( ,_trace_open((fname)))
 #define _TRACE_CLOSE        _IS_RETRACE(_RETRACE_END() ,_trace_close())
 
 #define _POINTER_CALL(call) _TRACE_POINTER_CALL(call)
@@ -621,7 +625,7 @@ extern bool _trace_pointer_call;
 #define _LOOP_BODY(id)      ;_TRACE_IF();
 #define _LOOP_END(id)       ;_TRACE_ELSE();
 
-#define _TRACE_OPEN(fname)  ;_trace_open((fname));
+#define _TRACE_OPEN(fname)  _TRACE_POINTER_CALL_SET; _trace_open((fname));
 #define _TRACE_CLOSE        ;_trace_close();
 
 #define _FORK(fork_stmt)    (_trace_before_fork(), \
@@ -691,7 +695,7 @@ extern bool _trace_pointer_call;
 #define _TRY_END            ;_RETRACE_TRY_END();
 #define _SETJMP(stmt)       _RETRACE_SETJMP(stmt)
 
-#define _TRACE_OPEN(fname)  /* nothing here */
+#define _TRACE_OPEN(fname)  ;_TRACE_POINTER_CALL_SET;
 #define _TRACE_CLOSE        ;_RETRACE_END();
 
 #define _FORK(fork_stmt)    (_retrace_elem('G', _retrace_fork_count), \
@@ -771,7 +775,7 @@ extern bool _trace_pointer_call;
 
 #define _SETJMP(stmt)       _RETRACE_SETJMP_CBMC(stmt)
 
-#define _TRACE_OPEN(fname)  ;retrace_i = 0;
+#define _TRACE_OPEN(fname)  ;_TRACE_POINTER_CALL_SET; retrace_i = 0;
 #define _TRACE_CLOSE        ;_RETRACE_END_CBMC();
 
 #define _FORK(fork_stmt)    fork_stmt

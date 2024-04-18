@@ -124,7 +124,6 @@ void _trace_open(const char *fname) {
     trace_fd = fd;
     _trace_buf_pos = 0;
     _trace_ie_byte = _TRACE_IE_BYTE_INIT;
-    _trace_pointer_call = true;
 }
 
 void _trace_before_fork(void) {
