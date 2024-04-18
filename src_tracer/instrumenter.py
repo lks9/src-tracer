@@ -10,7 +10,7 @@ class Instrumenter:
     def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
                  return_instrument=True, inline_instrument=False, main_instrument=True, main_spelling="main",
                  main_close=False, anon_instrument=False,
-                 function_instrument=True, inner_instrument=True, call_instrument=True):
+                 function_instrument=True, inner_instrument=True, call_instrument=True, pointer_call_instrument=False):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
@@ -28,6 +28,7 @@ class Instrumenter:
         self.function_instrument = function_instrument
         self.inner_instrument = inner_instrument
         self.call_instrument = call_instrument
+        self.pointer_call_instrument = pointer_call_instrument
 
         self.ifs = []
         self.loops = []
@@ -429,6 +430,34 @@ class Instrumenter:
             self.add_annotation(b"_SWITCH(", switch_num.extent.start)
             self.add_annotation(b")", switch_num.extent.end, 1)
 
+    def is_pointer_call(self, node):
+        childs = [c for c in node.get_children()]
+        normal_call = False
+        if len(childs) > 0:
+            unexp = childs[0]
+            childs = [c for c in unexp.get_children()]
+            if len(childs) > 0 and childs[0].kind == CursorKind.DECL_REF_EXPR:
+                reference = childs[0]
+                target = reference.referenced
+                if target and target.kind == CursorKind.FUNCTION_DECL:
+                    normal_call = True
+        return not normal_call
+
+    def last_call_before(self, node):
+        # Returns the last child node (if any) of kind CALL_EXPR that would be
+        # evaluated before the evaluation of the current node.
+        # Otherwise it returns None.
+        childs = [c for c in node.get_children()]
+        for c in reversed(childs):
+            if c.kind == CursorKind.CALL_EXPR:
+                return c
+            rec_last = self.last_call_before(c)
+            if rec_last is not None:
+                return rec_last
+        return None
+
+    last_calls = []
+
     def visit_call(self, node):
         # Some calls need to be anotated
         if node.spelling == "fork":
@@ -439,9 +468,18 @@ class Instrumenter:
             self.prepent_annotation(b")", node.extent.end)
         elif node.spelling in ("exit", "_Exit", "_exit"):
             self.add_annotation(b"(({int exitcode = ", node.extent.start, len(node.spelling))
-            self.add_annotation(b"; _TRACE_CLOSE; exitcode; }))", node.extent.end)
+            self.prepent_annotation(b"; _TRACE_CLOSE; exitcode; }))", node.extent.end)
         elif node.spelling == "abort":
             self.add_annotation(b"_TRACE_CLOSE ", node.extent.start)
+        elif self.pointer_call_instrument and self.is_pointer_call(node):
+            last_call = self.last_call_before(node)
+            if last_call is None:
+                self.add_annotation(b"_POINTER_CALL(", node.extent.start)
+                self.prepent_annotation(b")", node.extent.end)
+            else:
+                last_call_type = bytes(last_call.type.spelling, "utf-8")
+                self.prepent_annotation(b"_POINTER_CALL_AFTER(" + last_call_type + b", ", last_call.extent.start)
+                self.add_annotation(b")", last_call.extent.end)
 
     def visit_try(self, node):
         childs = [c for c in node.get_children()]

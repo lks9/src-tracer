@@ -28,6 +28,7 @@ static int temp_trace_buf_pos;
 static int temp_trace_fd;
 
 unsigned long long int _trace_setjmp_idx;
+bool _trace_pointer_call;
 
 #ifndef _TRACE_USE_POSIX_WRITE
 // taken from musl (arch/x86_64/syscall_arch.h)
