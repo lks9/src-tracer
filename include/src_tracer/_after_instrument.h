@@ -591,7 +591,15 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _TRY_END            ;_TRACE_TRY_END();
 #define _SETJMP(stmt)       _TRACE_SETJMP(stmt)
 
-#define _POINTER_CALL(call) ({ _trace_pointer_call = 1; call ; })
+#define _POINTER_CALL(call) ({ \
+    _trace_pointer_call = 1; \
+    call; \
+})
+#define _POINTER_CALL_AFTER(type, call) ({ \
+    type _trace_call_tmp = call; \
+    _trace_pointer_call = 1; \
+    _trace_call_tmp; \
+})
 
 #define _RETRO_ONLY(code)   /* nothing here */
 #define _RETRO_SKIP(code)   code
@@ -655,7 +663,15 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _FORK(fork_stmt)    (_retrace_elem('G', _retrace_fork_count), \
                              _retrace_after_fork(fork_stmt))
 
-#define _POINTER_CALL(call) ({ _trace_pointer_call = 1; call ; })
+#define _POINTER_CALL(call) ({ \
+    _trace_pointer_call = 1; \
+    call; \
+})
+#define _POINTER_CALL_AFTER(type, call) ({ \
+    type _trace_call_tmp = call; \
+    _trace_pointer_call = 1; \
+    _trace_call_tmp; \
+})
 
 #define _RETRO_ONLY(code)   code
 #define _RETRO_SKIP(code)   /* nothing here */
@@ -752,7 +768,8 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 #define _TRY_END            /* nothing here */
 #define _SETJMP(setjmp_stmt) setjmp_stmt
 
-#define _POINTER_CALL(call) /* nothing here */
+#define _POINTER_CALL(call) call
+#define _POINTER_CALL_AFTER(type, call) call
 
 #define _RETRO_ONLY(code)   /* nothing here */
 #define _RETRO_SKIP(code)   code
