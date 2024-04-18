@@ -246,6 +246,11 @@ class Instrumenter:
             print(self.get_content(node.extent.start, node.extent.end))
             raise Exception
 
+        condition = children[0]
+        if condition.kind == CursorKind.INTEGER_LITERAL:
+            # constant value? no branching, no need to instrument
+            return
+
         if_body = children[1]
         if len(children) == 3:
             else_body = children[2]
@@ -288,6 +293,11 @@ class Instrumenter:
         self.ifs.append(node)
         children = [c for c in node.get_children()]
         condition = children[0]
+
+        if condition.kind == CursorKind.INTEGER_LITERAL:
+            # constant value? no branching, no need to instrument
+            return
+
         self.add_annotation(b" _CONDITION(", condition.extent.start)
         self.add_annotation(b") ", condition.extent.end)
 
@@ -297,6 +307,10 @@ class Instrumenter:
             raise Exception
         left = children[0]
         right = children[1]
+
+        if left.kind == CursorKind.INTEGER_LITERAL:
+            # constant value? no branching, no need to instrument
+            return
 
         if self.search(rb"(&&|\|\|)", left.extent.end, right.extent.start):
             # found short-circuit && or ||
