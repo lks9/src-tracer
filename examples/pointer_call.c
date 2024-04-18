@@ -1,5 +1,5 @@
 int foo(int i) {
-    if (0);
+    if (0) /* nothing here */;
     return i;
 }
 
@@ -8,7 +8,7 @@ int (*ptr)(int) = *foo;
 typedef int (*function_ptr)(int);
 
 function_ptr meta (void) {
-    if (1);
+    if (1) /* nothing here */;
     return ptr;
 }
 
