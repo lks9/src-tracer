@@ -293,31 +293,32 @@ class Instrumenter:
     # the ?: ternary operator
     def visit_conditional_op(self, node):
         self.ifs.append(node)
-        children = [c for c in node.get_children()]
-        condition = children[0]
+        childs = [c for c in node.get_children()]
+        condition = childs[0]
 
         if condition.kind == CursorKind.INTEGER_LITERAL:
             # constant value? no branching, no need to instrument
             return
-        if not self.boolop_full_instrument and self.last_call_before(node) is None:
-            # no function call subexpression, hence no branching!
+        if not self.boolop_full_instrument and len(childs) == 3 and \
+                self.is_expr_only(childs[1]) and self.is_expr_only(childs[2]):
+            # "logical" subexpression, no function call, no control structure block, hence no branching!
             return
 
         self.add_annotation(b" _CONDITION(", condition.extent.start)
         self.add_annotation(b") ", condition.extent.end)
 
     def visit_binary_op(self, node):
-        children = [c for c in node.get_children()]
-        if len(children) != 2:
+        childs = [c for c in node.get_children()]
+        if len(childs) != 2:
             raise Exception
-        left = children[0]
-        right = children[1]
+        left = childs[0]
+        right = childs[1]
 
         if left.kind == CursorKind.INTEGER_LITERAL:
             # constant value? no branching, no need to instrument
             return
-        if not self.boolop_full_instrument and self.last_call_before(node) is None:
-            # no function call subexpression, hence no branching!
+        if not self.boolop_full_instrument and self.is_expr_only(right):
+            # "logical" subexpression, no function call, no control structure block, hence no branching!
             return
 
         if self.search(rb"(&&|\|\|)", left.extent.end, right.extent.start):
@@ -476,8 +477,18 @@ class Instrumenter:
                     normal_call = True
         return not normal_call
 
+    def is_expr_only(self, node):
+        # returns False when node includes some call or some block statement
+        #         (=^ evaluation might branch)
+        if node.kind in (CursorKind.CALL_EXPR, CursorKind.COMPOUND_STMT):
+            return False
+        for child in node.get_children():
+            if not self.is_expr_only(child):
+                return False
+        return True
+
     def last_call_before(self, node):
-        # Returns the last child node (if any) of kind CALL_EXPR that would be
+        # Returns the last descendant node (if any) of kind CALL_EXPR that would be
         # evaluated before the evaluation of the current node.
         # Otherwise it returns None.
         childs = [c for c in node.get_children()]
@@ -488,8 +499,6 @@ class Instrumenter:
             if rec_last is not None:
                 return rec_last
         return None
-
-    last_calls = []
 
     def visit_call(self, node):
         # Some calls need to be anotated
