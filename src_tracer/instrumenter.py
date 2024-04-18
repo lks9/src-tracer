@@ -10,7 +10,7 @@ class Instrumenter:
     def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
                  return_instrument=True, inline_instrument=False, main_instrument=True, main_spelling="main",
                  main_close=False, anon_instrument=False,
-                 function_instrument=True, inner_instrument=True, call_instrument=True):
+                 function_instrument=True, inner_instrument=True, call_instrument=True, pointer_call_instrument=False):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
@@ -28,6 +28,7 @@ class Instrumenter:
         self.function_instrument = function_instrument
         self.inner_instrument = inner_instrument
         self.call_instrument = call_instrument
+        self.pointer_call_instrument = pointer_call_instrument
 
         self.ifs = []
         self.loops = []
@@ -139,6 +140,9 @@ class Instrumenter:
         content = self.annotations[filename]["content"]
         return content[start.offset: end.offset]
 
+    def node_content(self, node):
+        return self.get_content(node.extent.start, node.extent.end)
+
     def find_next_semi(self, location):
         filename = self.filename(location)
         content = self.annotations[filename]["content"]
@@ -242,6 +246,11 @@ class Instrumenter:
             print(self.get_content(node.extent.start, node.extent.end))
             raise Exception
 
+        condition = children[0]
+        if condition.kind == CursorKind.INTEGER_LITERAL:
+            # constant value? no branching, no need to instrument
+            return
+
         if_body = children[1]
         if len(children) == 3:
             else_body = children[2]
@@ -284,6 +293,11 @@ class Instrumenter:
         self.ifs.append(node)
         children = [c for c in node.get_children()]
         condition = children[0]
+
+        if condition.kind == CursorKind.INTEGER_LITERAL:
+            # constant value? no branching, no need to instrument
+            return
+
         self.add_annotation(b" _CONDITION(", condition.extent.start)
         self.add_annotation(b") ", condition.extent.end)
 
@@ -293,6 +307,10 @@ class Instrumenter:
             raise Exception
         left = children[0]
         right = children[1]
+
+        if left.kind == CursorKind.INTEGER_LITERAL:
+            # constant value? no branching, no need to instrument
+            return
 
         if self.search(rb"(&&|\|\|)", left.extent.end, right.extent.start):
             # found short-circuit && or ||
@@ -305,6 +323,19 @@ class Instrumenter:
         if not self.check_location(node.extent.start, [b"for", b"while", b"do"]):
             print("Check location failed for loop")
             return
+
+        # constant loop conditions do not need instrumentation
+        if node.kind in (CursorKind.DO_STMT, CursorKind.WHILE_STMT):
+            childs = [c for c in node.get_children()]
+            if CursorKind.DO_STMT:
+                condition = childs[-1]
+            else:
+                condition = childs[0]
+            if condition.kind == CursorKind.INTEGER_LITERAL:
+                # one-time loop with "do { ... } while(0);", no need to instrument
+                # same goes for "while(1) { ... break ... }"
+                return
+
         body = None
         for child in node.get_children():
             if (child.kind == CursorKind.COMPOUND_STMT):
@@ -338,25 +369,50 @@ class Instrumenter:
 #            if (descendant.kind in (CursorKind.RETURN_STMT, CursorKind.GOTO_STMT)):
 #                self.add_annotation(b"_LOOP_END(" + loop_id + b") ", descendant.extent.start)
 
-    def visit_case(self, node, switch_id, case_id, bits_needed):
+    def case_pos_after(self, node):
         if node.kind == CursorKind.CASE_STMT:
             number_end = [c for c in node.get_children()][0].extent.end
         else:
             number_end = node.extent.start
+        return number_end
+
+    def visit_case(self, node, switch_id, case_id, bits_needed):
+        number_end = self.case_pos_after(node)
         try:
             colon_off = self.find_next_colon(number_end)
-            self.add_annotation(b" _CASE(" + case_id + b", " + switch_id + b", " + bits_needed + b") ",
-                                number_end, colon_off+1)
         except IndexError:
             print(b"Failed to annotate _CASE(" + case_id + b", " + switch_id + b", " + bits_needed + b") ")
+        self.add_annotation(b" _CASE(" + case_id + b", " + switch_id + b", " + bits_needed + b") ",
+                                number_end, colon_off+1)
+
+    def append_case(self, node, case_node_list):
+        # when the prev node is a fall-through, we can skip annotation of prev node
+        if len(case_node_list) > 0:
+            prev_node = case_node_list[-1]
+            prev_end = self.case_pos_after(prev_node)
+            try:
+                between = self.get_content(prev_end, node.extent.start)
+                # In between 'case prev' and 'case next', are there only spaces?
+                # (re is complicated since we also handle 'default' and ';' and lines starting with '#')
+                if re.match(rb'\A'
+                            rb'(?:default)?(?:\s|[\n\r]#[^\n\r]*(?=[\n\r]))*'
+                            rb':'
+                            rb'(?:[\s;]|[\n\r]#[^\n\r]*(?=[\n\r]))*'
+                            rb'\Z', between):
+                    # it is a fall-through
+                    case_node_list.pop()
+            except IndexError:
+                pass
+        # do the actual append
+        case_node_list.append(node)
 
     def accumulate_cases(self, node, case_node_list):
         has_default = False
         if node.kind == CursorKind.CASE_STMT:
-            case_node_list.append(node)
+            self.append_case(node, case_node_list)
         elif node.kind == CursorKind.DEFAULT_STMT:
             has_default = True
-            case_node_list.append(node)
+            self.append_case(node, case_node_list)
         for child in node.get_children():
             if (child.kind != CursorKind.SWITCH_STMT):
                 res = self.accumulate_cases(child, case_node_list)
@@ -399,6 +455,34 @@ class Instrumenter:
             self.add_annotation(b"_SWITCH(", switch_num.extent.start)
             self.add_annotation(b")", switch_num.extent.end, 1)
 
+    def is_pointer_call(self, node):
+        childs = [c for c in node.get_children()]
+        normal_call = False
+        if len(childs) > 0:
+            unexp = childs[0]
+            childs = [c for c in unexp.get_children()]
+            if len(childs) > 0 and childs[0].kind == CursorKind.DECL_REF_EXPR:
+                reference = childs[0]
+                target = reference.referenced
+                if target and target.kind == CursorKind.FUNCTION_DECL:
+                    normal_call = True
+        return not normal_call
+
+    def last_call_before(self, node):
+        # Returns the last child node (if any) of kind CALL_EXPR that would be
+        # evaluated before the evaluation of the current node.
+        # Otherwise it returns None.
+        childs = [c for c in node.get_children()]
+        for c in reversed(childs):
+            if c.kind == CursorKind.CALL_EXPR:
+                return c
+            rec_last = self.last_call_before(c)
+            if rec_last is not None:
+                return rec_last
+        return None
+
+    last_calls = []
+
     def visit_call(self, node):
         # Some calls need to be anotated
         if node.spelling == "fork":
@@ -407,8 +491,20 @@ class Instrumenter:
         elif node.spelling in ("setjmp", "sigsetjmp", "_setjmp", "__sigsetjmp"):
             self.add_annotation(b"_SETJMP(", node.extent.start)
             self.prepent_annotation(b")", node.extent.end)
-        elif node.spelling in ("exit", "_Exit", "abort"):
+        elif node.spelling in ("exit", "_Exit", "_exit"):
+            self.add_annotation(b"(({int exitcode = ", node.extent.start, len(node.spelling))
+            self.prepent_annotation(b"; _TRACE_CLOSE; exitcode; }))", node.extent.end)
+        elif node.spelling == "abort":
             self.add_annotation(b"_TRACE_CLOSE ", node.extent.start)
+        elif self.pointer_call_instrument and self.is_pointer_call(node):
+            last_call = self.last_call_before(node)
+            if last_call is None:
+                self.add_annotation(b"_POINTER_CALL(", node.extent.start)
+                self.prepent_annotation(b")", node.extent.end)
+            else:
+                last_call_type = bytes(last_call.type.spelling, "utf-8")
+                self.prepent_annotation(b"_POINTER_CALL_AFTER(" + last_call_type + b", ", last_call.extent.start)
+                self.add_annotation(b")", last_call.extent.end)
 
     def visit_try(self, node):
         childs = [c for c in node.get_children()]

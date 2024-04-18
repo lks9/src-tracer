@@ -39,6 +39,7 @@ unsigned char _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 static int trace_fork_count = 0;
 
 unsigned long long int _trace_setjmp_idx;
+bool _trace_pointer_call;
 
 static __attribute__((aligned(4096))) void *temp_trace_buf = dummy;
 static unsigned short temp_trace_pos;
