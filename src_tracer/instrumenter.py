@@ -8,6 +8,7 @@ from clang.cindex import Index, CursorKind, StorageClass
 class Instrumenter:
 
     def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
+                 boolop_full_instrument=False,
                  return_instrument=True, inline_instrument=False, main_instrument=True, main_spelling="main",
                  main_close=False, anon_instrument=False,
                  function_instrument=True, inner_instrument=True, call_instrument=True, pointer_call_instrument=False):
@@ -19,6 +20,7 @@ class Instrumenter:
         self.trace_store_dir = trace_store_dir
         self.case_instrument = case_instrument
         self.boolop_instrument = boolop_instrument
+        self.boolop_full_instrument = boolop_full_instrument
         self.return_instrument = return_instrument
         self.inline_instrument = inline_instrument
         self.main_instrument = main_instrument
@@ -297,6 +299,9 @@ class Instrumenter:
         if condition.kind == CursorKind.INTEGER_LITERAL:
             # constant value? no branching, no need to instrument
             return
+        if not self.boolop_full_instrument and self.last_call_before(node) is None:
+            # no function call subexpression, hence no branching!
+            return
 
         self.add_annotation(b" _CONDITION(", condition.extent.start)
         self.add_annotation(b") ", condition.extent.end)
@@ -310,6 +315,9 @@ class Instrumenter:
 
         if left.kind == CursorKind.INTEGER_LITERAL:
             # constant value? no branching, no need to instrument
+            return
+        if not self.boolop_full_instrument and self.last_call_before(node) is None:
+            # no function call subexpression, hence no branching!
             return
 
         if self.search(rb"(&&|\|\|)", left.extent.end, right.extent.start):

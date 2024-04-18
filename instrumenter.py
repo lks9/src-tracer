@@ -20,7 +20,9 @@ ap.add_argument("--no-return", action='store_true',
 ap.add_argument("--switch-number", action='store_true',
                 help="Instrument to record switch number instead of case based bit-tracing.")
 ap.add_argument("--short-circuit", action='store_true',
-                help="Instrument short circuit operators (experimental).")
+                help="Instrument short circuit operators.")
+ap.add_argument("--short-circuit-full", action='store_true',
+                help="Instrument almost all short circuit operators, even if unnecessary (implies --short-circuit).")
 ap.add_argument("--no-inner", action='store_true',
                 help="Do not instrument any control structrure including if, else, while, for.")
 ap.add_argument("--inline", action='store_true',
@@ -41,6 +43,8 @@ ap.add_argument("--no-calls", action='store_true',
 ap.add_argument("--pointer-calls", action='store_true',
                 help="Instrument pointer calls. "
                 "Note that you have to compile your sources with -D_TRACE_POINTER_CALLS_ONLY to make use of it!")
+ap.add_argument("--full", action='store_true',
+                help="Instrument everything. Implies positive arguments above.")
 args = ap.parse_args()
 
 # trace store dir
@@ -66,14 +70,26 @@ if args.record:
     main_instrument = True
     main_spelling = args.record
 
+case_instrument = not args.switch_number
+boolop_instrument = args.full or args.short_circuit or args.short_circuit_full
+boolop_full_instrument = args.full or args.short_circuit_full
+return_instrument = not args.no_return
+inline_instrument = args.full or args.inline
+main_close = not args.no_close
+anon_instrument = args.anon
+function_instrument = not args.no_functions
+inner_instrument = not args.no_inner
+call_instrument = not args.no_calls
+pointer_call_instrument = args.full or args.pointer_calls
+
 # do the instrumentation
-instrumenter = Instrumenter(database, store_dir, case_instrument=not args.switch_number,
-                            boolop_instrument=args.short_circuit,
-                            return_instrument=not args.no_return, inline_instrument=args.inline,
-                            main_instrument=main_instrument, main_spelling=main_spelling, main_close=not args.no_close,
-                            anon_instrument=args.anon,
-                            function_instrument=not args.no_functions, inner_instrument=not args.no_inner,
-                            call_instrument=not args.no_calls, pointer_call_instrument=args.pointer_calls)
+instrumenter = Instrumenter(database, store_dir, case_instrument=case_instrument,
+                            boolop_instrument=boolop_instrument, boolop_full_instrument=boolop_full_instrument,
+                            return_instrument=return_instrument, inline_instrument=inline_instrument,
+                            main_instrument=main_instrument, main_spelling=main_spelling, main_close=main_close,
+                            anon_instrument=anon_instrument,
+                            function_instrument=function_instrument, inner_instrument=inner_instrument,
+                            call_instrument=call_instrument, pointer_call_instrument=pointer_call_instrument)
 instrumenter.parse(args.filename)
 instrumenter.annotate_all(args.filename)
 database.close_connection()
