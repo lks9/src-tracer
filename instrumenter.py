@@ -41,8 +41,7 @@ ap.add_argument("--no-calls", action='store_true',
                 help="Do not instrument any calls. "
                 "Currently we instrument exit() and friends, fork() and setjmp().")
 ap.add_argument("--pointer-calls", action='store_true',
-                help="Instrument pointer calls. "
-                "Note that you have to compile your sources with -D_TRACE_POINTER_CALLS_ONLY to make use of it!")
+                help="Instrument pointer calls. In effect, other function calls and returns wont be traced.")
 ap.add_argument("--full", action='store_true',
                 help="Instrument everything. Implies positive arguments above.")
 args = ap.parse_args()

@@ -563,6 +563,40 @@ extern bool _trace_pointer_call;
 #define _TRACE_RETURN_CHECK 1
 #endif
 
+/* return after */
+#define _FUNC_RETURN_AFTER(ret, type, expr) { \
+    type _trace_return_result = (expr); \
+    _FUNC_RETURN \
+    return _trace_return_result; \
+}
+#define _FUNC_RETURN_VOID_AFTER(ret, type, expr) { \
+    (expr); \
+    _FUNC_RETURN \
+    return; \
+}
+#define _TRACE_CLOSE_AFTER(ret, type, expr) { \
+    type _trace_return_result = (expr); \
+    _TRACE_CLOSE \
+    return _trace_return_result; \
+}
+#define _TRACE_CLOSE_VOID_AFTER(ret, type, expr) { \
+    (expr); \
+    _TRACE_CLOSE \
+    return; \
+}
+#define _FUNC_RETURN_TRACE_CLOSE_AFTER(ret, type, expr) { \
+    type _trace_return_result = (expr); \
+    _FUNC_RETURN \
+    _TRACE_CLOSE \
+    return _trace_return_result; \
+}
+#define _FUNC_RETURN_TRACE_CLOSE_VOID_AFTER(ret, type, expr) { \
+    (expr); \
+    _FUNC_RETURN \
+    _TRACE_CLOSE \
+    return; \
+}
+
 /*
  * Macros used in the instrumentation.
  * 2 versions: _TRACE_MODE and _RETRACE_MODE

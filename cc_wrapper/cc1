@@ -94,8 +94,8 @@ if [ "$1" = "-E" ]; then
         #   you could add any of --no-return --switch-number --short-circuit --inline --no-functions --anon --no-inner --no-main --pointer-calls
         python3 "${SRC_TRACER_DIR}/instrumenter.py" --no-return --pointer-calls --short-circuit "${outfile}.tmp.c" "${SRC_TRACER_STORE_DIR}" || exit $?
 
-        # rerun preprocessor to resolve instrumentation macros (you could add -DBYTE_TRACE or -D_TRACE_POINTER_CALLS_ONLY)
-        cpp ${SRC_TRACER} -D_TRACE_POINTER_CALLS_ONLY "${outfile}.tmp.c" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/include/"
+        # rerun preprocessor to resolve instrumentation macros (you could add -DBYTE_TRACE)
+        cpp ${SRC_TRACER} "${outfile}.tmp.c" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/include/"
         cp "${outfile}.tmp.i" "${outfile}"
     fi
 elif [ "$1" = "-fpreprocessed" ]; then

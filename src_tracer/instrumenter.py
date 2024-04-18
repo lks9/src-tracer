@@ -46,7 +46,10 @@ class Instrumenter:
             with open(filename, "rb") as f:
                 content = f.read()
             self.annotations[filename] = {"content": content}
-            self.annotations[filename][0] = b'#include <src_tracer/_after_instrument.h>\n'
+            prolog = b'#include <src_tracer/_after_instrument.h>\n'
+            if self.pointer_call_instrument:
+                prolog = b'#define _TRACE_POINTER_CALLS_ONLY\n' + prolog
+            self.annotations[filename][0] = prolog
         return filename
 
     def orig_file_and_line(self, location):
@@ -109,14 +112,8 @@ class Instrumenter:
                 func_num = self.func_num(node)
                 self.add_annotation(b" _FUNC(" + bytes(hex(func_num), "utf-8") + b") ", body.extent.start, 1)
 
-        # handle returns
-        if self.return_instrument:
-            for descendant in node.walk_preorder():
-                if descendant.kind == CursorKind.RETURN_STMT:
-                    self.add_annotation(b"_FUNC_RETURN ", descendant.extent.start)
-            self.add_annotation(b"_FUNC_RETURN ", node.extent.end, -1)
-
         # special treatment for main function
+        close = False
         if self.main_instrument and node.spelling == self.main_spelling:
             if not self.function_instrument:
                 # well, we need something to start...
@@ -132,10 +129,42 @@ class Instrumenter:
             self.prepent_annotation(b' _TRACE_OPEN("' + bytes(trace_path, "utf8") + b'") ', body.extent.start, 1)
 
             if self.main_close:
-                for descendant in node.walk_preorder():
-                    if descendant.kind == CursorKind.RETURN_STMT:
-                        self.add_annotation(b"_TRACE_CLOSE ", descendant.extent.start)
-                self.add_annotation(b"_TRACE_CLOSE ", node.extent.end, -1)
+                close = True
+
+        # handle returns
+        self.visit_function_returns(node, close, self.return_instrument)
+
+    def visit_function_returns(self, node, close, ret):
+        if not ret and not close:
+            # nothing to do
+            return
+
+        for ret_stmt in node.walk_preorder():
+            if ret_stmt.kind == CursorKind.RETURN_STMT:
+                if self.is_expr_only(ret_stmt):
+                    if ret:
+                        self.add_annotation(b"_FUNC_RETURN ", ret_stmt.extent.start)
+                    if close:
+                        self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
+                else:
+                    childs = [c for c in ret_stmt.get_children()]
+                    ret_expr = childs[0]
+                    ret_type = bytes(ret_expr.type.spelling, "utf-8")
+                    macro = b""
+                    if ret:
+                        macro = macro + b"_FUNC_RETURN"
+                    if close:
+                        macro = macro + b"_TRACE_CLOSE"
+                    if ret_type == b"void":
+                        macro = macro + b"_VOID"
+                    self.add_annotation(macro + b"_AFTER(", ret_stmt.extent.start)
+                    self.prepent_annotation(b", " + ret_type + b", ", ret_expr.extent.start)
+                    self.add_annotation(b")", ret_expr.extent.end)
+        # void functions just end, and even non-void main needs no return
+        if ret:
+            self.add_annotation(b"_FUNC_RETURN ", node.extent.end, -1)
+        if close:
+            self.add_annotation(b"_TRACE_CLOSE ", node.extent.end, -1)
 
     def get_content(self, start, end):
         filename = self.filename(start)
