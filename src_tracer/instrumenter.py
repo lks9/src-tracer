@@ -10,7 +10,7 @@ class Instrumenter:
     def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
                  return_instrument=True, inline_instrument=False, main_instrument=True, main_spelling="main",
                  main_close=False, anon_instrument=False,
-                 function_instrument=True, inner_instrument=True, call_instrument=True):
+                 function_instrument=True, inner_instrument=True, call_instrument=True, pointer_call_instrument=False):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
@@ -28,6 +28,7 @@ class Instrumenter:
         self.function_instrument = function_instrument
         self.inner_instrument = inner_instrument
         self.call_instrument = call_instrument
+        self.pointer_call_instrument = pointer_call_instrument
 
         self.ifs = []
         self.loops = []
@@ -449,7 +450,7 @@ class Instrumenter:
             self.prepent_annotation(b"; _TRACE_CLOSE; exitcode; }))", node.extent.end)
         elif node.spelling == "abort":
             self.add_annotation(b"_TRACE_CLOSE ", node.extent.start)
-        elif self.is_pointer_call(node):
+        elif self.pointer_call_instrument and self.is_pointer_call(node):
             last_call = self.last_call_before(node)
             if last_call is None:
                 self.add_annotation(b"_POINTER_CALL(", node.extent.start)
