@@ -284,7 +284,7 @@ class Instrumenter:
             raise Exception
 
         condition = children[0]
-        if condition.kind == CursorKind.INTEGER_LITERAL:
+        if condition.kind in (CursorKind.INTEGER_LITERAL, CursorKind.CXX_BOOL_LITERAL_EXPR):
             # constant value? no branching, no need to instrument
             return
 
@@ -331,7 +331,7 @@ class Instrumenter:
         childs = [c for c in node.get_children()]
         condition = childs[0]
 
-        if condition.kind == CursorKind.INTEGER_LITERAL:
+        if condition.kind in (CursorKind.INTEGER_LITERAL, CursorKind.CXX_BOOL_LITERAL_EXPR):
             # constant value? no branching, no need to instrument
             return
         if not self.boolop_full_instrument and len(childs) == 3 and \
@@ -349,7 +349,7 @@ class Instrumenter:
         left = childs[0]
         right = childs[1]
 
-        if left.kind == CursorKind.INTEGER_LITERAL:
+        if left.kind in (CursorKind.INTEGER_LITERAL, CursorKind.CXX_BOOL_LITERAL_EXPR):
             # constant value? no branching, no need to instrument
             return
         if not self.boolop_full_instrument and self.is_expr_only(right):
@@ -375,7 +375,7 @@ class Instrumenter:
                 condition = childs[-1]
             else:
                 condition = childs[0]
-            if condition.kind == CursorKind.INTEGER_LITERAL:
+            if condition.kind in (CursorKind.INTEGER_LITERAL, CursorKind.CXX_BOOL_LITERAL_EXPR):
                 # one-time loop with "do { ... } while(0);", no need to instrument
                 # same goes for "while(1) { ... break ... }"
                 return
