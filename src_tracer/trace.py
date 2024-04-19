@@ -32,7 +32,7 @@ TEST_IS_ELEM    = 0b11100000
 SET_IS_ELEM     = 0b01000000
 
 TEST_ELEM       = 0b11111111
-SET_END         = ord('Q')
+SET_END         = ord('L')
 SET_RETURN      = ord('R')
 SET_RETURN_TAIL = ord('S')
 SET_FUNC_ANON   = ord('A')
@@ -185,7 +185,7 @@ class Trace:
                 # remove a leading 0
                 hexstring = hexstring[1:]
             res += elem.letter + hexstring
-            if elem.letter == 'Q':
+            if elem.letter == 'L':
                 return res
         # normally, a trace should end with F0
         return res
@@ -278,7 +278,7 @@ class TraceCompact(Trace):
                 count -= 1
             else:
                 break
-            if elem.letter == 'Q':
+            if elem.letter == 'L':
                 break
         if count != 0:
             raise ValueError(f"Trace ended, could not yield {count} elements")

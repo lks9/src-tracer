@@ -85,7 +85,7 @@ extern int _trace_buf_pos;
  #define _TRACE_SET_IS_ELEM         0b01000000
 
 #define _TRACE_TEST_ELEM            0b11111111
- #define _TRACE_SET_END             'Q'
+ #define _TRACE_SET_END             'L'
  #define _TRACE_SET_RETURN          'R'
  #define _TRACE_SET_RETURN_TAIL     'S'
  #define _TRACE_SET_FUNC_ANON       'A'
@@ -424,7 +424,7 @@ extern volatile int _retrace_fork_count;
     _RETRACE_ELEM('O', 0)
 
 #define _RETRACE_END() \
-    _RETRACE_ELEM('Q', 0)
+    _RETRACE_ELEM('L', 0)
 
 #define _RETRACE_TRY() \
     _RETRACE_ELEM('T', 0)
@@ -765,7 +765,7 @@ extern bool _trace_pointer_call;
     }
 
 #define _RETRACE_END_CBMC() { \
-    _RETRACE_CBMC('Q', 0); \
+    _RETRACE_CBMC('L', 0); \
     __CPROVER_assume(retrace_i == retrace_arr_len); \
     /* now check all past assertions */ \
     for (int i = 0; i < _retrace_assert_idx; i++) { \
