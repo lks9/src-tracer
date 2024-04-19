@@ -85,7 +85,7 @@ extern int _trace_buf_pos;
  #define _TRACE_SET_IS_ELEM         0b01000000
 
 #define _TRACE_TEST_ELEM            0b11111111
- #define _TRACE_SET_END             'L'
+ #define _TRACE_SET_END             'E'
  #define _TRACE_SET_RETURN          'R'
  #define _TRACE_SET_RETURN_TAIL     'S'
  #define _TRACE_SET_FUNC_ANON       'A'
@@ -100,8 +100,8 @@ extern int _trace_buf_pos;
  #define _TRACE_SET_ELSE            'O'
 /* 'F' is reserved, use _TRACE_SET_FORK */
  #define _TRACE_SET_FORK_reserved   'F'
-/* 'E' is reserved, use _TRACE_SET_CATCH */
- #define _TRACE_SET_CATCH_reserved  'E'
+/* 'J' is reserved, use _TRACE_SET_CATCH */
+ #define _TRACE_SET_CATCH_reserved  'J'
 /* 'D' is reserved, use _TRACE_SET_DATA */
  #define _TRACE_SET_DATA_reserved   'D'
 
@@ -424,13 +424,13 @@ extern volatile int _retrace_fork_count;
     _RETRACE_ELEM('O', 0)
 
 #define _RETRACE_END() \
-    _RETRACE_ELEM('L', 0)
+    _RETRACE_ELEM('E', 0)
 
 #define _RETRACE_TRY() \
     _RETRACE_ELEM('T', 0)
 
 #define _RETRACE_CATCH(cur_idx) { \
-    _RETRACE_ELEM('E', _trace_setjmp_idx - (cur_idx)); \
+    _RETRACE_ELEM('J', _trace_setjmp_idx - (cur_idx)); \
     /* _trace_setjmp_idx = cur_idx; */ \
 }
 
@@ -765,7 +765,7 @@ extern bool _trace_pointer_call;
     }
 
 #define _RETRACE_END_CBMC() { \
-    _RETRACE_CBMC('L', 0); \
+    _RETRACE_CBMC('E', 0); \
     __CPROVER_assume(retrace_i == retrace_arr_len); \
     /* now check all past assertions */ \
     for (int i = 0; i < _retrace_assert_idx; i++) { \
@@ -783,7 +783,7 @@ extern bool _trace_pointer_call;
     int cur_setjmp_idx = _trace_setjmp_idx; \
     int setjmp_res = setjmp_stmt; \
     if (setjmp_res != 0) { \
-        _RETRACE_CBMC('E', _trace_setjmp_idx - cur_setjmp_idx); \
+        _RETRACE_CBMC('J', _trace_setjmp_idx - cur_setjmp_idx); \
     } \
     setjmp_res; \
 })

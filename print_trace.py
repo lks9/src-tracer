@@ -118,7 +118,7 @@ for elem in trace:
         setjmp_indent.pop()
         # print as usual
         print_extra(elem.pretty(show_pos=args.show_pos))
-    elif elem.letter == 'E':
+    elif elem.letter == 'J':
         # longjmp, catch
         # restore indent
         indent = setjmp_indent[-elem.num -1]

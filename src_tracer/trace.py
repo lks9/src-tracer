@@ -32,7 +32,7 @@ TEST_IS_ELEM    = 0b11100000
 SET_IS_ELEM     = 0b01000000
 
 TEST_ELEM       = 0b11111111
-SET_END         = ord('L')
+SET_END         = ord('E')
 SET_RETURN      = ord('R')
 SET_RETURN_TAIL = ord('S')
 SET_FUNC_ANON   = ord('A')
@@ -46,8 +46,8 @@ SET_IF          = ord('I')
 SET_ELSE        = ord('O')
 #/* 'F' is reserved, use _TRACE_SET_ELEM2_FORK */
 SET_FORK_res    = ord('F')
-#/* 'E' is reserved, use _TRACE_SET_ELEM2_CATCH */
-SET_CATCH_res   = ord('E')
+#/* 'J' is reserved, use _TRACE_SET_ELEM2_CATCH */
+SET_CATCH_res   = ord('J')
 #/* 'D' is reserved, use _TRACE_SET_ELEM2_DATA */
 SET_DATA_res    = ord('D')
 
@@ -106,7 +106,7 @@ def letter(b, count=0):
     elif b & TEST_ELEM2 == SET_ELEM2_FORK:
         return 'F'
     elif b & TEST_ELEM2 == SET_ELEM2_CATCH:
-        return 'E'
+        return 'J'
     elif b & TEST_ELEM2 == SET_ELEM2_DATA:
         return 'D'
     raise ValueError(f"There is no letter for {bin(b)}")
@@ -185,7 +185,7 @@ class Trace:
                 # remove a leading 0
                 hexstring = hexstring[1:]
             res += elem.letter + hexstring
-            if elem.letter == 'L':
+            if elem.letter == 'E':
                 return res
         # normally, a trace should end with F0
         return res
@@ -278,7 +278,7 @@ class TraceCompact(Trace):
                 count -= 1
             else:
                 break
-            if elem.letter == 'L':
+            if elem.letter == 'E':
                 break
         if count != 0:
             raise ValueError(f"Trace ended, could not yield {count} elements")
