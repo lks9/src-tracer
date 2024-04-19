@@ -32,27 +32,24 @@ TEST_IS_ELEM    = 0b11100000
 SET_IS_ELEM     = 0b01000000
 
 TEST_ELEM       = 0b11111111
-SET_END         = 0b01000101 # 'E'
-SET_RETURN      = 0b01010010 # 'R'
-SET_RETURN_TAIL = 0b01001000 # 'H'
-SET_FUNC_ANON   = 0b01000001 # 'A'
-SET_TRY         = 0b01010011 # 'S'
-SET_PAUSE       = 0b01010000 # 'P'
+SET_END         = ord('Q')
+SET_RETURN      = ord('R')
+SET_RETURN_TAIL = ord('S')
+SET_FUNC_ANON   = ord('A')
+SET_TRY         = ord('T')
+SET_PAUSE       = ord('P')
 #/* FUNC_32 always comes with 4 bytes, a 32 bit function number! */
-SET_FUNC_32     = 0b01000110 # 'F'
-#/* 'T' and 'N' could be used instead of
+SET_FUNC_32     = ord('C')
+#/* 'I' and 'O' could be used instead of
 # * _TRACE_IE_BYTE_INIT for faster trace writing */
-SET_IF          = 0b01010100 # 'T'
-SET_ELSE        = 0b01001110 # 'N'
-#/* 'G' is reserved, use _TRACE_SET_FORK */
-SET_FORK_res    = 0b01000111 # 'G'
-#/* 'L' is reserved, use _TRACE_SET_CATCH */
-SET_CATCH_res   = 0b01001100 # 'L'
-#/* 'D' is reserved, use _TRACE_SET_DATA */
-SET_DATA_res    = 0b01000100 # 'D'
-#/* 'M' and 'B' are currently not supported */
-SET_FUNC_STR_res = 0b01001101 # 'M'
-SET_DATA_STR_res = 0b01000010 # 'B'
+SET_IF          = ord('I')
+SET_ELSE        = ord('O')
+#/* 'F' is reserved, use _TRACE_SET_ELEM2_FORK */
+SET_FORK_res    = ord('F')
+#/* 'E' is reserved, use _TRACE_SET_ELEM2_CATCH */
+SET_CATCH_res   = ord('E')
+#/* 'D' is reserved, use _TRACE_SET_ELEM2_DATA */
+SET_DATA_res    = ord('D')
 
 #/* 'X' to '_' are reserved */
 TEST_ELEM_res   = 0b11111000
@@ -62,9 +59,9 @@ TEST_IS_ELEM2   = 0b11100000
 SET_IS_ELEM2    = 0b01100000
 
 TEST_ELEM2      = 0b11111000
-SET_FORK        = 0b01100000
-SET_CATCH       = 0b01101000
-SET_DATA        = 0b01110000
+SET_ELEM2_FORK  = 0b01100000
+SET_ELEM2_CATCH = 0b01101000
+SET_ELEM2_DATA  = 0b01110000
 SET_ELEM2_res   = 0b01111000
 
 
@@ -99,18 +96,18 @@ byte_length = {
 def letter(b, count=0):
     if b & TEST_IE == SET_IE:
         if b & (1 << count):
-            return 'T'
+            return 'I'
         else:
-            return 'N'
+            return 'O'
     elif b & TEST_FUNC == SET_FUNC:
-        return 'F'
+        return 'C'
     elif b & TEST_IS_ELEM == SET_IS_ELEM:
         return chr(b)
-    elif b & TEST_ELEM2 == SET_FORK:
-        return 'G'
-    elif b & TEST_ELEM2 == SET_CATCH:
-        return 'L'
-    elif b & TEST_ELEM2 == SET_DATA:
+    elif b & TEST_ELEM2 == SET_ELEM2_FORK:
+        return 'F'
+    elif b & TEST_ELEM2 == SET_ELEM2_CATCH:
+        return 'E'
+    elif b & TEST_ELEM2 == SET_ELEM2_DATA:
         return 'D'
     raise ValueError(f"There is no letter for {bin(b)}")
 
@@ -188,7 +185,7 @@ class Trace:
                 # remove a leading 0
                 hexstring = hexstring[1:]
             res += elem.letter + hexstring
-            if elem.letter == 'E':
+            if elem.letter == 'Q':
                 return res
         # normally, a trace should end with F0
         return res
@@ -198,7 +195,7 @@ class Trace:
         Yield all function calls in a trace.
         """
         for elem in iter(self):
-            if elem.letter in ('F', 'S'):
+            if elem.letter in ('C', 'A'):
                 yield elem
 
 
@@ -281,7 +278,7 @@ class TraceCompact(Trace):
                 count -= 1
             else:
                 break
-            if elem.letter == 'E':
+            if elem.letter == 'Q':
                 break
         if count != 0:
             raise ValueError(f"Trace ended, could not yield {count} elements")
