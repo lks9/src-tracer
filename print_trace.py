@@ -100,7 +100,7 @@ setjmp_indent = []
 for elem in trace:
     if elem.letter == 'T' or elem.letter == 'N':
         print_with_count(f"{elem.letter}")
-    elif elem.letter == 'R':
+    elif elem.letter in ('R', 'H'):
         indent -= 1
         print_extra(elem.pretty(show_pos=args.show_pos))
     elif elem.letter == 'A':

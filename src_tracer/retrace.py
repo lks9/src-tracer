@@ -338,17 +338,12 @@ class SourceTraceReplayer:
                 while simgr.active != []:
                     simgr.explore(find=find, avoid=avoid, find_stash='traced')
 
-                # PART 2.5: handle unconstrained
+                # PART 3: handle unconstrained
                 if simgr.unconstrained != []:
                     self.try_solve_unconstrained(elem, simgr, database)
-                    # to break out of PART 2 loop if try_solve failed
+                    # to break out of PART 3 loop if try_solve failed
                     simgr.move(from_stash='unconstrained', to_stash='deadended')
-                    # final check is in PART 3
-
-            # PART 3: nothing found?
-            if simgr.traced == []:
-                log.warning("Could not find %s at all in simgr %s", elem.letter, simgr)
-                return (simgr, state)
+                    # final check is in PART 6
 
             # PART 4: merge states
             self.merge(simgr, 'traced', merging)
@@ -362,19 +357,24 @@ class SourceTraceReplayer:
                 state.solver.add(mem_int == trace_int)
                 state.solver.add(mem_letter == trace_letter)
 
-            # PART 6: drop all states not in traced
+            # PART 6: nothing found?
+            if simgr.traced == []:
+                log.warning("Could not find %s at all in simgr %s", elem.letter, simgr)
+                return (simgr, state)
+
+            # PART 7: drop all states not in traced
             simgr.drop(stash="avoid")
             simgr.drop(stash="unsat")
             simgr.drop(stash="traced", filter_func=lambda state: not state.satisfiable())
 
-            # PART 7: debugging
+            # PART 8: debugging
             if debug:
                 name = None
                 if not elem.bs == b'':
                     num = elem.num
                     if elem.letter == 'F' and database:
                         name = database.get_name(num)
-                if len(simgr.traced) > 1:
+                if len(simgr.traced) != 1:
                     log.debug(elem.pretty(name=name) + f" (found {len(simgr.traced)})")
                 else:
                     log.debug(elem.pretty(name=name))

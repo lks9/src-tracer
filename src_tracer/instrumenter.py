@@ -8,6 +8,7 @@ from clang.cindex import Index, CursorKind, StorageClass
 class Instrumenter:
 
     def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
+                 boolop_full_instrument=False, assume_tailcall=True,
                  return_instrument=True, inline_instrument=False, main_instrument=True, main_spelling="main",
                  main_close=False, anon_instrument=False,
                  function_instrument=True, inner_instrument=True, call_instrument=True, pointer_call_instrument=False):
@@ -19,7 +20,9 @@ class Instrumenter:
         self.trace_store_dir = trace_store_dir
         self.case_instrument = case_instrument
         self.boolop_instrument = boolop_instrument
+        self.boolop_full_instrument = boolop_full_instrument
         self.return_instrument = return_instrument
+        self.assume_tailcall = assume_tailcall
         self.inline_instrument = inline_instrument
         self.main_instrument = main_instrument
         self.main_spelling = main_spelling
@@ -44,7 +47,10 @@ class Instrumenter:
             with open(filename, "rb") as f:
                 content = f.read()
             self.annotations[filename] = {"content": content}
-            self.annotations[filename][0] = b'#include <src_tracer/_after_instrument.h>\n'
+            prolog = b'#include <src_tracer/_after_instrument.h>\n'
+            if self.pointer_call_instrument:
+                prolog = b'#define _TRACE_POINTER_CALLS_ONLY\n' + prolog
+            self.annotations[filename][0] = prolog
         return filename
 
     def orig_file_and_line(self, location):
@@ -107,14 +113,8 @@ class Instrumenter:
                 func_num = self.func_num(node)
                 self.add_annotation(b" _FUNC(" + bytes(hex(func_num), "utf-8") + b") ", body.extent.start, 1)
 
-        # handle returns
-        if self.return_instrument:
-            for descendant in node.walk_preorder():
-                if descendant.kind == CursorKind.RETURN_STMT:
-                    self.add_annotation(b"_FUNC_RETURN ", descendant.extent.start)
-            self.add_annotation(b"_FUNC_RETURN ", node.extent.end, -1)
-
         # special treatment for main function
+        close = False
         if self.main_instrument and node.spelling == self.main_spelling:
             if not self.function_instrument:
                 # well, we need something to start...
@@ -130,10 +130,53 @@ class Instrumenter:
             self.prepent_annotation(b' _TRACE_OPEN("' + bytes(trace_path, "utf8") + b'") ', body.extent.start, 1)
 
             if self.main_close:
-                for descendant in node.walk_preorder():
-                    if descendant.kind == CursorKind.RETURN_STMT:
-                        self.add_annotation(b"_TRACE_CLOSE ", descendant.extent.start)
-                self.add_annotation(b"_TRACE_CLOSE ", node.extent.end, -1)
+                close = True
+
+        # handle returns
+        self.visit_function_returns(node, close, self.return_instrument)
+
+    def visit_function_returns(self, node, close, ret):
+        if not ret and not close:
+            # nothing to do
+            return
+
+        for ret_stmt in node.walk_preorder():
+            if ret_stmt.kind == CursorKind.RETURN_STMT:
+                if self.is_expr_only(ret_stmt):
+                    self.add_annotation(b"{ ", ret_stmt.extent.start)
+                    if ret:
+                        self.add_annotation(b"_FUNC_RETURN ", ret_stmt.extent.start)
+                    if close:
+                        self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
+                    semi_off = self.find_next_semi(ret_stmt.extent.end)
+                    self.prepent_annotation(b" }", ret_stmt.extent.end, semi_off + 1)
+                elif self.assume_tailcall:
+                    self.add_annotation(b"{ ", ret_stmt.extent.start)
+                    if ret:
+                        self.add_annotation(b"_FUNC_RETURN_TAIL ", ret_stmt.extent.start)
+                    if close:
+                        self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
+                    semi_off = self.find_next_semi(ret_stmt.extent.end)
+                    self.prepent_annotation(b" }", ret_stmt.extent.end, semi_off + 1)
+                else:
+                    childs = [c for c in ret_stmt.get_children()]
+                    ret_expr = childs[0]
+                    ret_type = bytes(ret_expr.type.spelling, "utf-8")
+                    macro = b""
+                    if ret:
+                        macro = macro + b"_FUNC_RETURN"
+                    if close:
+                        macro = macro + b"_TRACE_CLOSE"
+                    if ret_type == b"void":
+                        macro = macro + b"_VOID"
+                    self.add_annotation(macro + b"_AFTER(", ret_stmt.extent.start)
+                    self.prepent_annotation(b", " + ret_type + b", ", ret_expr.extent.start)
+                    self.add_annotation(b")", ret_expr.extent.end)
+        # void functions just end, and even non-void main needs no return
+        if ret:
+            self.add_annotation(b"_FUNC_RETURN ", node.extent.end, -1)
+        if close:
+            self.add_annotation(b"_TRACE_CLOSE ", node.extent.end, -1)
 
     def get_content(self, start, end):
         filename = self.filename(start)
@@ -247,7 +290,7 @@ class Instrumenter:
             raise Exception
 
         condition = children[0]
-        if condition.kind == CursorKind.INTEGER_LITERAL:
+        if condition.kind in (CursorKind.INTEGER_LITERAL, CursorKind.CXX_BOOL_LITERAL_EXPR):
             # constant value? no branching, no need to instrument
             return
 
@@ -291,25 +334,32 @@ class Instrumenter:
     # the ?: ternary operator
     def visit_conditional_op(self, node):
         self.ifs.append(node)
-        children = [c for c in node.get_children()]
-        condition = children[0]
+        childs = [c for c in node.get_children()]
+        condition = childs[0]
 
-        if condition.kind == CursorKind.INTEGER_LITERAL:
+        if condition.kind in (CursorKind.INTEGER_LITERAL, CursorKind.CXX_BOOL_LITERAL_EXPR):
             # constant value? no branching, no need to instrument
+            return
+        if not self.boolop_full_instrument and len(childs) == 3 and \
+                self.is_expr_only(childs[1]) and self.is_expr_only(childs[2]):
+            # "logical" subexpression, no function call, no control structure block, hence no branching!
             return
 
         self.add_annotation(b" _CONDITION(", condition.extent.start)
         self.add_annotation(b") ", condition.extent.end)
 
     def visit_binary_op(self, node):
-        children = [c for c in node.get_children()]
-        if len(children) != 2:
+        childs = [c for c in node.get_children()]
+        if len(childs) != 2:
             raise Exception
-        left = children[0]
-        right = children[1]
+        left = childs[0]
+        right = childs[1]
 
-        if left.kind == CursorKind.INTEGER_LITERAL:
+        if left.kind in (CursorKind.INTEGER_LITERAL, CursorKind.CXX_BOOL_LITERAL_EXPR):
             # constant value? no branching, no need to instrument
+            return
+        if not self.boolop_full_instrument and self.is_expr_only(right):
+            # "logical" subexpression, no function call, no control structure block, hence no branching!
             return
 
         if self.search(rb"(&&|\|\|)", left.extent.end, right.extent.start):
@@ -331,7 +381,7 @@ class Instrumenter:
                 condition = childs[-1]
             else:
                 condition = childs[0]
-            if condition.kind == CursorKind.INTEGER_LITERAL:
+            if condition.kind in (CursorKind.INTEGER_LITERAL, CursorKind.CXX_BOOL_LITERAL_EXPR):
                 # one-time loop with "do { ... } while(0);", no need to instrument
                 # same goes for "while(1) { ... break ... }"
                 return
@@ -468,8 +518,18 @@ class Instrumenter:
                     normal_call = True
         return not normal_call
 
+    def is_expr_only(self, node):
+        # returns False when node includes some call or some block statement
+        #         (=^ evaluation might branch)
+        if node.kind in (CursorKind.CALL_EXPR, CursorKind.COMPOUND_STMT):
+            return False
+        for child in node.get_children():
+            if not self.is_expr_only(child):
+                return False
+        return True
+
     def last_call_before(self, node):
-        # Returns the last child node (if any) of kind CALL_EXPR that would be
+        # Returns the last descendant node (if any) of kind CALL_EXPR that would be
         # evaluated before the evaluation of the current node.
         # Otherwise it returns None.
         childs = [c for c in node.get_children()]
@@ -480,8 +540,6 @@ class Instrumenter:
             if rec_last is not None:
                 return rec_last
         return None
-
-    last_calls = []
 
     def visit_call(self, node):
         # Some calls need to be anotated

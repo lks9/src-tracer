@@ -87,6 +87,7 @@ extern unsigned char _trace_ie_byte;
 #define _TRACE_TEST_ELEM            0b11111111
  #define _TRACE_SET_END             0b01000101 // 'E'
  #define _TRACE_SET_RETURN          0b01010010 // 'R'
+ #define _TRACE_SET_RETURN_TAIL     0b01001000 // 'H'
  #define _TRACE_SET_FUNC_ANON       0b01000001 // 'A'
  #define _TRACE_SET_TRY             0b01010011 // 'S'
  #define _TRACE_SET_UNTRY           0b01010101 // 'U'
@@ -299,10 +300,10 @@ extern unsigned char _trace_ie_byte;
         } \
     }
 
-#define _TRACE_RETURN() \
+#define _TRACE_RETURN(type) \
     if (_TRACE_RETURN_CHECK) { \
         _TRACE_IE_FINISH \
-        _TRACE_PUT(_TRACE_SET_RETURN); \
+        _TRACE_PUT(type); \
     }
 
 #define _TRACE_END() { \
@@ -388,9 +389,9 @@ extern volatile int _retrace_fork_count;
         _TRACE_POINTER_CALL_RESET; \
     }
 
-#define _RETRACE_RETURN() \
+#define _RETRACE_RETURN(type) \
     if (_TRACE_RETURN_CHECK) { \
-        _RETRACE_ELEM('R', 0); \
+        _RETRACE_ELEM(type, 0); \
     }
 
 #define _RETRACE_IF() \
@@ -537,6 +538,40 @@ extern bool _trace_pointer_call;
 #define _TRACE_RETURN_CHECK 1
 #endif
 
+/* return after */
+#define _FUNC_RETURN_AFTER(ret, type, expr) { \
+    type _trace_return_result = (expr); \
+    _FUNC_RETURN \
+    return _trace_return_result; \
+}
+#define _FUNC_RETURN_VOID_AFTER(ret, type, expr) { \
+    (expr); \
+    _FUNC_RETURN \
+    return; \
+}
+#define _TRACE_CLOSE_AFTER(ret, type, expr) { \
+    type _trace_return_result = (expr); \
+    _TRACE_CLOSE \
+    return _trace_return_result; \
+}
+#define _TRACE_CLOSE_VOID_AFTER(ret, type, expr) { \
+    (expr); \
+    _TRACE_CLOSE \
+    return; \
+}
+#define _FUNC_RETURN_TRACE_CLOSE_AFTER(ret, type, expr) { \
+    type _trace_return_result = (expr); \
+    _FUNC_RETURN \
+    _TRACE_CLOSE \
+    return _trace_return_result; \
+}
+#define _FUNC_RETURN_TRACE_CLOSE_VOID_AFTER(ret, type, expr) { \
+    (expr); \
+    _FUNC_RETURN \
+    _TRACE_CLOSE \
+    return; \
+}
+
 /*
  * Macros used in the instrumentation.
  * 2 versions: _TRACE_MODE and _RETRACE_MODE
@@ -549,7 +584,8 @@ extern bool _trace_pointer_call;
 #define _ELSE               _IS_RETRACE(_RETRACE_ELSE(), _TRACE_ELSE())
 #define _CONDITION(cond)    _is_retrace_condition(cond)
 #define _FUNC(num)          _TRACE_FUNC_INIT; _IS_RETRACE(_RETRACE_FUNC(num), _TRACE_FUNC(num))
-#define _FUNC_RETURN        _IS_RETRACE(_RETRACE_RETURN(), _TRACE_RETURN())
+#define _FUNC_RETURN        _IS_RETRACE(_RETRACE_RETURN('R'), _TRACE_RETURN(_TRACE_SET_RETURN))
+#define _FUNC_RETURN_TAIL   _IS_RETRACE(_RETRACE_RETURN('H'), _TRACE_RETURN(_TRACE_SET_RETURN_TAIL))
 // non-macro version for switch
 #define _SWITCH(num)        _is_retrace_switch(num)
 // bit-trace version for switch
@@ -586,7 +622,8 @@ extern bool _trace_pointer_call;
 #define _ELSE               ;_TRACE_ELSE();
 #define _CONDITION(cond)    _trace_condition(cond)
 #define _FUNC(num)          _TRACE_FUNC_INIT; _TRACE_FUNC(num);
-#define _FUNC_RETURN        ;_TRACE_RETURN();
+#define _FUNC_RETURN        ;_TRACE_RETURN(_TRACE_SET_RETURN);
+#define _FUNC_RETURN_TAIL   ;_TRACE_RETURN(_TRACE_SET_RETURN_TAIL);
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num(_TRACE_SET_DATA, num)
 // bit-trace version for switch
@@ -625,6 +662,7 @@ extern bool _trace_pointer_call;
 #define _CONDITION(cond)    _text_trace_condition(cond)
 #define _FUNC(num)          ;_TRACE_NUM_TEXT('F', ((unsigned int)(num)));
 #define _FUNC_RETURN        ;_TRACE_PUT_TEXT('R');
+#define _FUNC_RETURN_TAIL   ;_TRACE_PUT_TEXT('H');
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num_text('D', ((unsigned int)(num)))
 // experimental version for switch
@@ -651,7 +689,8 @@ extern bool _trace_pointer_call;
 #define _ELSE               ;_RETRACE_ELSE();
 #define _CONDITION(cond)    _retrace_condition(cond)
 #define _FUNC(num)          _TRACE_FUNC_INIT; _RETRACE_FUNC(num);
-#define _FUNC_RETURN        ;_RETRACE_RETURN();
+#define _FUNC_RETURN        ;_RETRACE_RETURN('R');
+#define _FUNC_RETURN_TAIL   ;_RETRACE_RETURN('H');
 // non-macro version for switch
 #define _SWITCH(num)        _retrace_elem('D', num)
 // bit-trace version for switch
@@ -737,6 +776,7 @@ extern bool _trace_pointer_call;
 #define _CONDITION(cond)    cond
 #define _FUNC(num)          _TRACE_FUNC_INIT; _RETRACE_FUNC_CBMC(num);
 #define _FUNC_RETURN        ;if(_TRACE_RETURN_CHECK) { _RETRACE_CBMC('R', 0); };
+#define _FUNC_RETURN_TAIL   ;if(_TRACE_RETURN_CHECK) { _RETRACE_CBMC('H', 0); };
 #define _SWITCH(num)        ;_RETRACE_CBMC('D', num);
 #define _SWITCH_START(id,cnt) ;bool _cflow_switch_##id = 1;
 #define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
@@ -768,6 +808,7 @@ extern bool _trace_pointer_call;
 #define _CONDITION(cond)    cond
 #define _FUNC(num)          /* nothing here */
 #define _FUNC_RETURN        /* nothing here */
+#define _FUNC_RETURN_TAIL   /* nothing here */
 #define _SWITCH(num)        num
 #define _SWITCH_START(id,cnt) /* nothing here */
 #define _CASE(num, id, cnt) /* nothing here */
