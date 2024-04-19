@@ -143,15 +143,21 @@ class Instrumenter:
         for ret_stmt in node.walk_preorder():
             if ret_stmt.kind == CursorKind.RETURN_STMT:
                 if self.is_expr_only(ret_stmt):
+                    self.add_annotation(b"{ ", ret_stmt.extent.start)
                     if ret:
                         self.add_annotation(b"_FUNC_RETURN ", ret_stmt.extent.start)
                     if close:
                         self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
+                    semi_off = self.find_next_semi(ret_stmt.extent.end)
+                    self.prepent_annotation(b" }", ret_stmt.extent.end, semi_off + 1)
                 elif self.assume_tailcall:
+                    self.add_annotation(b"{ ", ret_stmt.extent.start)
                     if ret:
                         self.add_annotation(b"_FUNC_RETURN_TAIL ", ret_stmt.extent.start)
                     if close:
                         self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
+                    semi_off = self.find_next_semi(ret_stmt.extent.end)
+                    self.prepent_annotation(b" }", ret_stmt.extent.end, semi_off + 1)
                 else:
                     childs = [c for c in ret_stmt.get_children()]
                     ret_expr = childs[0]
