@@ -8,7 +8,7 @@ from clang.cindex import Index, CursorKind, StorageClass
 class Instrumenter:
 
     def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
-                 boolop_full_instrument=False,
+                 boolop_full_instrument=False, assume_tailcall=True,
                  return_instrument=True, inline_instrument=False, main_instrument=True, main_spelling="main",
                  main_close=False, anon_instrument=False,
                  function_instrument=True, inner_instrument=True, call_instrument=True, pointer_call_instrument=False):
@@ -22,6 +22,7 @@ class Instrumenter:
         self.boolop_instrument = boolop_instrument
         self.boolop_full_instrument = boolop_full_instrument
         self.return_instrument = return_instrument
+        self.assume_tailcall = assume_tailcall
         self.inline_instrument = inline_instrument
         self.main_instrument = main_instrument
         self.main_spelling = main_spelling
@@ -144,6 +145,11 @@ class Instrumenter:
                 if self.is_expr_only(ret_stmt):
                     if ret:
                         self.add_annotation(b"_FUNC_RETURN ", ret_stmt.extent.start)
+                    if close:
+                        self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
+                elif self.assume_tailcall:
+                    if ret:
+                        self.add_annotation(b"_FUNC_RETURN_TAIL ", ret_stmt.extent.start)
                     if close:
                         self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
                 else:

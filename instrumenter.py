@@ -17,6 +17,9 @@ ap.add_argument("--database",
                 help="Custom database path.")
 ap.add_argument("--no-return", action='store_true',
                 help="Do not instrument returns.")
+ap.add_argument("--no-tailcall-return", action='store_true',
+                help="Do not assume that returns with function calls are all tailcalls. "
+                "This makes recording less efficient!")
 ap.add_argument("--switch-number", action='store_true',
                 help="Instrument to record switch number instead of case based bit-tracing.")
 ap.add_argument("--short-circuit", action='store_true',
@@ -73,6 +76,7 @@ case_instrument = not args.switch_number
 boolop_instrument = args.full or args.short_circuit or args.short_circuit_full
 boolop_full_instrument = args.full or args.short_circuit_full
 return_instrument = not args.no_return
+assume_tailcall = not args.no_tailcall_return
 inline_instrument = args.full or args.inline
 main_close = not args.no_close
 anon_instrument = args.anon
@@ -84,7 +88,8 @@ pointer_call_instrument = args.full or args.pointer_calls
 # do the instrumentation
 instrumenter = Instrumenter(database, store_dir, case_instrument=case_instrument,
                             boolop_instrument=boolop_instrument, boolop_full_instrument=boolop_full_instrument,
-                            return_instrument=return_instrument, inline_instrument=inline_instrument,
+                            return_instrument=return_instrument, assume_tailcall=assume_tailcall,
+                            inline_instrument=inline_instrument,
                             main_instrument=main_instrument, main_spelling=main_spelling, main_close=main_close,
                             anon_instrument=anon_instrument,
                             function_instrument=function_instrument, inner_instrument=inner_instrument,
