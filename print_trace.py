@@ -98,16 +98,16 @@ if args.pretty == -1:
 setjmp_indent = []
 
 for elem in trace:
-    if elem.letter == 'T' or elem.letter == 'N':
+    if elem.letter == 'I' or elem.letter == 'O':
         print_with_count(f"{elem.letter}")
-    elif elem.letter in ('R', 'H'):
+    elif elem.letter in ('R', 'S'):
         indent -= 1
         print_extra(elem.pretty(show_pos=args.show_pos))
     elif elem.letter == 'A':
         # anonymous function call
         print_extra(elem.pretty(show_pos=args.show_pos))
         indent += 1
-    elif elem.letter == 'S':
+    elif elem.letter == 'T':
         # setjmp, try
         # save current indent
         setjmp_indent.append(indent)
@@ -118,7 +118,7 @@ for elem in trace:
         setjmp_indent.pop()
         # print as usual
         print_extra(elem.pretty(show_pos=args.show_pos))
-    elif elem.letter == 'L':
+    elif elem.letter == 'J':
         # longjmp, catch
         # restore indent
         indent = setjmp_indent[-elem.num -1]
@@ -128,7 +128,7 @@ for elem in trace:
         print_extra(elem.pretty(show_pos=args.show_pos))
     else:
         num = elem.num
-        if elem.letter == 'F':
+        if elem.letter == 'C':
             if args.pretty in (5,3):
                 name = database.get_name(num)
                 # All upper case letters in the trace are treated as elem,
