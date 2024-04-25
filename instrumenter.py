@@ -10,27 +10,43 @@ from src_tracer.database import Database
 # arguments
 ap = argparse.ArgumentParser()
 ap.add_argument("filename",
-                help="pre-preccessed C or C++ file to instrument")
+                help="Pre-preccessed C or C++ file to instrument.")
 ap.add_argument("store_dir", nargs='?',
-                help="where to store database and traces")
+                help="Where to store database and traces.")
 ap.add_argument("--database",
-                help="custom database path")
+                help="Custom database path.")
 ap.add_argument("--no-return", action='store_true',
-                help="do not instrument returns")
-ap.add_argument("--cases", action='store_true',
-                help="instrument all switch cases instead of switch number (experimental)")
+                help="Do not instrument returns.")
+ap.add_argument("--no-tailcall-return", action='store_true',
+                help="Do not assume that returns with function calls are all tailcalls. "
+                "This makes recording less efficient!")
+ap.add_argument("--switch-number", action='store_true',
+                help="Instrument to record switch number instead of case based bit-tracing.")
 ap.add_argument("--short-circuit", action='store_true',
-                help="instrument short circuit operators (experimental)")
+                help="Instrument short circuit operators.")
+ap.add_argument("--short-circuit-full", action='store_true',
+                help="Instrument almost all short circuit operators, even if unnecessary (implies --short-circuit).")
 ap.add_argument("--no-inner", action='store_true',
-                help="do not instrument any control structrure including if, else, while, for")
+                help="Do not instrument any control structrure including if, else, while, for.")
 ap.add_argument("--inline", action='store_true',
-                help="instrument inline function calls and returns")
+                help="Instrument inline function calls and returns.")
 ap.add_argument("--no-main", action='store_true',
-                help="do not instrument the main function to start tracing")
+                help="Do not instrument the main function to start trace recording.")
+ap.add_argument("--record",
+                help="Start trace recording in other function than main (implies --no-main).")
+ap.add_argument("--no-close", action='store_true',
+                help="Do not stop trace recording in main (or other) function.")
 ap.add_argument("--anon", action='store_true',
-                help="instrument all functions without a number")
+                help="Instrument all functions without a number.")
 ap.add_argument("--no-functions", action='store_true',
-                help="do not instrument functions at all")
+                help="Do not instrument functions at all.")
+ap.add_argument("--no-calls", action='store_true',
+                help="Do not instrument any calls. "
+                "Currently we instrument exit() and friends, fork() and setjmp().")
+ap.add_argument("--pointer-calls", action='store_true',
+                help="Instrument pointer calls. In effect, other function calls and returns wont be traced.")
+ap.add_argument("--full", action='store_true',
+                help="Instrument everything. Implies positive arguments above.")
 args = ap.parse_args()
 
 # trace store dir
@@ -49,11 +65,35 @@ except sqlite3.OperationalError:
     error = "the given path is not correct, make sure the dir exists beforehand"
     raise Exception(error)
 
+# custom trace recording start?
+main_instrument = not args.no_main
+main_spelling = "main"
+if args.record:
+    main_instrument = True
+    main_spelling = args.record
+
+case_instrument = not args.switch_number
+boolop_instrument = args.full or args.short_circuit or args.short_circuit_full
+boolop_full_instrument = args.full or args.short_circuit_full
+return_instrument = not args.no_return
+assume_tailcall = not args.no_tailcall_return
+inline_instrument = args.full or args.inline
+main_close = not args.no_close
+anon_instrument = args.anon
+function_instrument = not args.no_functions
+inner_instrument = not args.no_inner
+call_instrument = not args.no_calls
+pointer_call_instrument = args.full or args.pointer_calls
+
 # do the instrumentation
-instrumenter = Instrumenter(database, store_dir, case_instrument=args.cases, boolop_instrument=args.short_circuit,
-                            return_instrument=not args.no_return, inline_instrument=args.inline,
-                            main_instrument=not args.no_main, anon_instrument=args.anon,
-                            function_instrument=not args.no_functions, inner_instrument=not args.no_inner)
+instrumenter = Instrumenter(database, store_dir, case_instrument=case_instrument,
+                            boolop_instrument=boolop_instrument, boolop_full_instrument=boolop_full_instrument,
+                            return_instrument=return_instrument, assume_tailcall=assume_tailcall,
+                            inline_instrument=inline_instrument,
+                            main_instrument=main_instrument, main_spelling=main_spelling, main_close=main_close,
+                            anon_instrument=anon_instrument,
+                            function_instrument=function_instrument, inner_instrument=inner_instrument,
+                            call_instrument=call_instrument, pointer_call_instrument=pointer_call_instrument)
 instrumenter.parse(args.filename)
 instrumenter.annotate_all(args.filename)
 database.close_connection()

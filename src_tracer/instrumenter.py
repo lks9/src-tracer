@@ -8,8 +8,10 @@ from clang.cindex import Index, CursorKind, StorageClass
 class Instrumenter:
 
     def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
-                 return_instrument=True, inline_instrument=False, main_instrument=True, anon_instrument=False,
-                 function_instrument=True, inner_instrument=True):
+                 boolop_full_instrument=False, assume_tailcall=True,
+                 return_instrument=True, inline_instrument=False, main_instrument=True, main_spelling="main",
+                 main_close=False, anon_instrument=False,
+                 function_instrument=True, inner_instrument=True, call_instrument=True, pointer_call_instrument=False):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
@@ -18,20 +20,26 @@ class Instrumenter:
         self.trace_store_dir = trace_store_dir
         self.case_instrument = case_instrument
         self.boolop_instrument = boolop_instrument
+        self.boolop_full_instrument = boolop_full_instrument
         self.return_instrument = return_instrument
+        self.assume_tailcall = assume_tailcall
         self.inline_instrument = inline_instrument
         self.main_instrument = main_instrument
+        self.main_spelling = main_spelling
+        self.main_close = main_close
         self.anon_instrument = anon_instrument
         self.function_instrument = function_instrument
         self.inner_instrument = inner_instrument
+        self.call_instrument = call_instrument
+        self.pointer_call_instrument = pointer_call_instrument
 
         self.ifs = []
         self.loops = []
         self.switchis = []
+        self.trys = []
         self.check_locations = []
 
         self.annotations = {}
-
 
     def filename(self, location):
         filename = location.file.name
@@ -39,7 +47,10 @@ class Instrumenter:
             with open(filename, "rb") as f:
                 content = f.read()
             self.annotations[filename] = {"content": content}
-            self.annotations[filename][0] = b'#include <src_tracer/_after_instrument.h>\n'
+            prolog = b'#include <src_tracer/_after_instrument.h>\n'
+            if self.pointer_call_instrument:
+                prolog = b'#define _TRACE_POINTER_CALLS_ONLY\n' + prolog
+            self.annotations[filename][0] = prolog
         return filename
 
     def orig_file_and_line(self, location):
@@ -60,8 +71,8 @@ class Instrumenter:
     def func_num(self, node):
         (file, line) = self.orig_file_and_line(node.extent.start)
         name = node.spelling
-        pre_file = self.filename(node.extent.start)
-        offset = node.extent.start.offset
+        # pre_file = self.filename(node.extent.start)
+        # offset = node.extent.start.offset
         try:
             self.database.insert_to_table(file, line, name)
         except sqlite3.OperationalError:
@@ -102,15 +113,9 @@ class Instrumenter:
                 func_num = self.func_num(node)
                 self.add_annotation(b" _FUNC(" + bytes(hex(func_num), "utf-8") + b") ", body.extent.start, 1)
 
-        # handle returns
-        if self.return_instrument:
-            for descendant in node.walk_preorder():
-                if descendant.kind == CursorKind.RETURN_STMT:
-                    self.add_annotation(b"_FUNC_RETURN ", descendant.extent.start)
-            self.add_annotation(b"_FUNC_RETURN ", node.extent.end, -1)
-
         # special treatment for main function
-        if self.main_instrument and node.spelling == "main":
+        close = False
+        if self.main_instrument and node.spelling == self.main_spelling:
             if not self.function_instrument:
                 # well, we need something to start...
                 self.add_annotation(b" _FUNC(0) ", body.extent.start, 1)
@@ -124,10 +129,62 @@ class Instrumenter:
             trace_path = os.path.join(os.path.abspath(self.trace_store_dir), trace_fname)
             self.prepent_annotation(b' _TRACE_OPEN("' + bytes(trace_path, "utf8") + b'") ', body.extent.start, 1)
 
+            if self.main_close:
+                close = True
+
+        # handle returns
+        self.visit_function_returns(node, close, self.return_instrument)
+
+    def visit_function_returns(self, node, close, ret):
+        if not ret and not close:
+            # nothing to do
+            return
+
+        for ret_stmt in node.walk_preorder():
+            if ret_stmt.kind == CursorKind.RETURN_STMT:
+                if self.is_expr_only(ret_stmt):
+                    self.add_annotation(b"{ ", ret_stmt.extent.start)
+                    if ret:
+                        self.add_annotation(b"_FUNC_RETURN ", ret_stmt.extent.start)
+                    if close:
+                        self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
+                    semi_off = self.find_next_semi(ret_stmt.extent.end)
+                    self.prepent_annotation(b" }", ret_stmt.extent.end, semi_off + 1)
+                elif self.assume_tailcall:
+                    self.add_annotation(b"{ ", ret_stmt.extent.start)
+                    if ret:
+                        self.add_annotation(b"_FUNC_RETURN_TAIL ", ret_stmt.extent.start)
+                    if close:
+                        self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
+                    semi_off = self.find_next_semi(ret_stmt.extent.end)
+                    self.prepent_annotation(b" }", ret_stmt.extent.end, semi_off + 1)
+                else:
+                    childs = [c for c in ret_stmt.get_children()]
+                    ret_expr = childs[0]
+                    ret_type = bytes(ret_expr.type.spelling, "utf-8")
+                    macro = b""
+                    if ret:
+                        macro = macro + b"_FUNC_RETURN"
+                    if close:
+                        macro = macro + b"_TRACE_CLOSE"
+                    if ret_type == b"void":
+                        macro = macro + b"_VOID"
+                    self.add_annotation(macro + b"_AFTER(", ret_stmt.extent.start)
+                    self.prepent_annotation(b", " + ret_type + b", ", ret_expr.extent.start)
+                    self.add_annotation(b")", ret_expr.extent.end)
+        # void functions just end, and even non-void main needs no return
+        if ret:
+            self.add_annotation(b"_FUNC_RETURN ", node.extent.end, -1)
+        if close:
+            self.add_annotation(b"_TRACE_CLOSE ", node.extent.end, -1)
+
     def get_content(self, start, end):
         filename = self.filename(start)
         content = self.annotations[filename]["content"]
         return content[start.offset: end.offset]
+
+    def node_content(self, node):
+        return self.get_content(node.extent.start, node.extent.end)
 
     def find_next_semi(self, location):
         filename = self.filename(location)
@@ -232,6 +289,11 @@ class Instrumenter:
             print(self.get_content(node.extent.start, node.extent.end))
             raise Exception
 
+        condition = children[0]
+        if condition.kind in (CursorKind.INTEGER_LITERAL, CursorKind.CXX_BOOL_LITERAL_EXPR):
+            # constant value? no branching, no need to instrument
+            return
+
         if_body = children[1]
         if len(children) == 3:
             else_body = children[2]
@@ -272,17 +334,33 @@ class Instrumenter:
     # the ?: ternary operator
     def visit_conditional_op(self, node):
         self.ifs.append(node)
-        children = [c for c in node.get_children()]
-        condition = children[0]
+        childs = [c for c in node.get_children()]
+        condition = childs[0]
+
+        if condition.kind in (CursorKind.INTEGER_LITERAL, CursorKind.CXX_BOOL_LITERAL_EXPR):
+            # constant value? no branching, no need to instrument
+            return
+        if not self.boolop_full_instrument and len(childs) == 3 and \
+                self.is_expr_only(childs[1]) and self.is_expr_only(childs[2]):
+            # "logical" subexpression, no function call, no control structure block, hence no branching!
+            return
+
         self.add_annotation(b" _CONDITION(", condition.extent.start)
         self.add_annotation(b") ", condition.extent.end)
 
     def visit_binary_op(self, node):
-        children = [c for c in node.get_children()]
-        if len(children) != 2:
+        childs = [c for c in node.get_children()]
+        if len(childs) != 2:
             raise Exception
-        left = children[0]
-        right = children[1]
+        left = childs[0]
+        right = childs[1]
+
+        if left.kind in (CursorKind.INTEGER_LITERAL, CursorKind.CXX_BOOL_LITERAL_EXPR):
+            # constant value? no branching, no need to instrument
+            return
+        if not self.boolop_full_instrument and self.is_expr_only(right):
+            # "logical" subexpression, no function call, no control structure block, hence no branching!
+            return
 
         if self.search(rb"(&&|\|\|)", left.extent.end, right.extent.start):
             # found short-circuit && or ||
@@ -295,6 +373,19 @@ class Instrumenter:
         if not self.check_location(node.extent.start, [b"for", b"while", b"do"]):
             print("Check location failed for loop")
             return
+
+        # constant loop conditions do not need instrumentation
+        if node.kind in (CursorKind.DO_STMT, CursorKind.WHILE_STMT):
+            childs = [c for c in node.get_children()]
+            if CursorKind.DO_STMT:
+                condition = childs[-1]
+            else:
+                condition = childs[0]
+            if condition.kind in (CursorKind.INTEGER_LITERAL, CursorKind.CXX_BOOL_LITERAL_EXPR):
+                # one-time loop with "do { ... } while(0);", no need to instrument
+                # same goes for "while(1) { ... break ... }"
+                return
+
         body = None
         for child in node.get_children():
             if (child.kind == CursorKind.COMPOUND_STMT):
@@ -328,24 +419,55 @@ class Instrumenter:
 #            if (descendant.kind in (CursorKind.RETURN_STMT, CursorKind.GOTO_STMT)):
 #                self.add_annotation(b"_LOOP_END(" + loop_id + b") ", descendant.extent.start)
 
-    def visit_case(self, node, switch_id, case_id, bits_needed):
+    def case_pos_after(self, node):
         if node.kind == CursorKind.CASE_STMT:
             number_end = [c for c in node.get_children()][0].extent.end
         else:
             number_end = node.extent.start
+        return number_end
+
+    def visit_case(self, node, switch_id, case_id, bits_needed):
+        number_end = self.case_pos_after(node)
         try:
             colon_off = self.find_next_colon(number_end)
-            self.add_annotation(b" _CASE(" + case_id + b", " + switch_id + b", " + bits_needed + b") ",
-                                number_end, colon_off+1)
         except IndexError:
             print(b"Failed to annotate _CASE(" + case_id + b", " + switch_id + b", " + bits_needed + b") ")
+        self.add_annotation(b" _CASE(" + case_id + b", " + switch_id + b", " + bits_needed + b") ",
+                                number_end, colon_off+1)
+
+    def append_case(self, node, case_node_list):
+        # when the prev node is a fall-through, we can skip annotation of prev node
+        if len(case_node_list) > 0:
+            prev_node = case_node_list[-1]
+            prev_end = self.case_pos_after(prev_node)
+            try:
+                between = self.get_content(prev_end, node.extent.start)
+                # In between 'case prev' and 'case next', are there only spaces?
+                # (re is complicated since we also handle 'default' and ';' and lines starting with '#')
+                if re.match(rb'\A'
+                            rb'(?:default)?(?:\s|[\n\r]#[^\n\r]*(?=[\n\r]))*'
+                            rb':'
+                            rb'(?:[\s;]|[\n\r]#[^\n\r]*(?=[\n\r]))*'
+                            rb'\Z', between):
+                    # it is a fall-through
+                    case_node_list.pop()
+            except IndexError:
+                pass
+        # do the actual append
+        case_node_list.append(node)
 
     def accumulate_cases(self, node, case_node_list):
-        if node.kind in (CursorKind.CASE_STMT, CursorKind.DEFAULT_STMT):
-            case_node_list.append(node)
+        has_default = False
+        if node.kind == CursorKind.CASE_STMT:
+            self.append_case(node, case_node_list)
+        elif node.kind == CursorKind.DEFAULT_STMT:
+            has_default = True
+            self.append_case(node, case_node_list)
         for child in node.get_children():
             if (child.kind != CursorKind.SWITCH_STMT):
-                self.accumulate_cases(child, case_node_list)
+                res = self.accumulate_cases(child, case_node_list)
+                has_default = has_default or res
+        return has_default
 
     def visit_switch(self, node):
         self.switchis.append(node)
@@ -357,20 +479,111 @@ class Instrumenter:
         if self.case_instrument:
             # experimental
             switch_id = bytes(hex(len(self.switchis) - 1), "utf-8")
-            self.add_annotation(b" _SWITCH_START(" + switch_id + b") ", node.extent.start)
             case_node_list = []
-            self.accumulate_cases(node, case_node_list)
+            has_default = self.accumulate_cases(node, case_node_list)
             case_count = len(case_node_list)
+            if not has_default:
+                # we will add an extra case below
+                case_count = case_count + 1
             bits_needed = bytes(hex(int.bit_length(case_count-1)), "utf-8")
-            for case_index in range(case_count):
+            self.add_annotation(b" _SWITCH_START(" + switch_id + b", " + bits_needed + b") ", node.extent.start)
+
+            for case_index in range(len(case_node_list)):
                 case_node = case_node_list[case_index]
                 case_id = bytes(hex(case_index), "utf-8")
                 self.visit_case(case_node, switch_id, case_id, bits_needed)
+
+            # append missing default if necessary
+            if not has_default:
+                case_id = bytes(hex(case_count - 1), "utf-8")
+                self.add_annotation(b" break; default: _CASE(" + case_id + b", "
+                                                               + switch_id + b", " + bits_needed + b") ",
+                                    node.extent.end, -1)
         else:
             # simpler, default
             switch_num = children[0]
             self.add_annotation(b"_SWITCH(", switch_num.extent.start)
             self.add_annotation(b")", switch_num.extent.end, 1)
+
+    def is_pointer_call(self, node):
+        childs = [c for c in node.get_children()]
+        normal_call = False
+        if len(childs) > 0:
+            unexp = childs[0]
+            childs = [c for c in unexp.get_children()]
+            if len(childs) > 0 and childs[0].kind == CursorKind.DECL_REF_EXPR:
+                reference = childs[0]
+                target = reference.referenced
+                if target and target.kind == CursorKind.FUNCTION_DECL:
+                    normal_call = True
+        return not normal_call
+
+    def is_expr_only(self, node):
+        # returns False when node includes some call or some block statement
+        #         (=^ evaluation might branch)
+        if node.kind in (CursorKind.CALL_EXPR, CursorKind.COMPOUND_STMT):
+            return False
+        for child in node.get_children():
+            if not self.is_expr_only(child):
+                return False
+        return True
+
+    def last_call_before(self, node):
+        # Returns the last descendant node (if any) of kind CALL_EXPR that would be
+        # evaluated before the evaluation of the current node.
+        # Otherwise it returns None.
+        childs = [c for c in node.get_children()]
+        for c in reversed(childs):
+            if c.kind == CursorKind.CALL_EXPR:
+                return c
+            rec_last = self.last_call_before(c)
+            if rec_last is not None:
+                return rec_last
+        return None
+
+    def visit_call(self, node):
+        # Some calls need to be anotated
+        if node.spelling == "fork":
+            self.add_annotation(b"_FORK(", node.extent.start)
+            self.prepent_annotation(b")", node.extent.end)
+        elif node.spelling in ("setjmp", "sigsetjmp", "_setjmp", "__sigsetjmp"):
+            self.add_annotation(b"_SETJMP(", node.extent.start)
+            self.prepent_annotation(b")", node.extent.end)
+        elif node.spelling in ("exit", "_Exit", "_exit"):
+            self.add_annotation(b"(({int exitcode = ", node.extent.start, len(node.spelling))
+            self.prepent_annotation(b"; _TRACE_CLOSE; exitcode; }))", node.extent.end)
+        elif node.spelling == "abort":
+            self.add_annotation(b"_TRACE_CLOSE ", node.extent.start)
+        elif self.pointer_call_instrument and self.is_pointer_call(node):
+            last_call = self.last_call_before(node)
+            if last_call is None:
+                self.add_annotation(b"_POINTER_CALL(", node.extent.start)
+                self.prepent_annotation(b")", node.extent.end)
+            else:
+                last_call_type = bytes(last_call.type.spelling, "utf-8")
+                self.prepent_annotation(b"_POINTER_CALL_AFTER(" + last_call_type + b", ", last_call.extent.start)
+                self.add_annotation(b")", last_call.extent.end)
+
+    def visit_try(self, node):
+        childs = [c for c in node.get_children()]
+        for i in range(1, len(childs)):
+            try_id = bytes(hex(len(self.trys)), "utf-8")
+            self.trys.append(node)
+            self.prepent_annotation(b" { int _trace_try_idx_" + try_id + b" = ++_trace_setjmp_idx; _TRY ",
+                                    node.extent.start)
+            self.visit_catch(childs[i], try_id)
+            self.prepent_annotation(b" _TRY_END } ", node.extent.end)
+
+    def visit_catch(self, node, try_id):
+        childs = [c for c in node.get_children()]
+        if len(childs) == 2:
+            inside = childs[1]
+        elif len(childs) == 1:
+            inside = childs[0]
+        else:
+            print(str(len(childs)) + " childs for catch")
+            return
+        self.add_annotation(b" _CATCH(_trace_try_idx_" + try_id + b") ", inside.extent.start, 1)
 
     def parse(self, filename):
         index = Index.create()
@@ -441,10 +654,17 @@ class Instrumenter:
                 self.visit_loop(node)
             elif node.kind == CursorKind.SWITCH_STMT:
                 self.visit_switch(node)
+            elif node.kind == CursorKind.CALL_EXPR:
+                if self.call_instrument:
+                    self.visit_call(node)
+            elif node.kind == CursorKind.CXX_TRY_STMT:
+                if self.call_instrument:
+                    self.visit_try(node)
             elif node.type.is_const_qualified():
                 # skip constants
                 return
-            elif node.storage_class == StorageClass.STATIC and not node.kind in (CursorKind.FUNCTION_DECL, CursorKind.COMPOUND_STMT):
+            elif node.storage_class == StorageClass.STATIC and node.kind not in (CursorKind.FUNCTION_DECL,
+                                                                                 CursorKind.COMPOUND_STMT):
                 # something static, not a function declaration smells like a constant expression
                 # anyway, static means it cannot be function local
                 function_scope = False
