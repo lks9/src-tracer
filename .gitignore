@@ -1,0 +1,12 @@
+*.trace
+*.trace.txt
+*.trace.zst
+*.trace.c
+*.trace.txt.c
+*.trace.zst.c
+function_database.db
+*.o
+*.i
+*.s
+*.S
+*.a
