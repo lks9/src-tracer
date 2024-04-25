@@ -266,7 +266,7 @@ class SourceTraceReplayer:
             simgr.merge(stash=stash)
 
     def try_solve_unconstrained(self, elem, simgr, database, to_stash='active'):
-        if elem.letter == 'F' and database:
+        if elem.letter == 'C' and database:
             fun_num = elem.num
             try:
                 fun_name = database.get_name(fun_num)
@@ -286,7 +286,7 @@ class SourceTraceReplayer:
         # function name not given?
         if not func_name:
             elem = next(iter(trace))
-            if elem.letter != 'F':
+            if elem.letter != 'C':
                 raise ValueError(f'Trace contains first element "{elem.letter}"')
             func_num = elem.num
             func_name = database.get_name(func_num)
@@ -372,7 +372,7 @@ class SourceTraceReplayer:
                 name = None
                 if not elem.bs == b'':
                     num = elem.num
-                    if elem.letter == 'F' and database:
+                    if elem.letter == 'C' and database:
                         name = database.get_name(num)
                 if len(simgr.traced) != 1:
                     log.debug(elem.pretty(name=name) + f" (found {len(simgr.traced)})")
