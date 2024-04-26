@@ -5,7 +5,7 @@ import sys
 import os
 import argparse
 
-from src_tracer.retrace import SourceTraceReplayer
+from src_tracer.retrace import SourceTraceReplayer, AssertResult
 from src_tracer.trace import Trace
 from src_tracer.database import Database
 
@@ -121,11 +121,11 @@ source_tracer = SourceTraceReplayer(args.binary_name, auto_load_libs=False)
 
 # assertion checks
 if assertion_checks:
+    res = AssertResult.NEVER_PASSED
     for state in simgr.deadended:
-        print()
-        res = source_tracer.check_all_assertions(state)
-        print()
-        print(f"Final assertion check result: {res.name}")
-        print()
+        res = res.Union(source_tracer.check_all_assertions(state))
+    print()
+    print(f"Final assertion check result: {res.name}")
+    print()
 
 database.close_connection()
