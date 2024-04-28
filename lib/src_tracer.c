@@ -167,8 +167,6 @@ void _trace_open(const char *fname) {
 
     // now the tracing can start (guarded by _trace_buf != dummy)
     _trace_buf = _trace_ptr;
-    _trace_pos = 0;
-    _trace_ie_byte = _TRACE_IE_BYTE_INIT;
 }
 
 void _trace_before_fork(void) {
