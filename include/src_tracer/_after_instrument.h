@@ -201,9 +201,9 @@ extern int _trace_buf_pos;
 #endif // BYTE_TRACE
 
 // functions numbers are now big endian for better conversion
-#define _TRACE_FUNC(num) \
+#define _TRACE_FUNC(num) { \
+    _TRACE_IE_FINISH \
     if (_TRACE_CALL_CHECK) { \
-        _TRACE_IE_FINISH \
         if ((num) == 0) { \
             _TRACE_PUT(_TRACE_SET_FUNC_ANON); \
         } else if ((num) == ((num) & 0xf)) { \
@@ -228,7 +228,8 @@ extern int _trace_buf_pos;
             _TRACE_PUT(((num) >> 0) & 0xff); \
         } \
         _TRACE_POINTER_CALL_RESET \
-    }
+    } \
+}
 
 #define _TRACE_NUM_0(type, num) { \
     _TRACE_IE_FINISH \
@@ -627,7 +628,10 @@ extern bool _trace_pointer_call;
 #define _TRY_END            _IS_RETRACE(_RETRACE_TRY_END(), _TRACE_TRY_END())
 #define _SETJMP(stmt)       _IS_RETRACE(_RETRACE_SETJMP(stmt), _TRACE_SETJMP(stmt))
 
-#define _TRACE_OPEN(fname)  _TRACE_POINTER_CALL_SET; _IS_RETRACE( ,_trace_open((fname)))
+#define _TRACE_OPEN(fname)  _IS_RETRACE( ,_trace_open((fname))); \
+                            _IS_RETRACE( ,_trace_buf_pos = 0); \
+                            _IS_RETRACE( ,_trace_ie_byte = _TRACE_IE_BYTE_INIT); \
+                            _TRACE_POINTER_CALL_SET;
 #define _TRACE_CLOSE        _IS_RETRACE(_RETRACE_END() ,_trace_close())
 
 #define _POINTER_CALL(call) _TRACE_POINTER_CALL(call)
@@ -659,7 +663,10 @@ extern bool _trace_pointer_call;
 #define _LOOP_BODY(id)      ;_TRACE_IF();
 #define _LOOP_END(id)       ;_TRACE_ELSE();
 
-#define _TRACE_OPEN(fname)  _TRACE_POINTER_CALL_SET; _trace_open((fname));
+#define _TRACE_OPEN(fname)  _trace_open((fname)); \
+                            _trace_buf_pos = 0; \
+                            _trace_ie_byte = _TRACE_IE_BYTE_INIT; \
+                            _TRACE_POINTER_CALL_SET;
 #define _TRACE_CLOSE        ;_trace_close();
 
 #define _FORK(fork_stmt)    (_trace_before_fork(), \
