@@ -201,35 +201,57 @@ extern int _trace_buf_pos;
 #endif // BYTE_TRACE
 
 // functions numbers are now big endian for better conversion
-#define _TRACE_FUNC(num) { \
-    _TRACE_IE_FINISH \
-    if (_TRACE_CALL_CHECK) { \
-        if ((num) == 0) { \
-            _TRACE_PUT(_TRACE_SET_FUNC_ANON); \
-        } else if ((num) == ((num) & 0xf)) { \
-            _TRACE_PUT(_TRACE_SET_FUNC_4  | (((num) >> 0) & 0xff)); \
-        } else if ((num) == ((num) & 0xfff)) { \
-            _TRACE_PUT(_TRACE_SET_FUNC_12 | (((num) >> 8) & 0xff)); \
-            _TRACE_PUT(((num) >> 0) & 0xff); \
-        } else if ((num) == ((num) & 0xfffff)) { \
-            _TRACE_PUT(_TRACE_SET_FUNC_20 | (((num) >> 16) & 0xff)); \
-            _TRACE_PUT(((num) >> 8) & 0xff); \
-            _TRACE_PUT(((num) >> 0) & 0xff); \
-        } else if ((num) == ((num) & 0xfffffff)) { \
-            _TRACE_PUT(_TRACE_SET_FUNC_28 | (((num) >> 24) & 0xff)); \
-            _TRACE_PUT(((num) >> 16) & 0xff); \
-            _TRACE_PUT(((num) >> 8) & 0xff); \
-            _TRACE_PUT(((num) >> 0) & 0xff); \
-        } else { \
-            _TRACE_PUT(_TRACE_SET_FUNC_32); \
-            _TRACE_PUT(((num) >> 24) & 0xff); \
-            _TRACE_PUT(((num) >> 16) & 0xff); \
-            _TRACE_PUT(((num) >> 8) & 0xff); \
-            _TRACE_PUT(((num) >> 0) & 0xff); \
-        } \
-        _TRACE_POINTER_CALL_RESET \
+#define _TRACE_FUNC_CORE(num) { \
+    if ((num) == 0) { \
+        _TRACE_PUT(_TRACE_SET_FUNC_ANON); \
+    } else if ((num) == ((num) & 0xf)) { \
+        _TRACE_PUT(_TRACE_SET_FUNC_4  | (((num) >> 0) & 0xff)); \
+    } else if ((num) == ((num) & 0xfff)) { \
+        _TRACE_PUT(_TRACE_SET_FUNC_12 | (((num) >> 8) & 0xff)); \
+        _TRACE_PUT(((num) >> 0) & 0xff); \
+    } else if ((num) == ((num) & 0xfffff)) { \
+        _TRACE_PUT(_TRACE_SET_FUNC_20 | (((num) >> 16) & 0xff)); \
+        _TRACE_PUT(((num) >> 8) & 0xff); \
+        _TRACE_PUT(((num) >> 0) & 0xff); \
+    } else if ((num) == ((num) & 0xfffffff)) { \
+        _TRACE_PUT(_TRACE_SET_FUNC_28 | (((num) >> 24) & 0xff)); \
+        _TRACE_PUT(((num) >> 16) & 0xff); \
+        _TRACE_PUT(((num) >> 8) & 0xff); \
+        _TRACE_PUT(((num) >> 0) & 0xff); \
+    } else { \
+        _TRACE_PUT(_TRACE_SET_FUNC_32); \
+        _TRACE_PUT(((num) >> 24) & 0xff); \
+        _TRACE_PUT(((num) >> 16) & 0xff); \
+        _TRACE_PUT(((num) >> 8) & 0xff); \
+        _TRACE_PUT(((num) >> 0) & 0xff); \
     } \
 }
+
+#ifdef _TRACE_POINTER_CALLS_ONLY
+
+#define _TRACE_FUNC(num) \
+    _TRACE_POINTER_CALL_INIT \
+    _TRACE_IE_FINISH \
+    if (_TRACE_CALL_CHECK) { \
+        _TRACE_FUNC_CORE(num) \
+        _TRACE_POINTER_CALL_RESET \
+    } \
+
+#define _TRACE_STATIC_FUNC(num) \
+    _TRACE_POINTER_CALL_INIT \
+    if (_TRACE_CALL_CHECK) { \
+        _TRACE_IE_FINISH \
+        _TRACE_FUNC_CORE(num) \
+        _TRACE_POINTER_CALL_RESET \
+    }
+
+#else
+#define _TRACE_FUNC(num) \
+    _TRACE_IE_FINISH \
+    _TRACE_FUNC_CORE(num)
+#define _TRACE_STATIC_FUNC(num) \
+    _TRACE_FUNC(num)
+#endif
 
 #define _TRACE_NUM_0(type, num) { \
     _TRACE_IE_FINISH \
@@ -408,6 +430,7 @@ extern volatile int _retrace_fork_count;
 }
 
 #define _RETRACE_FUNC(num) \
+    _TRACE_POINTER_CALL_INIT \
     if (_TRACE_CALL_CHECK) { \
         _RETRACE_ELEM('C', num); \
         _TRACE_POINTER_CALL_RESET; \
@@ -529,7 +552,7 @@ static inline __attribute__((always_inline)) long long int _is_retrace_switch(lo
 
 extern bool _trace_pointer_call;
 
-#define _TRACE_FUNC_INIT \
+#define _TRACE_POINTER_CALL_INIT \
     bool _trace_local_return __attribute__((unused)) = 0;
 
 #define _TRACE_POINTER_CALL_SET \
@@ -553,7 +576,7 @@ extern bool _trace_pointer_call;
 })
 
 #else
-#define _TRACE_FUNC_INIT /* nothing here */
+#define _TRACE_POINTER_CALL_INIT /* nothing here */
 #define _TRACE_CALL_CHECK 1
 #define _TRACE_POINTER_CALL_SET /* nothing here */
 #define _TRACE_POINTER_CALL_RESET /* nothing here */
@@ -607,7 +630,8 @@ extern bool _trace_pointer_call;
 #define _IF                 _IS_RETRACE(_RETRACE_IF(), _TRACE_IF())
 #define _ELSE               _IS_RETRACE(_RETRACE_ELSE(), _TRACE_ELSE())
 #define _CONDITION(cond)    _is_retrace_condition(cond)
-#define _FUNC(num)          _TRACE_FUNC_INIT; _IS_RETRACE(_RETRACE_FUNC(num), _TRACE_FUNC(num))
+#define _FUNC(num)          _IS_RETRACE(_RETRACE_FUNC(num), _TRACE_FUNC(num))
+#define _STATIC_FUNC(num)   _IS_RETRACE(_RETRACE_FUNC(num), _TRACE_STATIC_FUNC(num))
 #define _FUNC_RETURN        _IS_RETRACE(_RETRACE_RETURN('R'), _TRACE_RETURN(_TRACE_SET_RETURN))
 #define _FUNC_RETURN_TAIL   _IS_RETRACE(_RETRACE_RETURN('S'), _TRACE_RETURN(_TRACE_SET_RETURN_TAIL))
 // non-macro version for switch
@@ -648,7 +672,8 @@ extern bool _trace_pointer_call;
 #define _IF                 ;_TRACE_IF();
 #define _ELSE               ;_TRACE_ELSE();
 #define _CONDITION(cond)    _trace_condition(cond)
-#define _FUNC(num)          _TRACE_FUNC_INIT; _TRACE_FUNC(num);
+#define _FUNC(num)          ;_TRACE_FUNC(num);
+#define _STATIC_FUNC(num)   ;_TRACE_STATIC_FUNC(num);
 #define _FUNC_RETURN        ;_TRACE_RETURN(_TRACE_SET_RETURN);
 #define _FUNC_RETURN_TAIL   ;_TRACE_RETURN(_TRACE_SET_RETURN_TAIL);
 // non-macro version for switch
@@ -691,6 +716,7 @@ extern bool _trace_pointer_call;
 #define _ELSE               ;_TRACE_PUT_TEXT('O');
 #define _CONDITION(cond)    _text_trace_condition(cond)
 #define _FUNC(num)          ;_TRACE_NUM_TEXT('C', ((unsigned int)(num)));
+#define _STATIC_FUNC(num)   _FUNC(num)
 #define _FUNC_RETURN        ;_TRACE_PUT_TEXT('R');
 #define _FUNC_RETURN_TAIL   ;_TRACE_PUT_TEXT('S');
 // non-macro version for switch
@@ -718,7 +744,8 @@ extern bool _trace_pointer_call;
 #define _IF                 ;_RETRACE_IF();
 #define _ELSE               ;_RETRACE_ELSE();
 #define _CONDITION(cond)    _retrace_condition(cond)
-#define _FUNC(num)          _TRACE_FUNC_INIT; _RETRACE_FUNC(num);
+#define _FUNC(num)          ;_RETRACE_FUNC(num);
+#define _STATIC_FUNC(num)   _FUNC(num)
 #define _FUNC_RETURN        ;_RETRACE_RETURN('R');
 #define _FUNC_RETURN_TAIL   ;_RETRACE_RETURN('S');
 // non-macro version for switch
@@ -804,7 +831,8 @@ extern bool _trace_pointer_call;
 #define _IF                 ;_RETRACE_CBMC('I', 0);
 #define _ELSE               ;_RETRACE_CBMC('O', 0);
 #define _CONDITION(cond)    cond
-#define _FUNC(num)          _TRACE_FUNC_INIT; _RETRACE_FUNC_CBMC(num);
+#define _FUNC(num)          _TRACE_POINTER_CALL_INIT; _RETRACE_FUNC_CBMC(num);
+#define _STATIC_FUNC(num)   _FUNC(num)
 #define _FUNC_RETURN        ;if(_TRACE_RETURN_CHECK) { _RETRACE_CBMC('R', 0); };
 #define _FUNC_RETURN_TAIL   ;if(_TRACE_RETURN_CHECK) { _RETRACE_CBMC('S', 0); };
 #define _SWITCH(num)        ;_RETRACE_CBMC('D', num);
@@ -837,6 +865,7 @@ extern bool _trace_pointer_call;
 #define _ELSE               /* nothing here */
 #define _CONDITION(cond)    cond
 #define _FUNC(num)          /* nothing here */
+#define _STATIC_FUNC(num)   /* nothing here */
 #define _FUNC_RETURN        /* nothing here */
 #define _FUNC_RETURN_TAIL   /* nothing here */
 #define _SWITCH(num)        num
