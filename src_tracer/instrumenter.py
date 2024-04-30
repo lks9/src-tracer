@@ -96,6 +96,18 @@ class Instrumenter:
         else:
             self.annotations[filename][offset] = annotation + self.annotations[filename][offset]
 
+    def annotate_function(self, node, body):
+        if node.storage_class == StorageClass.STATIC:
+            func_annotation = b" _STATIC_FUNC("
+        else:
+            func_annotation = b" _FUNC("
+        if self.anon_instrument:
+            func_annotation += b"0) "
+        else:
+            func_num = self.func_num(node)
+            func_annotation += bytes(hex(func_num), "utf-8") + b") "
+        self.add_annotation(func_annotation, body.extent.start, 1)
+
     def visit_function(self, node):
         body = None
         for child in node.get_children():
@@ -107,11 +119,7 @@ class Instrumenter:
             print("Check location failed for function " + node.spelling)
             return
         if self.function_instrument:
-            if self.anon_instrument:
-                self.add_annotation(b" _FUNC(0) ", body.extent.start, 1)
-            else:
-                func_num = self.func_num(node)
-                self.add_annotation(b" _FUNC(" + bytes(hex(func_num), "utf-8") + b") ", body.extent.start, 1)
+            self.annotate_function(node, body)
 
         # special treatment for main function
         close = False
