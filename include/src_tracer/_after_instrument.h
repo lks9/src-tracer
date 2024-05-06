@@ -23,7 +23,7 @@ extern "C" {
     #include "src_tracer/trace_mode.h"
 #endif
 #ifdef _TRACE_MODE_TEXT
-    #include "src_tracer/trace_mode_text.h"
+    #include "src_tracer/text_trace_mode.h"
 #endif
 
 // for retracing
