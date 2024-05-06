@@ -1,4 +1,8 @@
-#include <src_tracer/_after_instrument.h>
+#include <src_tracer/constants.h>
+#include <src_tracer/trace_elem.h>
+#include <src_tracer/trace_buf.h>
+#include <src_tracer/trace_mode.h>
+#include <src_tracer/retrace_mode.h>
 #include <src_tracer/ghost.h>
 
 #include <stdbool.h>
@@ -15,7 +19,7 @@
 #define O_LARGEFILE 0
 #endif
 
-unsigned char _trace_ie_byte = _TRACE_IE_BYTE_INIT;
+unsigned char _trace_ie_byte = _TRACE_SET_IE_INIT;
 unsigned char _trace_buf[TRACE_BUF_SIZE];
 int _trace_buf_pos = 0;
 
@@ -156,7 +160,7 @@ int _trace_after_fork(int pid) {
         trace_fd = temp_trace_fd;
         temp_trace_fd = 0;
         _trace_buf_pos = temp_trace_buf_pos;
-        _trace_ie_byte = _TRACE_IE_BYTE_INIT;
+        _trace_ie_byte = _TRACE_SET_IE_INIT;
 
         // _TRACE_NUM(pid < 0 ? -1 : 1);
         _TRACE_IF();
@@ -177,7 +181,7 @@ int _trace_after_fork(int pid) {
     // now the tracing can start (guarded by trace_fd > 0)
     trace_fd = fd;
     _trace_buf_pos = 0;
-    _trace_ie_byte = _TRACE_IE_BYTE_INIT;
+    _trace_ie_byte = _TRACE_SET_IE_INIT;
 
     // _TRACE_NUM(pid);
     _TRACE_ELSE();
