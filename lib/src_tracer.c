@@ -21,19 +21,25 @@
 
 unsigned char _trace_ie_byte = _TRACE_SET_IE_INIT;
 unsigned char _trace_buf[TRACE_BUF_SIZE];
+#ifdef TRACE_USE_RINGBUFFER
+unsigned short _trace_buf_pos = 0;
+#else
 int _trace_buf_pos = 0;
 
 static int trace_fd = 0;
 static char trace_fname[170];
 
-static int trace_fork_count = 0;
 static unsigned char temp_trace_buf[TRACE_BUF_SIZE];
 static int temp_trace_buf_pos;
 static int temp_trace_fd;
+#endif // not TRACE_USE_RINGBUFFER
+
+static int trace_fork_count = 0;
 
 unsigned long long int _trace_setjmp_idx;
 bool _trace_pointer_call;
 
+#ifndef TRACE_USE_RINGBUFFER
 #ifndef _TRACE_USE_POSIX_WRITE
 // taken from musl (arch/x86_64/syscall_arch.h)
 static __inline long __syscall3(long n, long a1, long a2, long a3)
@@ -204,6 +210,33 @@ void _trace_close(void) {
     // now we call a library function without being traced
     close(fd);
 }
+
+#else // TRACE_USE_RINGBUFFER
+
+void _trace_open(const char *fname) {
+    _trace_ie_byte = _TRACE_SET_IE_INIT;
+    _trace_buf_pos = 0;
+}
+
+void _trace_close(void) {}
+
+void _trace_before_fork(void) {
+    trace_fork_count += 1;
+    _TRACE_NUM(_TRACE_SET_FORK, trace_fork_count);
+}
+
+int _trace_after_fork(int pid) {
+    if (pid != 0) {
+        // we are in the parent
+        _TRACE_IF();
+        return pid;
+    }
+    // we are in a fork
+    _TRACE_ELSE();
+    return pid;
+}
+
+#endif // TRACE_USE_RINGBUFFER
 
 
 // for retracing

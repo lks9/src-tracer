@@ -19,6 +19,12 @@ extern void _trace_close(void);
 extern void _trace_before_fork(void);
 extern int _trace_after_fork(int pid);
 
+#ifdef TRACE_USE_RINGBUFFER
+#define _TRACE_PUT(c) ;{ \
+    _trace_buf[_trace_buf_pos] = (c); \
+    _trace_buf_pos += 1; \
+}
+#else
 #define _TRACE_PUT(c) ;{ \
     _trace_buf[_trace_buf_pos] = (c); \
     _trace_buf_pos += 1; \
@@ -27,6 +33,7 @@ extern int _trace_after_fork(int pid);
         _trace_buf_pos = 0; \
     } \
 }
+#endif
 
 #ifdef BYTE_TRACE
 
