@@ -4,6 +4,10 @@
 
 #include <src_tracer/trace_buf.h>
 
+#ifndef TRACE_USE_POSIX
+  #include "syscalls.h"
+#endif
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -20,76 +24,11 @@
 
 #include <zstd.h>
 
-// editable constant definitions
-#ifndef SHORT_SLEEP_NSEC
-#define SHORT_SLEEP_NSEC 20000
-#endif
-#ifndef LONG_SLEEP_MULT
-#define LONG_SLEEP_MULT 25
-#endif
-#ifndef TIMEOUT_NSEC
-#define TIMEOUT_NSEC 10000000000 // 10 sec
-#endif
-#ifndef BUSY_WAITING
-// comment out if you really want busy waiting
-//#define BUSY_WAITING
-#endif
-#ifndef WRITE_BLOCK_SIZE
-#define WRITE_BLOCK_SIZE 16384
-#endif
-#ifndef COMPRESSION_LEVEL
-#define COMPRESSION_LEVEL 3
-#endif
-
 // computed constants
 #define LONG_SLEEP_NSEC \
-    (SHORT_SLEEP_NSEC * LONG_SLEEP_MULT)
+    (TRACEFORK_SHORT_SLEEP_NSEC * TRACEFORK_LONG_SLEEP_MULT)
 #define SLEEP_COUNT_TIMEOUT \
-    (TIMEOUT_NSEC / LONG_SLEEP_NSEC)
-
-#ifndef _TRACE_USE_POSIX
-// taken from musl (arch/x86_64/syscall_arch.h)
-static __inline long syscall_0(long n)
-{
-    unsigned long ret;
-    __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n) : "rcx", "r11", "memory");
-    return ret;
-}
-
-static __inline long syscall_1(long n, long a1)
-{
-    unsigned long ret;
-    __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1) : "rcx", "r11", "memory");
-    return ret;
-}
-
-static __inline long syscall_3(long n, long a1, long a2, long a3)
-{
-    unsigned long ret;
-    __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
-                                                  "d"(a3) : "rcx", "r11", "memory");
-    return ret;
-}
-
-static __inline long syscall_4(long n, long a1, long a2, long a3, long a4)
-{
-       unsigned long ret;
-       register long r10 __asm__("r10") = a4;
-       __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
-                                                 "d"(a3), "r"(r10): "rcx", "r11", "memory");
-       return ret;
-}
-
-#define SYS_write        1
-#define SYS_madvise     28
-#define SYS_nanosleep   35
-#define SYS_getppid    110
-#define SYS_fork        57
-#define SYS_timer_create        222
-#define SYS_timer_settime       223
-#define SYS_timer_gettime       224
-// end musl code
-#endif
+    (TRACEFORK_TIMEOUT_NSEC / LONG_SLEEP_NSEC)
 
 // other macros
 #define EXIT_WHEN(cond) \
@@ -112,9 +51,9 @@ __attribute__((noreturn))
 static void my_exit(void) {
     close(trace_fd);
     ZSTD_freeCCtx(cctx);
-#ifdef _TRACE_USE_PTHREAD
+#ifdef TRACE_USE_PTHREAD
     pthread_exit((void *)0);
-#else
+#else // in fork
     exit(0);
 #endif
 }
@@ -123,7 +62,7 @@ static void my_exit(void) {
 // without calling atfork etc.
 __attribute__((returns_twice))
 pid_t my_fork(void) {
-#ifdef _TRACE_USE_POSIX
+#ifdef TRACE_USE_POSIX
     return fork();
 #else
     return (pid_t)syscall_0(SYS_fork);
@@ -136,7 +75,7 @@ static void my_write(void *ptr, int len, bool last) {
     __builtin_memset(ptr, 0, len);
     in_desc.size += len;
 
-    last = last || in_desc.size + WRITE_BLOCK_SIZE > ZSTD_BLOCKSIZE_MAX;
+    last = last || in_desc.size + TRACEFORK_WRITE_BLOCK_SIZE > ZSTD_BLOCKSIZE_MAX;
     ZSTD_EndDirective const mode = last ? ZSTD_e_end : ZSTD_e_continue;
 
     size_t rem;
@@ -163,7 +102,7 @@ static void write_and_exit(unsigned char *ptr, int len) {
 
 static volatile long long *next_ptr;
 
-#ifdef BUSY_WAITING
+#ifdef TRACEFORK_BUSY_WAITING
 
 static int counter = 0;
 static int prev_counter = 0;
@@ -177,18 +116,21 @@ static void counter_handler(int nr) {
     prev_counter = counter;
 }
 
-#else // BUSY_WAITING
+#else // TRACEFORK_BUSY_WAITING
 
 static void my_sleep(long nsec) {
-    const struct timespec sleep_time = {0, nsec};
-#ifdef _TRACE_USE_POSIX
-    nanosleep(&sleep_time);
+    const struct timespec sleep_time = {
+        nsec / 1000000000,
+        nsec % 1000000000
+    };
+#ifdef TRACE_USE_POSIX
+    nanosleep(&sleep_time, NULL);
 #else
-    syscall_1(SYS_nanosleep, (long)&sleep_time);
+    syscall_2(SYS_nanosleep, (long)&sleep_time, 0);
 #endif
 }
 
-#endif // BUSY_WAITING
+#endif // TRACEFORK_BUSY_WAITING
 
 void *forked_write (void *trace_fname) {
     char fname_zstd[200];
@@ -202,10 +144,10 @@ void *forked_write (void *trace_fname) {
     }
 
     unsigned char *const ptr = _trace_ptr;
-    unsigned short next_pos = WRITE_BLOCK_SIZE;
+    unsigned short next_pos = TRACEFORK_WRITE_BLOCK_SIZE;
     unsigned short pos = 0;
 
-#ifdef BUSY_WAITING
+#ifdef TRACEFORK_BUSY_WAITING
     // timer to interrupt busy waiting
     struct sigevent sev;
     sev.sigev_notify = SIGEV_SIGNAL;
@@ -216,8 +158,8 @@ void *forked_write (void *trace_fname) {
 
     signal(SIGRTMIN, counter_handler);
 
-    time_t secs = TIMEOUT_NSEC / 1000000000;
-    long nsecs  = TIMEOUT_NSEC % 1000000000;
+    time_t secs = TRACEFORK_TIMEOUT_NSEC / 1000000000;
+    long nsecs  = TRACEFORK_TIMEOUT_NSEC % 1000000000;
     struct itimerspec interv = {{secs,nsecs}, {secs,nsecs}};
     syscall_4(SYS_timer_settime, (long)timerid, (long)0, (long)&interv, (long)NULL);
 #else
@@ -226,7 +168,7 @@ void *forked_write (void *trace_fname) {
     // initialize zstd compression
     cctx = ZSTD_createCCtx();
     EXIT_WHEN(cctx == NULL);
-    CHECK_ZSTD(ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, COMPRESSION_LEVEL));
+    CHECK_ZSTD(ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, TRACEFORK_COMPRESSION_LEVEL));
     CHECK_ZSTD(ZSTD_CCtx_setParameter(cctx, ZSTD_c_checksumFlag, 0));
 
     while (true) {
@@ -235,7 +177,7 @@ void *forked_write (void *trace_fname) {
         long long next_ll;
 
         // wait in for loop until tracer in parent writes to next page
-#ifdef BUSY_WAITING
+#ifdef TRACEFORK_BUSY_WAITING
         while ((next_ll = *next_ptr) == 0ll) {
             __builtin_ia32_pause();
         }
@@ -243,16 +185,17 @@ void *forked_write (void *trace_fname) {
 #else
         if (!slept_before) {
             // sleep short when tracing is quick
-            for (int i = 0; i < LONG_SLEEP_MULT; i++) {
+            for (int i = 0; i < TRACEFORK_LONG_SLEEP_MULT; i++) {
                 next_ll = *next_ptr;
                 if (next_ll != 0ll) break;
-                my_sleep(SHORT_SLEEP_NSEC);
+                my_sleep(TRACEFORK_SHORT_SLEEP_NSEC);
             }
         } else {
             next_ll = *next_ptr;
         }
         slept_before = false;
         for (int timeout = 0; timeout < SLEEP_COUNT_TIMEOUT; timeout++) {
+            // sleep long when tracing is slow
             if (next_ll != 0ll) break;
             my_sleep(LONG_SLEEP_NSEC);
             next_ll = *next_ptr;
@@ -261,13 +204,13 @@ void *forked_write (void *trace_fname) {
 #endif
         if (next_ll == 0ll || next_ll == -1ll) {
             // timeout (indicated by 0ll) or parent wrote trace end marker -1ll
-            write_and_exit(this_ptr, WRITE_BLOCK_SIZE);
+            write_and_exit(this_ptr, TRACEFORK_WRITE_BLOCK_SIZE);
         }
 
-        my_write(this_ptr, WRITE_BLOCK_SIZE, false);
+        my_write(this_ptr, TRACEFORK_WRITE_BLOCK_SIZE, false);
 
         pos = next_pos;
-        next_pos += WRITE_BLOCK_SIZE;
+        next_pos += TRACEFORK_WRITE_BLOCK_SIZE;
     }
 }
 

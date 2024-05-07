@@ -18,7 +18,7 @@
 #include <sys/prctl.h>
 #include <pthread.h>
 
-#ifndef _TRACE_USE_POSIX_WRITE
+#ifndef TRACE_USE_POSIX
 #include "syscalls.h"
 #endif
 
@@ -57,11 +57,11 @@ static __attribute__((unused)) int temp_trace_fd;
 
 void _trace_write(const void *buf) {
     if (trace_fd <= 0) return;
-#ifdef _TRACE_USE_POSIX_WRITE
+#ifdef TRACE_USE_POSIX
     ssize_t written = write(trace_fd, buf, TRACE_BUF_SIZE);
 #else
-    // Use __syscall3 to avoid recursive calls
-    long written = __syscall3(SYS_write, (long)trace_fd, (long)buf, (long)TRACE_BUF_SIZE);
+    // Use syscall_3 to avoid recursive calls
+    long written = syscall_3(SYS_write, (long)trace_fd, (long)buf, (long)TRACE_BUF_SIZE);
 #endif
     if (likely(written == TRACE_BUF_SIZE)) {
         return;
@@ -77,11 +77,11 @@ void _trace_write(const void *buf) {
 #ifndef EFFICIENT_TEXT_TRACE
 void _trace_write_text(const void *buf, unsigned long count) {
     if (trace_fd <= 0) return;
-#ifdef _TRACE_USE_POSIX_WRITE
+#ifdef TRACE_USE_POSIX
     ssize_t written = write(trace_fd, buf, count);
 #else
-    // Use __syscall3 to avoid recursive calls
-    long written = __syscall3(SYS_write, (long)trace_fd, (long)buf, (long)count);
+    // Use syscall_3 to avoid recursive calls
+    long written = syscall_3(SYS_write, (long)trace_fd, (long)buf, (long)count);
 #endif
     if (likely(written == count)) {
         return;
@@ -97,11 +97,11 @@ void _trace_write_text(const void *buf, unsigned long count) {
 
 static void trace_write_rest(void) {
     if (trace_fd <= 0) return;
-#ifdef _TRACE_USE_POSIX_WRITE
+#ifdef TRACE_USE_POSIX
     write(trace_fd, _trace_buf, _trace_buf_pos);
 #else
-    // Use __syscall3 to avoid recursive calls
-    __syscall3(SYS_write, (long)trace_fd, (long)_trace_buf, (long)_trace_buf_pos);
+    // Use syscall_3 to avoid recursive calls
+    syscall_3(SYS_write, (long)trace_fd, (long)_trace_buf, (long)_trace_buf_pos);
 #endif
     // don't care about write errors anymore, will be closed soon!
 }
@@ -348,7 +348,16 @@ void _trace_close(void) {
         _trace_ptr = dummy;
         return;
     }
+    // put trace end marker 'E' on the trace
     _TRACE_END();
+    /* put second end marker, a -1ll sign to the next page */
+    _trace_buf_pos += TRACEFORK_WRITE_BLOCK_SIZE-1;
+    _trace_buf_pos &= ~(TRACEFORK_WRITE_BLOCK_SIZE-1);
+    for (int i = 0; i < 8; i++) {
+        _trace_buf[_trace_buf_pos] = 0xff;
+        _trace_buf_pos += 1;
+    }
+
     // stop tracing
     _trace_buf = dummy;
 

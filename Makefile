@@ -21,7 +21,7 @@ lib/src_tracer/retrace_mode.i: lib/src_tracer/retrace_mode.c include/src_tracer/
 lib/src_tracer/retrace_mode.o: lib/src_tracer/retrace_mode.i
 	gcc -Wall -fPIC -c -nostdlib -O3 -o $@ $<
 
-lib/src_tracer/mmap_to_trace.o: lib/src_tracer/mmap_to_trace.c include/src_tracer/constants.h include/src_tracer/trace_buf.h
+lib/src_tracer/mmap_to_trace.o: lib/src_tracer/mmap_to_trace.c lib/src_tracer/syscalls.h include/src_tracer/constants.h include/src_tracer/trace_buf.h
 	gcc -Wall -fPIC -c -Iinclude -O3 -o $@ $<
 
 clean:
