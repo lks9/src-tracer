@@ -12,7 +12,11 @@
 #include <time.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <sys/mman.h>
+#include <signal.h>
 #include <string.h>
+#include <sys/prctl.h>
+#include <pthread.h>
 
 #ifndef _TRACE_USE_POSIX_WRITE
 #include "syscalls.h"
@@ -22,20 +26,32 @@
 #define O_LARGEFILE 0
 #endif
 
-unsigned char _trace_ie_byte = _TRACE_SET_IE_INIT;
-unsigned char _trace_buf[TRACE_BUF_SIZE];
-#ifdef TRACE_USE_RINGBUFFER
-unsigned short _trace_buf_pos = 0;
+// trace buffer
+#if defined TRACE_USE_PTHREAD || defined TRACE_USE_FORK
+  static unsigned char dummy[TRACE_BUF_SIZE] __attribute__ ((aligned (4096)));
+  void __attribute__((aligned(4096))) *_trace_ptr = dummy;
+  __attribute__((aligned(4096))) unsigned char *restrict _trace_buf = dummy;
 #else
-int _trace_buf_pos = 0;
+  unsigned char _trace_buf[TRACE_BUF_SIZE];
+#endif
 
-static int trace_fd = 0;
-static char trace_fname[170];
+// trace position
+#ifdef TRACE_USE_RINGBUFFER
+  unsigned short _trace_buf_pos = 0;
+#else
+  int _trace_buf_pos = 0;
+#endif
 
-static unsigned char temp_trace_buf[TRACE_BUF_SIZE];
-static int temp_trace_buf_pos;
-static int temp_trace_fd;
-#endif // not TRACE_USE_RINGBUFFER
+// trace ie byte
+unsigned char _trace_ie_byte = _TRACE_SET_IE_INIT;
+
+// trace file name
+static __attribute__((unused)) char trace_fname[200];
+
+// temporary stuff
+static __attribute__((unused)) unsigned char temp_trace_buf[TRACE_BUF_SIZE];
+static __attribute__((unused)) int temp_trace_buf_pos;
+static __attribute__((unused)) int temp_trace_fd;
 
 #ifndef TRACE_USE_RINGBUFFER
 
@@ -197,14 +213,164 @@ void _trace_close(void) {
     close(fd);
 }
 
-#else // TRACE_USE_RINGBUFFER
+#elif defined TRACE_USE_PTHREAD || defined TRACE_USE_FORK
+// use the ringbuffer and write in a separate pthread/fork
+
+extern void *forked_write(void *);
+#ifdef TRACE_USE_PTHREAD
+static pthread_t thread_id;
+#endif
+
+extern
+__attribute__((returns_twice))
+pid_t my_fork(void);
+
+static void create_trace_process(void) {
+    // reserve memory for the trace buffer
+    _trace_ptr = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (_trace_ptr == MAP_FAILED) {
+        _trace_ptr = dummy;
+        perror("mmap");
+        return;
+    }
+
+#ifdef TRACE_USE_PTHREAD
+    pthread_create(&thread_id, NULL, &forked_write, trace_fname);
+#else
+    // bsd style daemon + close all fd
+    if (my_fork() == 0) {
+        // child process
+        // new name
+        prctl(PR_SET_NAME, (unsigned long)"src_tracer");
+        // session leader
+        //    -> independ from the previous process session
+        //    -> independent from terminal
+        setsid();
+        // anything might happen to the current directory, be independent
+        chdir("/");
+        umask(0);
+        // close any fd
+        for (int i = sysconf(_SC_OPEN_MAX); i >= 0; i--) {
+            close(i);
+        }
+
+        forked_write(trace_fname);
+        // will never return
+    }
+#endif
+}
+
+void _trace_open(const char *fname) {
+    if (_trace_ptr != dummy) {
+        // already opened
+        _trace_close();
+    }
+    // Make the file name time dependent
+    char timed_fname[160];
+    struct timespec now;
+    if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
+        return;
+    }
+    strftime(timed_fname, 160, fname, gmtime(&now.tv_sec));
+    snprintf(trace_fname, 170, timed_fname, now.tv_nsec);
+    //printf("Trace to: %s\n", trace_fname);
+
+    create_trace_process();
+
+    atexit(_trace_close);
+
+    // now the tracing can start (guarded by _trace_buf != dummy)
+    _trace_buf = _trace_ptr;
+    _trace_buf_pos = 0;
+    _trace_ie_byte = _TRACE_SET_IE_INIT;
+}
+
+void _trace_before_fork(void) {
+    if (_trace_buf == dummy) {
+        // tracing has already been aborted!
+        return;
+    }
+    _trace_fork_count += 1;
+    _TRACE_NUM(_TRACE_SET_FORK, _trace_fork_count);
+
+    temp_trace_buf_pos = _trace_buf_pos;
+
+    // stop tracing
+    _trace_buf = dummy;
+}
+
+int _trace_after_fork(int pid) {
+    if (_trace_ptr == dummy) {
+        // tracing has already been aborted!
+        return pid;
+    }
+    if (pid != 0) {
+        // we are in the parent
+        // resume tracing
+        _trace_buf = _trace_ptr;
+        _trace_buf_pos = temp_trace_buf_pos;
+        _trace_ie_byte = _TRACE_SET_IE_INIT;
+
+        // _TRACE_NUM(pid < 0 ? -1 : 1);
+        _TRACE_IF();
+        return pid;
+    }
+    // we are in a fork
+
+    // just to be sure
+    _trace_buf = dummy;
+
+    // unmap old trace buffer
+    munmap(_trace_ptr, TRACE_BUF_SIZE);
+    _trace_ptr = dummy;
+
+    char fname_suffix[20];
+    snprintf(fname_suffix, 20, "-fork-%d.trace", _trace_fork_count);
+    strncat(trace_fname, fname_suffix, 20);
+    //printf("Trace to: %s\n", trace_fname);
+
+    create_trace_process();
+
+    // now the tracing can start (guarded by _trace_ptr != dummy)
+    _trace_buf = _trace_ptr;
+    _trace_buf_pos = 0;
+    _trace_ie_byte = _TRACE_SET_IE_INIT;
+
+    // _TRACE_NUM(pid);
+    _TRACE_ELSE();
+    return pid;
+}
+
+void _trace_close(void) {
+    if (_trace_buf == dummy || _trace_ptr == dummy) {
+        // already closed, paused or never successfully opened
+        _trace_buf = dummy;
+        _trace_ptr = dummy;
+        return;
+    }
+    _TRACE_END();
+    // stop tracing
+    _trace_buf = dummy;
+
+    // now we can safely call library functions
+#ifdef TRACE_USE_PTHREAD
+    // FIXME
+    pthread_join(thread_id, NULL);
+#endif
+    munmap(_trace_ptr, TRACE_BUF_SIZE);
+    _trace_ptr = dummy;
+}
+
+#else // TRACE_USE_RINGBUFFER, without fork or pthread
 
 void _trace_open(const char *fname) {
     _trace_ie_byte = _TRACE_SET_IE_INIT;
     _trace_buf_pos = 0;
 }
 
-void _trace_close(void) {}
+void _trace_close(void) {
+    _TRACE_END();
+}
 
 void _trace_before_fork(void) {
     _trace_fork_count += 1;

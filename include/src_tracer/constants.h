@@ -5,9 +5,22 @@
 #ifndef SRC_TRACER_CONSTANTS_H
 #define SRC_TRACER_CONSTANTS_H
 
-// Ringbuffer for fast tracing without writing to disk
+// Ringbuffer for fast tracing (no writing to disk, unless in pthread or fork)
 // assumes char is 8 bit!
 #define TRACE_USE_RINGBUFFER
+
+// to write ringbuffer to disk in a separate thread
+//#define TRACE_USE_PTHREAD
+
+// to write ringbuffer to disk in a separate process
+//#define TRACE_USE_FORK
+
+// do not edit here:
+#if defined TRACE_USE_PTHREAD || defined TRACE_USE_FORK
+    #ifndef TRACE_USE_RINGBUFFER
+    #define TRACE_USE_RINGBUFFER
+    #endif
+#endif
 
 #ifdef TRACE_USE_RINGBUFFER
     // matches 16 bit counter, don't change this!
