@@ -19,7 +19,10 @@
 #include <pthread.h>
 
 #ifndef TRACE_USE_POSIX
-#include "syscalls.h"
+  #include "syscalls.h"
+#endif
+#ifdef TRACEFORK_SYNC_UFFD
+  #include "sync_uffd.h"
 #endif
 
 #ifndef O_LARGEFILE
@@ -46,7 +49,12 @@
 unsigned char _trace_ie_byte = _TRACE_SET_IE_INIT;
 
 // trace file name
-static __attribute__((unused)) char trace_fname[200];
+static __attribute__((unused)) char trace_fname[200] = "";
+
+// userfault fd
+#ifdef TRACEFORK_SYNC_UFFD
+  int _trace_uffd;
+#endif
 
 // temporary stuff
 static __attribute__((unused)) unsigned char temp_trace_buf[TRACE_BUF_SIZE];
@@ -218,7 +226,7 @@ void _trace_close(void) {
 
 extern void *forked_write(void *);
 #ifdef TRACE_USE_PTHREAD
-static pthread_t thread_id;
+static pthread_t writer_tid;
 #endif
 
 extern
@@ -227,15 +235,70 @@ pid_t my_fork(void);
 
 static void create_trace_process(void) {
     // reserve memory for the trace buffer
-    _trace_ptr = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+#ifdef TRACEFORK_SYNC_UFFD
+    const size_t mmap_size = TRACE_BUF_SIZE + 4096;
+#else
+    const size_t mmap_size = TRACE_BUF_SIZE;
+#endif
+#ifdef TRACE_USE_PTHREAD
+    const int mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS;
+#else
+    const int mmap_flags = MAP_SHARED | MAP_ANONYMOUS;
+#endif
+    _trace_ptr = mmap(NULL, mmap_size, PROT_READ | PROT_WRITE, mmap_flags, -1, 0);
     if (_trace_ptr == MAP_FAILED) {
         _trace_ptr = dummy;
         perror("mmap");
         return;
     }
 
+#ifdef TRACEFORK_SYNC_UFFD
+    // we set up uffd events when (half of) trace pages are filled
+    // then trace writer can write in second thread/process
+    _trace_uffd = syscall(SYS_userfaultfd, UFFD_USER_MODE_ONLY);
+    if (_trace_uffd == -1) {
+        _trace_ptr = dummy;
+        perror("userfaultfd");
+        return;
+    }
+    struct uffdio_api uffdio_api;
+    uffdio_api.api = UFFD_API;
+    uffdio_api.features = UFFD_FEATURE_EVENT_UNMAP | UFFD_FEATURE_PAGEFAULT_FLAG_WP;
+    if (ioctl(_trace_uffd, UFFDIO_API, &uffdio_api) == -1) {
+        perror("uffdio api");
+        _trace_ptr = dummy;
+        return;
+    }
+
+    // do not generate page fault for first page
+    *(unsigned char*)_trace_ptr = -1;
+
+    // register page ranges to track
+    struct uffdio_register uffdio_register;
+    uffdio_register.mode = UFFDIO_REGISTER_MODE_WP | UFFDIO_REGISTER_MODE_MISSING;
+    uffdio_register.range.len = 4096;
+    unsigned short i = 0;
+    do {
+        uffdio_register.range.start = (unsigned long) _trace_ptr + i;
+        if (ioctl(_trace_uffd, UFFDIO_REGISTER, &uffdio_register) == -1) {
+            perror("uffdio register");
+            _trace_ptr = dummy;
+            return;
+        }
+        i += TRACEFORK_WRITE_BLOCK_SIZE;
+    } while (i != 0);
+
+    // only used as a hack to finish tracing by creating an unmap event
+    uffdio_register.range.start = (unsigned long) _trace_ptr + 65536;
+    if (ioctl(_trace_uffd, UFFDIO_REGISTER, &uffdio_register) == -1) {
+        perror("uffdio register");
+        _trace_ptr = dummy;
+        return;
+    }
+#endif
+
 #ifdef TRACE_USE_PTHREAD
-    pthread_create(&thread_id, NULL, &forked_write, trace_fname);
+    pthread_create(&writer_tid, NULL, &forked_write, trace_fname);
 #else
     // bsd style daemon + close all fd
     if (my_fork() == 0) {
@@ -256,6 +319,7 @@ static void create_trace_process(void) {
 
         forked_write(trace_fname);
         // will never return
+        __builtin_unreachable();
     }
 #endif
 }
@@ -350,6 +414,8 @@ void _trace_close(void) {
     }
     // put trace end marker 'E' on the trace
     _TRACE_END();
+
+#ifdef TRACEFORK_POLLING
     /* put second end marker, a -1ll sign to the next page */
     _trace_buf_pos += TRACEFORK_WRITE_BLOCK_SIZE-1;
     _trace_buf_pos &= ~(TRACEFORK_WRITE_BLOCK_SIZE-1);
@@ -357,14 +423,20 @@ void _trace_close(void) {
         _trace_buf[_trace_buf_pos] = 0xff;
         _trace_buf_pos += 1;
     }
+#endif
 
     // stop tracing
     _trace_buf = dummy;
 
+#ifdef TRACEFORK_SYNC_UFFD
+    // we never use this memory
+    // hack to generate an uffd event to stop the trace writer
+    munmap(_trace_ptr + TRACE_BUF_SIZE, 4096);
+#endif
+
     // now we can safely call library functions
 #ifdef TRACE_USE_PTHREAD
-    // FIXME
-    pthread_join(thread_id, NULL);
+    pthread_join(writer_tid, NULL);
 #endif
     munmap(_trace_ptr, TRACE_BUF_SIZE);
     _trace_ptr = dummy;
