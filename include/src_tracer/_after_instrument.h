@@ -194,7 +194,7 @@ extern "C" {
 #define _TRACE_OPEN(fname)  ;_TRACE_POINTER_CALL_SET;
 #define _TRACE_CLOSE        ;_RETRACE_END();
 
-#define _FORK(fork_stmt)    (_retrace_elem('F', _retrace_fork_count), \
+#define _FORK(fork_stmt)    (_retrace_elem('F', _trace_fork_count), \
                              _retrace_after_fork(fork_stmt))
 
 #define _POINTER_CALL(call) _TRACE_POINTER_CALL(call)

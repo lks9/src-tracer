@@ -8,8 +8,11 @@
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
 
-/* try/catch/setjmp */
+/* try/catch/setjmp count */
 extern unsigned long long int _trace_setjmp_idx;
+
+/* fork count */
+extern int _trace_fork_count;
 
 /* Pointer calls */
 #ifdef _TRACE_POINTER_CALLS_ONLY

@@ -2,7 +2,6 @@
 #include <src_tracer/trace_elem.h>
 #include <src_tracer/trace_buf.h>
 #include <src_tracer/trace_mode.h>
-#include <src_tracer/retrace_mode.h>
 #include <src_tracer/ghost.h>
 
 #include <stdbool.h>
@@ -14,6 +13,10 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+
+#ifndef _TRACE_USE_POSIX_WRITE
+#include "syscalls.h"
+#endif
 
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
@@ -34,24 +37,7 @@ static int temp_trace_buf_pos;
 static int temp_trace_fd;
 #endif // not TRACE_USE_RINGBUFFER
 
-static int trace_fork_count = 0;
-
-unsigned long long int _trace_setjmp_idx;
-bool _trace_pointer_call;
-
 #ifndef TRACE_USE_RINGBUFFER
-#ifndef _TRACE_USE_POSIX_WRITE
-// taken from musl (arch/x86_64/syscall_arch.h)
-static __inline long __syscall3(long n, long a1, long a2, long a3)
-{
-	unsigned long ret;
-	__asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2),
-						  "d"(a3) : "rcx", "r11", "memory");
-	return ret;
-}
-#define SYS_write				1
-// end musl code
-#endif
 
 void _trace_write(const void *buf) {
     if (trace_fd <= 0) return;
@@ -139,8 +125,8 @@ void _trace_before_fork(void) {
         // tracing has already been aborted!
         return;
     }
-    trace_fork_count += 1;
-    _TRACE_NUM(_TRACE_SET_FORK, trace_fork_count);
+    _trace_fork_count += 1;
+    _TRACE_NUM(_TRACE_SET_FORK, _trace_fork_count);
 
     // stop tracing
     for (int k = 0; k < TRACE_BUF_SIZE; k++) {
@@ -176,7 +162,7 @@ int _trace_after_fork(int pid) {
     close(temp_trace_fd);
     temp_trace_fd = 0;
     char fname_suffix[20];
-    snprintf(fname_suffix, 20, "-fork-%d.trace", trace_fork_count);
+    snprintf(fname_suffix, 20, "-fork-%d.trace", _trace_fork_count);
     strncat(trace_fname, fname_suffix, 20);
     //printf("Trace to: %s\n", trace_fname);
 
@@ -221,8 +207,8 @@ void _trace_open(const char *fname) {
 void _trace_close(void) {}
 
 void _trace_before_fork(void) {
-    trace_fork_count += 1;
-    _TRACE_NUM(_TRACE_SET_FORK, trace_fork_count);
+    _trace_fork_count += 1;
+    _TRACE_NUM(_TRACE_SET_FORK, _trace_fork_count);
 }
 
 int _trace_after_fork(int pid) {
@@ -237,49 +223,3 @@ int _trace_after_fork(int pid) {
 }
 
 #endif // TRACE_USE_RINGBUFFER
-
-
-// for retracing
-
-// use volatile to forbid optimizing the variable accesses away
-
-// use barrier() to forbid reordering those functions
-#define barrier() __asm__ __volatile__("": : :"memory")
-
-
-volatile char _retrace_letter;
-volatile long long int _retrace_num;
-void _retrace_breakpoint(void) { barrier(); }
-
-volatile int _retrace_fork_count;
-
-// ghost code
-void _retrace_ghost_start(void) { barrier(); }
-void _retrace_ghost_end(void) { barrier(); }
-// true for combined trace/retrace mode
-volatile bool _retrace_in_ghost = true;
-
-char *volatile _retrace_assert_names[ASSERT_BUF_SIZE];
-volatile bool  _retrace_asserts[ASSERT_BUF_SIZE];
-volatile int   _retrace_assert_idx;
-void  _retrace_assert_passed(void) { barrier(); }
-
-char *volatile _retrace_assume_name;
-volatile bool  _retrace_assume;
-void  _retrace_assume_passed(void) { barrier(); }
-
-void _retrace_prop_start(void) { barrier(); }
-volatile bool _retrace_prop_is_assert;
-volatile bool _retrace_prop_is_assume;
-void _retrace_prop_passed(void) { barrier(); }
-
-char *volatile _retrace_dump_names[GHOST_DUMP_BUF_SIZE];
-void *volatile _retrace_dumps[GHOST_DUMP_BUF_SIZE];
-volatile int   _retrace_dump_idx;
-void  _retrace_dump_passed(void) { barrier(); }
-
-long long *volatile _retrace_symbolic[RETRACE_SYMBOLIC_SIZE];
-volatile int _retrace_symbolic_idx;
-
-// for both tracing and retracing
-volatile bool _is_retrace_mode = false;

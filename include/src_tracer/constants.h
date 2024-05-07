@@ -28,6 +28,14 @@
 
 // only used in CBMC MODE
 #define RETRACE_ARR_LEN_MAX 4096
+
+// maximum number of assertions when retracing+checking
 #define ASSERT_BUF_SIZE 4096
+
+// dump data to a ghost buffer
+#define GHOST_DUMP_BUF_SIZE 4096
+
+// maximum number of symbolic values obtained with RETRO_SYMBOLIC()
+#define RETRACE_SYMBOLIC_SIZE 4096
 
 #endif // SRC_TRACER_CONSTANSTS_H

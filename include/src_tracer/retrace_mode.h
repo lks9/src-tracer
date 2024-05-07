@@ -16,8 +16,6 @@ extern volatile char _retrace_letter;
 extern volatile long long int _retrace_num;
 extern void _retrace_breakpoint(void);
 
-extern volatile int _retrace_fork_count;
-
 #define _RETRACE_ELEM(type, num) ;{ \
     _retrace_letter = (type); \
     _retrace_num = (num); \
