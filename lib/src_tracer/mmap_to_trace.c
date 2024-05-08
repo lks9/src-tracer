@@ -69,7 +69,7 @@ static void my_exit(void) {
 __attribute__((returns_twice))
 pid_t my_fork(void) {
 #ifdef TRACE_USE_POSIX
-    return fork();
+    return (pid_t)syscall(SYS_fork);
 #else
     return (pid_t)syscall_0(SYS_fork);
 #endif

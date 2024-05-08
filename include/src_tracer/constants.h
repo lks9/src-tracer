@@ -13,7 +13,7 @@
 //#define TRACE_USE_PTHREAD
 
 // to write ringbuffer to disk in a separate process
-//#define TRACE_USE_FORK
+#define TRACE_USE_FORK
 
 // do not edit here:
 #if defined TRACE_USE_PTHREAD || defined TRACE_USE_FORK
@@ -57,7 +57,7 @@
 
 #if defined TRACE_USE_PTHREAD || defined TRACE_USE_FORK
     // synchronization via userfault fd linux api
-    //#define TRACEFORK_SYNC_UFFD
+    #define TRACEFORK_SYNC_UFFD
 
     // otherwise polling (do not edit here)
     #ifndef TRACEFORK_SYNC_UFFD

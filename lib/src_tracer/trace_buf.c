@@ -271,7 +271,13 @@ static void create_trace_process(void) {
     }
     struct uffdio_api uffdio_api;
     uffdio_api.api = UFFD_API;
-    uffdio_api.features = UFFD_FEATURE_EVENT_UNMAP | UFFD_FEATURE_PAGEFAULT_FLAG_WP;
+    uffdio_api.features = UFFD_FEATURE_EVENT_UNMAP
+#ifdef TRACE_USE_PTHREAD
+                        | UFFD_FEATURE_PAGEFAULT_FLAG_WP;
+#else
+                        | UFFD_FEATURE_MISSING_SHMEM
+                        | UFFD_FEATURE_WP_HUGETLBFS_SHMEM;
+#endif
     if (ioctl(_trace_uffd, UFFDIO_API, &uffdio_api) == -1) {
         perror("uffdio api");
         _trace_ptr = dummy;
@@ -283,21 +289,21 @@ static void create_trace_process(void) {
 
     // register page ranges to track
     struct uffdio_register uffdio_register;
-    uffdio_register.mode = UFFDIO_REGISTER_MODE_WP | UFFDIO_REGISTER_MODE_MISSING;
+    uffdio_register.mode = UFFDIO_REGISTER_MODE_WP
+                         | UFFDIO_REGISTER_MODE_MISSING;
     uffdio_register.range.len = 4096;
-    unsigned short i = 0;
-    do {
+
+    for (int i = 0; i < TRACE_BUF_SIZE; i += TRACEFORK_WRITE_BLOCK_SIZE) {
         uffdio_register.range.start = (unsigned long) _trace_ptr + i;
         if (ioctl(_trace_uffd, UFFDIO_REGISTER, &uffdio_register) == -1) {
             perror("uffdio register");
             _trace_ptr = dummy;
             return;
         }
-        i += TRACEFORK_WRITE_BLOCK_SIZE;
-    } while (i != 0);
+    }
 
-    // only used as a hack to finish tracing by creating an unmap event
-    uffdio_register.range.start = (unsigned long) _trace_ptr + 65536;
+    // only used as a hack to finish tracing by creating an unmap event in _trace_close()
+    uffdio_register.range.start = (unsigned long) _trace_ptr + TRACE_BUF_SIZE;
     if (ioctl(_trace_uffd, UFFDIO_REGISTER, &uffdio_register) == -1) {
         perror("uffdio register");
         _trace_ptr = dummy;
@@ -317,11 +323,19 @@ static void create_trace_process(void) {
         //    -> independ from the previous process session
         //    -> independent from terminal
         setsid();
+        // fork again to avoid any waitpid...
+        if (my_fork() != 0) {
+            _exit(0);
+        }
         // anything might happen to the current directory, be independent
         chdir("/");
         umask(0);
         // close any fd
         for (int i = sysconf(_SC_OPEN_MAX); i >= 0; i--) {
+#ifdef TRACEFORK_SYNC_UFFD
+            // except:
+            if (i == _trace_uffd) continue;
+#endif
             close(i);
         }
 
@@ -329,6 +343,10 @@ static void create_trace_process(void) {
         // will never return
         __builtin_unreachable();
     }
+#ifdef TRACEFORK_SYNC_UFFD
+    // we only need it in the child
+    close(_trace_uffd);
+#endif
 #endif
 }
 
