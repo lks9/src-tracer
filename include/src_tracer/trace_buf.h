@@ -26,7 +26,11 @@
 
 // trace ie byte
 #ifndef BYTE_TRACE
-    extern unsigned char _trace_ie_byte;
+    #ifdef TRACE_IE_BYTE_REG
+        register unsigned char _trace_ie_byte __asm__("r12");
+    #else
+        extern unsigned char _trace_ie_byte;
+    #endif
 #endif
 
 // write trace to disk

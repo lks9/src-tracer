@@ -46,7 +46,11 @@
 #endif
 
 // trace ie byte
-unsigned char _trace_ie_byte = _TRACE_SET_IE_INIT;
+#ifndef BYTE_TRACE
+  #ifndef TRACE_IE_BYTE_REG
+    unsigned char _trace_ie_byte = _TRACE_SET_IE_INIT;
+  #endif
+#endif
 
 // trace file name
 static __attribute__((unused)) char trace_fname[200] = "";
@@ -176,7 +180,9 @@ int _trace_after_fork(int pid) {
         trace_fd = temp_trace_fd;
         temp_trace_fd = 0;
         _trace_buf_pos = temp_trace_buf_pos;
+#ifndef BYTE_TRACE
         _trace_ie_byte = _TRACE_SET_IE_INIT;
+#endif
 
         // _TRACE_NUM(pid < 0 ? -1 : 1);
         _TRACE_IF();
@@ -197,7 +203,9 @@ int _trace_after_fork(int pid) {
     // now the tracing can start (guarded by trace_fd > 0)
     trace_fd = fd;
     _trace_buf_pos = 0;
+#ifndef BYTE_TRACE
     _trace_ie_byte = _TRACE_SET_IE_INIT;
+#endif
 
     // _TRACE_NUM(pid);
     _TRACE_ELSE();
@@ -346,7 +354,9 @@ void _trace_open(const char *fname) {
     // now the tracing can start (guarded by _trace_buf != dummy)
     _trace_buf = _trace_ptr;
     _trace_buf_pos = 0;
+#ifndef BYTE_TRACE
     _trace_ie_byte = _TRACE_SET_IE_INIT;
+#endif
 }
 
 void _trace_before_fork(void) {
@@ -373,7 +383,9 @@ int _trace_after_fork(int pid) {
         // resume tracing
         _trace_buf = _trace_ptr;
         _trace_buf_pos = temp_trace_buf_pos;
+#ifndef BYTE_TRACE
         _trace_ie_byte = _TRACE_SET_IE_INIT;
+#endif
 
         // _TRACE_NUM(pid < 0 ? -1 : 1);
         _TRACE_IF();
@@ -398,7 +410,9 @@ int _trace_after_fork(int pid) {
     // now the tracing can start (guarded by _trace_ptr != dummy)
     _trace_buf = _trace_ptr;
     _trace_buf_pos = 0;
+#ifndef BYTE_TRACE
     _trace_ie_byte = _TRACE_SET_IE_INIT;
+#endif
 
     // _TRACE_NUM(pid);
     _TRACE_ELSE();
@@ -445,7 +459,9 @@ void _trace_close(void) {
 #else // TRACE_USE_RINGBUFFER, without fork or pthread
 
 void _trace_open(const char *fname) {
+#ifndef BYTE_TRACE
     _trace_ie_byte = _TRACE_SET_IE_INIT;
+#endif
     _trace_buf_pos = 0;
 }
 

@@ -33,6 +33,10 @@
 // if TRACE_USE_POSIX is not set, we use the syscall directly
 #define TRACE_USE_POSIX
 
+// register variable for trace pos and trace ie byte
+// WARNING: GCC extension, breaks the ABI
+//#define TRACE_IE_BYTE_REG
+
 // text trace is meant for debugging, uncomment if you want efficiency
 //#define EFFICIENT_TEXT_TRACE
 
@@ -68,7 +72,7 @@
         #define TRACEFORK_LONG_SLEEP_MULT 25
 
         // busy waiting if you really want (only available when TRACE_USE_POSIX not set)
-        #define TRACEFORK_BUSY_WAITING
+        //#define TRACEFORK_BUSY_WAITING
 
         // finish fork process after a timeout, when trace producer seems inactive
         #define TRACEFORK_TIMEOUT_NSEC 10000000000 // 10 sec
