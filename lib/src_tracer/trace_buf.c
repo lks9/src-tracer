@@ -24,6 +24,11 @@
 #ifdef TRACEFORK_SYNC_UFFD
   #include "sync_uffd.h"
 #endif
+#ifdef TRACEFORK_FUTEX
+  #include "sync_futex.h"
+#endif
+
+extern int tracer_create_daemon(char *trace_fname);
 
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
@@ -237,13 +242,19 @@ extern void *forked_write(void *);
 static pthread_t writer_tid;
 #endif
 
-extern
-__attribute__((returns_twice))
-pid_t my_fork(void);
+#ifdef TRACEFORK_FUTEX
+int *_trace_pos_futex_var;
+
+void _tracefork_sync(void) {
+    if (_trace_ptr != dummy) {
+        syscall_3(SYS_futex, (long)_trace_pos_futex_var, FUTEX_WAKE, INT_MAX);
+    }
+}
+#endif
 
 static void create_trace_process(void) {
     // reserve memory for the trace buffer
-#ifdef TRACEFORK_SYNC_UFFD
+#if defined TRACEFORK_SYNC_UFFD || defined TRACEFORK_FUTEX
     const size_t mmap_size = TRACE_BUF_SIZE + 4096;
 #else
     const size_t mmap_size = TRACE_BUF_SIZE;
@@ -279,8 +290,8 @@ static void create_trace_process(void) {
                         | UFFD_FEATURE_WP_HUGETLBFS_SHMEM;
 #endif
     if (ioctl(_trace_uffd, UFFDIO_API, &uffdio_api) == -1) {
-        perror("uffdio api");
         _trace_ptr = dummy;
+        perror("uffdio api");
         return;
     }
 
@@ -296,8 +307,8 @@ static void create_trace_process(void) {
     for (int i = 0; i < TRACE_BUF_SIZE; i += TRACEFORK_WRITE_BLOCK_SIZE) {
         uffdio_register.range.start = (unsigned long) _trace_ptr + i;
         if (ioctl(_trace_uffd, UFFDIO_REGISTER, &uffdio_register) == -1) {
-            perror("uffdio register");
             _trace_ptr = dummy;
+            perror("uffdio register");
             return;
         }
     }
@@ -305,43 +316,28 @@ static void create_trace_process(void) {
     // only used as a hack to finish tracing by creating an unmap event in _trace_close()
     uffdio_register.range.start = (unsigned long) _trace_ptr + TRACE_BUF_SIZE;
     if (ioctl(_trace_uffd, UFFDIO_REGISTER, &uffdio_register) == -1) {
-        perror("uffdio register");
         _trace_ptr = dummy;
+        perror("uffdio register");
         return;
     }
 #endif
 
-#ifdef TRACE_USE_PTHREAD
-    pthread_create(&writer_tid, NULL, &forked_write, trace_fname);
-#else
-    // bsd style daemon + close all fd
-    if (my_fork() == 0) {
-        // child process
-        // new name
-        prctl(PR_SET_NAME, (unsigned long)"src_tracer");
-        // session leader
-        //    -> independ from the previous process session
-        //    -> independent from terminal
-        setsid();
-        // fork again to avoid any waitpid...
-        if (my_fork() != 0) {
-            _exit(0);
-        }
-        // anything might happen to the current directory, be independent
-        chdir("/");
-        umask(0);
-        // close any fd
-        for (int i = sysconf(_SC_OPEN_MAX); i >= 0; i--) {
-#ifdef TRACEFORK_SYNC_UFFD
-            // except:
-            if (i == _trace_uffd) continue;
+#ifdef TRACEFORK_FUTEX
+    _trace_pos_futex_var = _trace_ptr + TRACE_BUF_SIZE;
 #endif
-            close(i);
-        }
 
-        forked_write(trace_fname);
-        // will never return
-        __builtin_unreachable();
+#ifdef TRACE_USE_PTHREAD
+    errno = pthread_create(&writer_tid, NULL, &forked_write, trace_fname);
+    if (errno != 0) {
+        _trace_ptr = dummy;
+        perror("pthread_create");
+        return;
+    }
+#else
+    if (tracer_create_daemon(trace_fname) < 0) {
+        _trace_ptr = dummy;
+        perror("tracer_create_daemon");
+        return;
     }
 #ifdef TRACEFORK_SYNC_UFFD
     // we only need it in the child
@@ -363,6 +359,7 @@ void _trace_open(const char *fname) {
     }
     strftime(timed_fname, 160, fname, gmtime(&now.tv_sec));
     snprintf(trace_fname, 170, timed_fname, now.tv_nsec);
+    strcat(trace_fname, ".zst");
     //printf("Trace to: %s\n", trace_fname);
 
     create_trace_process();

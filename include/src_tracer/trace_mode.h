@@ -19,20 +19,26 @@ extern void _trace_close(void);
 extern void _trace_before_fork(void);
 extern int _trace_after_fork(int pid);
 
-#ifdef TRACE_USE_RINGBUFFER
 #define _TRACE_PUT(c) ;{ \
     _trace_buf[_trace_buf_pos] = (c); \
     _trace_buf_pos += 1; \
+    _TRACE_MAY_SYNC(); \
 }
+
+#ifdef TRACEFORK_FUTEX
+extern void _tracefork_sync(void);
+#define _TRACE_MAY_SYNC() \
+    if (_trace_buf_pos % TRACEFORK_WRITE_BLOCK_SIZE == 0) { \
+        _tracefork_sync(); \
+    }
+#elif defined TRACE_USE_RINGBUFFER
+#define _TRACE_MAY_SYNC()  /* nothing here */
 #else
-#define _TRACE_PUT(c) ;{ \
-    _trace_buf[_trace_buf_pos] = (c); \
-    _trace_buf_pos += 1; \
+#define _TRACE_MAY_SYNC() \
     if (_trace_buf_pos == TRACE_BUF_SIZE) { \
         _trace_write(_trace_buf); \
         _trace_buf_pos = 0; \
-    } \
-}
+    }
 #endif
 
 #ifdef BYTE_TRACE

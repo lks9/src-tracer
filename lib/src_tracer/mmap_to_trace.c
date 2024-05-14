@@ -7,21 +7,23 @@
 #ifndef TRACE_USE_POSIX
   #include "syscalls.h"
 #endif
+#ifdef TRACE_USE_PTHREAD
+  #include <pthread.h>
+#endif
 #ifdef TRACEFORK_SYNC_UFFD
   #include "sync_uffd.h"
+#endif
+
+#ifdef TRACEFORK_FUTEX
+  #include "sync_futex.h"
 #endif
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-
 #include <unistd.h>
 #include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <sys/mman.h>
-#include <pthread.h>
-#include <string.h>
 #include <time.h>
 #include <signal.h>
 
@@ -50,28 +52,28 @@ static char z_out[ZSTD_BLOCKSIZE_MAX];
 static ZSTD_outBuffer out_desc = { z_out, ZSTD_BLOCKSIZE_MAX, 0 };
 static ZSTD_CCtx* cctx;
 
+#ifdef TRACE_USE_POSIX
+#define CLOSE(fd) close(fd)
+#define EXIT(n) _exit(n)
+#else
+#define CLOSE(fd) syscall_1(SYS_close, fd)
+#define EXIT(n) { \
+    syscall_1(SYS_exit, n); \
+    __builtin_unreachable(); \
+}
+#endif
+
 __attribute__((noreturn))
 static void my_exit(void) {
 #ifdef TRACEFORK_SYNC_UFFD
-    close(_trace_uffd);
+    CLOSE(_trace_uffd);
 #endif
-    close(trace_fd);
+    CLOSE(trace_fd);
     ZSTD_freeCCtx(cctx);
 #ifdef TRACE_USE_PTHREAD
     pthread_exit((void *)0);
 #else // in fork
-    exit(0);
-#endif
-}
-
-// side effect free fork version
-// without calling atfork etc.
-__attribute__((returns_twice))
-pid_t my_fork(void) {
-#ifdef TRACE_USE_POSIX
-    return (pid_t)syscall(SYS_fork);
-#else
-    return (pid_t)syscall_0(SYS_fork);
+    EXIT(0);
 #endif
 }
 
@@ -91,7 +93,11 @@ static void my_write(void *ptr, int len, bool last) {
     if (last) {
         // ZSTD_e_end guarantees rem == 0 except when out buffer is full
         EXIT_WHEN(rem != 0);
+#ifdef TRACE_USE_POSIX
         ssize_t written = write(trace_fd, z_out, out_desc.pos);
+#else
+        ssize_t written = syscall_3(SYS_write, trace_fd, (long)z_out, out_desc.pos);
+#endif
         // abort trace recording on write error
         EXIT_WHEN(written != out_desc.pos);
 
@@ -177,7 +183,7 @@ static long long polling(volatile long long *ptr) {
         timeout -= 1;
     }
     // sleep long when tracing is slow
-    for (; timeout > 0; timeout++) {
+    for (; timeout > 0; timeout--) {
         my_sleep(LONG_SLEEP_NSEC);
         val = *ptr;
         if (val != 0ll) return val;
@@ -245,12 +251,32 @@ static void synchronize (unsigned char *ptr, unsigned short pos, unsigned short 
 }
 #endif // TRACEFORK_SYNC_UFFD
 
+#ifdef TRACEFORK_FUTEX
+
+static long futex(int *uaddr, int futex_op, int val, const struct timespec *timeout) {
+    return syscall_4(SYS_futex, (long)uaddr, futex_op, val, (long)timeout);
+}
+
+static void synchronize (unsigned char *ptr, unsigned short pos, unsigned short next_pos) {
+#define RETRIES 5
+    const struct timespec timeout = {
+        (TRACEFORK_TIMEOUT_NSEC / RETRIES) / 1000000000,
+        (TRACEFORK_TIMEOUT_NSEC / RETRIES) % 1000000000,
+    };
+    int retries = 0;
+    while (*_trace_pos_futex_var == pos) {
+        if (retries == RETRIES) {
+            write_and_exit(&(ptr[pos]), TRACEFORK_WRITE_BLOCK_SIZE);
+        }
+        futex(_trace_pos_futex_var, FUTEX_WAIT, pos, &timeout);
+        retries++;
+    }
+#undef RETRIES
+}
+#endif
 
 void *forked_write (void *trace_fname) {
-    char fname_zstd[200] = "";
-    strncat(fname_zstd, (char*)trace_fname, 195);
-    strncat(fname_zstd, ".zst", 5);
-    trace_fd = open(fname_zstd,
+    trace_fd = open(trace_fname,
                     O_WRONLY | O_CREAT | O_EXCL | O_NOCTTY,
                     S_IRUSR | S_IWUSR);
     if (trace_fd < 0) {

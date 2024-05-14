@@ -13,7 +13,7 @@
 //#define TRACE_USE_PTHREAD
 
 // to write ringbuffer to disk in a separate process
-#define TRACE_USE_FORK
+//#define TRACE_USE_FORK
 
 // do not edit here:
 #if defined TRACE_USE_PTHREAD || defined TRACE_USE_FORK
@@ -57,11 +57,16 @@
 
 #if defined TRACE_USE_PTHREAD || defined TRACE_USE_FORK
     // synchronization via userfault fd linux api
-    #define TRACEFORK_SYNC_UFFD
+    //#define TRACEFORK_SYNC_UFFD
+
+    // synchronization via futex linux api (only available when TRACE_USE_POSIX not set)
+    //#define TRACEFORK_FUTEX
 
     // otherwise polling (do not edit here)
     #ifndef TRACEFORK_SYNC_UFFD
-        #define TRACEFORK_POLLING
+        #ifndef TRACEFORK_FUTEX
+            #define TRACEFORK_POLLING
+        #endif
     #endif
 
     #ifdef TRACEFORK_POLLING
@@ -73,10 +78,10 @@
 
         // busy waiting if you really want (only available when TRACE_USE_POSIX not set)
         //#define TRACEFORK_BUSY_WAITING
-
-        // finish fork process after a timeout, when trace producer seems inactive
-        #define TRACEFORK_TIMEOUT_NSEC 10000000000 // 10 sec
     #endif
+
+    // finish fork process after a timeout, when trace producer seems inactive
+    #define TRACEFORK_TIMEOUT_NSEC 10000000000 // 10 sec
 
     // size of the trace blocks to consume/write at once (needs to be divisor of TRACE_BUF_SIZE)
     #define TRACEFORK_WRITE_BLOCK_SIZE 16384
