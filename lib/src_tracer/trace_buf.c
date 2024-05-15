@@ -15,8 +15,8 @@
 #include <sys/mman.h>
 #include <signal.h>
 #include <string.h>
-#include <sys/prctl.h>
 #include <pthread.h>
+#include <errno.h>
 
 #ifndef TRACE_USE_POSIX
   #include "syscalls.h"
@@ -243,11 +243,17 @@ static pthread_t writer_tid;
 #endif
 
 #ifdef TRACEFORK_FUTEX
-int *_trace_pos_futex_var;
-
+uint32_t *_trace_pos_futex_var;
 void _tracefork_sync(void) {
-    if (_trace_ptr != dummy) {
-        syscall_3(SYS_futex, (long)_trace_pos_futex_var, FUTEX_WAKE, INT_MAX);
+    if (_trace_buf != dummy) {
+        *_trace_pos_futex_var = _trace_buf_pos;
+        long res = futex_wake(_trace_pos_futex_var);
+        if (unlikely(res < 0)) {
+            // abort tracing
+            _trace_buf = dummy;
+            errno = -res;
+            perror("futex_wake");
+        }
     }
 }
 #endif
@@ -270,6 +276,10 @@ static void create_trace_process(void) {
         perror("mmap");
         return;
     }
+
+#ifdef TRACEFORK_FUTEX
+    _trace_pos_futex_var = _trace_ptr + TRACE_BUF_SIZE;
+#endif
 
 #ifdef TRACEFORK_SYNC_UFFD
     // we set up uffd events when (half of) trace pages are filled
@@ -322,9 +332,6 @@ static void create_trace_process(void) {
     }
 #endif
 
-#ifdef TRACEFORK_FUTEX
-    _trace_pos_futex_var = _trace_ptr + TRACE_BUF_SIZE;
-#endif
 
 #ifdef TRACE_USE_PTHREAD
     errno = pthread_create(&writer_tid, NULL, &forked_write, trace_fname);
@@ -454,16 +461,28 @@ void _trace_close(void) {
     }
 #endif
 
+#ifdef TRACEFORK_FUTEX
+    if (_trace_buf_pos % TRACEFORK_WRITE_BLOCK_SIZE == 0) {
+        // one extra byte (otherwise the fork would be confused)
+        _trace_buf_pos += 1;
+    }
+    _tracefork_sync();
+#endif
+
     // stop tracing
     _trace_buf = dummy;
+    // now we can safely call library functions
 
 #ifdef TRACEFORK_SYNC_UFFD
-    // we never use this memory
-    // hack to generate an uffd event to stop the trace writer
+    // fill remaining write block with 0
+    unsigned short rem = -_trace_buf_pos;
+    rem %= TRACEFORK_WRITE_BLOCK_SIZE;
+    memset(_trace_ptr + _trace_buf_pos, 0, rem);
+
+    // hack to generate an uffd event to stop the trace writer (we never use this memory)
     munmap(_trace_ptr + TRACE_BUF_SIZE, 4096);
 #endif
 
-    // now we can safely call library functions
 #ifdef TRACE_USE_PTHREAD
     pthread_join(writer_tid, NULL);
 #endif

@@ -26,6 +26,7 @@
 #include <sys/mman.h>
 #include <time.h>
 #include <signal.h>
+#include <errno.h>
 
 #include <zstd.h>
 
@@ -110,13 +111,7 @@ static void my_write(void *ptr, int len, bool last) {
 static void write_and_exit(unsigned char *ptr, int len) {
     // find were the trace ended
     int end = len;
-#ifdef TRACEFORK_POLLING
     while (end > 0 && ptr[end-1] == 0) end--;
-#else
-    // no memset with 0 from previous write, so we can only rely on trace end marker 'E'
-    while (end > 0 && ptr[end-1] != 'E') end--;
-    if (end == 0) end = len;
-#endif
     my_write(ptr, end, true);
     my_exit();
 }
@@ -252,26 +247,33 @@ static void synchronize (unsigned char *ptr, unsigned short pos, unsigned short 
 #endif // TRACEFORK_SYNC_UFFD
 
 #ifdef TRACEFORK_FUTEX
-
-static long futex(int *uaddr, int futex_op, int val, const struct timespec *timeout) {
-    return syscall_4(SYS_futex, (long)uaddr, futex_op, val, (long)timeout);
-}
-
 static void synchronize (unsigned char *ptr, unsigned short pos, unsigned short next_pos) {
-#define RETRIES 5
     const struct timespec timeout = {
-        (TRACEFORK_TIMEOUT_NSEC / RETRIES) / 1000000000,
-        (TRACEFORK_TIMEOUT_NSEC / RETRIES) % 1000000000,
+        .tv_sec = TRACEFORK_TIMEOUT_NSEC / 1000000000,
+        .tv_nsec = TRACEFORK_TIMEOUT_NSEC % 1000000000,
     };
-    int retries = 0;
-    while (*_trace_pos_futex_var == pos) {
-        if (retries == RETRIES) {
+    unsigned short cur_val;
+    while ((cur_val = *_trace_pos_futex_var) == pos) {
+        switch(futex_wait(_trace_pos_futex_var, pos, &timeout)) {
+        case -EAGAIN:
+        case -EINTR:
+        case 0:
+            /* let's check the variable again */
+            continue;
+        case -ETIMEDOUT:
+            /* timeout */
             write_and_exit(&(ptr[pos]), TRACEFORK_WRITE_BLOCK_SIZE);
+        default:
+            /* some other error */
+            my_exit();
         }
-        futex(_trace_pos_futex_var, FUTEX_WAIT, pos, &timeout);
-        retries++;
     }
-#undef RETRIES
+    unsigned short rem = cur_val - pos;
+    if (rem < TRACEFORK_WRITE_BLOCK_SIZE) {
+        /* finished tracing, only rem remaining */
+        my_write(&(ptr[pos]), rem, true);
+        my_exit();
+    }
 }
 #endif
 
