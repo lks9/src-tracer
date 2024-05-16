@@ -28,7 +28,9 @@
 #include <signal.h>
 #include <errno.h>
 
-#include <zstd.h>
+#ifdef TRACEFORK_ZSTD
+  #include <zstd.h>
+#endif
 
 // computed constants
 #define LONG_SLEEP_NSEC \
@@ -47,11 +49,13 @@
 
 static int trace_fd;
 
+#ifdef TRACEFORK_ZSTD
 static char z_in[ZSTD_BLOCKSIZE_MAX];
 static ZSTD_inBuffer in_desc = { z_in, 0, 0 };
 static char z_out[ZSTD_BLOCKSIZE_MAX];
 static ZSTD_outBuffer out_desc = { z_out, ZSTD_BLOCKSIZE_MAX, 0 };
 static ZSTD_CCtx* cctx;
+#endif
 
 #ifdef TRACE_USE_POSIX
 #define CLOSE(fd) close(fd)
@@ -70,7 +74,9 @@ static void my_exit(void) {
     CLOSE(_trace_uffd);
 #endif
     CLOSE(trace_fd);
+#ifdef TRACEFORK_ZSTD
     ZSTD_freeCCtx(cctx);
+#endif
 #ifdef TRACE_USE_PTHREAD
     pthread_exit((void *)0);
 #else // in fork
@@ -78,11 +84,14 @@ static void my_exit(void) {
 #endif
 }
 
+#ifdef TRACEFORK_ZSTD
+
 // write and compress
 static void my_write(void *ptr, int len, bool last) {
     __builtin_memcpy(&z_in[in_desc.size], ptr, len);
 #ifdef TRACEFORK_POLLING
-    __builtin_memset(ptr, 0, len);
+    // reset to 0 for future polling
+    *(long long*)ptr = 0;
 #endif
     in_desc.size += len;
 
@@ -108,10 +117,33 @@ static void my_write(void *ptr, int len, bool last) {
     }
 }
 
+#else // not TRACEFORK_ZSTD
+
+// write uncompressed
+static void my_write(void *ptr, int len, bool last) {
+#ifdef TRACE_USE_POSIX
+    ssize_t written = write(trace_fd, ptr, len);
+#else
+    ssize_t written = syscall_3(SYS_write, trace_fd, (long)ptr, len);
+#endif
+#ifdef TRACEFORK_POLLING
+    *(long long*)ptr = 0;
+#endif
+    // abort trace recording on write error
+    EXIT_WHEN(written != len);
+}
+
+#endif
+
 static void write_and_exit(unsigned char *ptr, int len) {
     // find were the trace ended
+    // remove any 0s at the end
+    while (len > 0 && ptr[len-1] == 0) len--;
+    // no memset with 0 after previous write, so we can only rely on trace end marker 'E'
     int end = len;
-    while (end > 0 && ptr[end-1] == 0) end--;
+    while (end > 0 && ptr[end-1] != 'E') end--;
+    // no 'E' found?
+    if (end == 0) end = len;
     my_write(ptr, end, true);
     my_exit();
 }
@@ -130,6 +162,7 @@ static void counter_handler(int nr) {
         *next_ptr_static = -1ll;
     }
     prev_counter = counter;
+    syscall_1(SYS_rt_sigreturn, 0);
 }
 
 #endif // TRACEFORK_BUSY_WAITING
@@ -290,26 +323,39 @@ void *forked_write (void *trace_fname) {
     unsigned short pos = 0;
 
 #ifdef TRACEFORK_BUSY_WAITING
-    // timer to interrupt busy waiting
+    // register timer to interrupt busy waiting
     struct sigevent sev;
     sev.sigev_notify = SIGEV_SIGNAL;
-    sev.sigev_signo = SIGRTMIN;
+    sev.sigev_signo = SIGRTMAX;
     timer_t timerid;
     sev.sigev_value.sival_ptr = &timerid;
     syscall_3(SYS_timer_create, CLOCK_BOOTTIME, (long)&sev, (long)&timerid);
 
-    signal(SIGRTMIN, counter_handler);
+    // register signal handler
+    const struct {
+        void (*handler)(int);
+        unsigned long flags;
+        void (*restorer)(void);
+        unsigned mask[2];
+    } ksa = {
+        .handler = counter_handler,
+        .flags = SA_RESETHAND | SA_NODEFER,
+    };
+    syscall_4(SYS_rt_sigaction, SIGRTMAX, (long)&ksa, (long)NULL, sizeof(ksa));
 
+    // start the timer
     time_t secs = TRACEFORK_TIMEOUT_NSEC / 1000000000;
     long nsecs  = TRACEFORK_TIMEOUT_NSEC % 1000000000;
     struct itimerspec interv = {{secs,nsecs}, {secs,nsecs}};
     syscall_4(SYS_timer_settime, (long)timerid, (long)0, (long)&interv, (long)NULL);
 #endif // TRACEFORK_BUSY_WAITING
+#ifdef TRACEFORK_ZSTD
     // initialize zstd compression
     cctx = ZSTD_createCCtx();
     EXIT_WHEN(cctx == NULL);
     CHECK_ZSTD(ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, TRACEFORK_COMPRESSION_LEVEL));
     CHECK_ZSTD(ZSTD_CCtx_setParameter(cctx, ZSTD_c_checksumFlag, 0));
+#endif
 
     while (true) {
         synchronize(ptr, pos, next_pos);

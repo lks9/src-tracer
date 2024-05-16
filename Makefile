@@ -21,11 +21,17 @@ lib/src_tracer/retrace_mode.i: lib/src_tracer/retrace_mode.c include/src_tracer/
 lib/src_tracer/retrace_mode.o: lib/src_tracer/retrace_mode.i
 	gcc -Wall -fPIC -c -nostdlib -O3 -o $@ $<
 
-lib/src_tracer/mmap_to_trace.o: lib/src_tracer/mmap_to_trace.c lib/src_tracer/syscalls.h lib/src_tracer/sync_uffd.h include/src_tracer/constants.h include/src_tracer/trace_buf.h lib/src_tracer/sync_futex.h
-	gcc -Wall -fPIC -c -Iinclude -O3 -o $@ $<
+lib/src_tracer/mmap_to_trace.i: lib/src_tracer/mmap_to_trace.c lib/src_tracer/syscalls.h lib/src_tracer/sync_uffd.h include/src_tracer/constants.h include/src_tracer/trace_buf.h lib/src_tracer/sync_futex.h
+	gcc -E -Wall -fPIC -Iinclude -c -nostdlib -O0 -o $@ $<
 
-lib/src_tracer/tracer_create_daemon.o: lib/src_tracer/tracer_create_daemon.c include/src_tracer/constants.h lib/src_tracer/syscalls.h
-	gcc -Wall -fPIC -c -Iinclude -O3 -o $@ $<
+lib/src_tracer/mmap_to_trace.o: lib/src_tracer/mmap_to_trace.i
+	gcc -Wall -fPIC -c -nostdlib -O3 -o $@ $<
+
+lib/src_tracer/tracer_create_daemon.i: lib/src_tracer/tracer_create_daemon.c include/src_tracer/constants.h lib/src_tracer/syscalls.h
+	gcc -E -Wall -fPIC -Iinclude -c -nostdlib -O0 -o $@ $<
+
+lib/src_tracer/tracer_create_daemon.o: lib/src_tracer/tracer_create_daemon.i
+	gcc -Wall -fPIC -c -nostdlib -O3 -o $@ $<
 
 clean:
 	rm -f lib/*.o lib/*.i lib/src_tracer/*.o lib/src_tracer/*.i

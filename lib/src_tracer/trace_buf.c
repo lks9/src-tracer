@@ -366,7 +366,9 @@ void _trace_open(const char *fname) {
     }
     strftime(timed_fname, 160, fname, gmtime(&now.tv_sec));
     snprintf(trace_fname, 170, timed_fname, now.tv_nsec);
+#ifdef TRACEFORK_ZSTD
     strcat(trace_fname, ".zst");
+#endif
     //printf("Trace to: %s\n", trace_fname);
 
     create_trace_process();
@@ -474,11 +476,6 @@ void _trace_close(void) {
     // now we can safely call library functions
 
 #ifdef TRACEFORK_SYNC_UFFD
-    // fill remaining write block with 0
-    unsigned short rem = -_trace_buf_pos;
-    rem %= TRACEFORK_WRITE_BLOCK_SIZE;
-    memset(_trace_ptr + _trace_buf_pos, 0, rem);
-
     // hack to generate an uffd event to stop the trace writer (we never use this memory)
     munmap(_trace_ptr + TRACE_BUF_SIZE, 4096);
 #endif

@@ -86,6 +86,9 @@
     // size of the trace blocks to consume/write at once (needs to be divisor of TRACE_BUF_SIZE)
     #define TRACEFORK_WRITE_BLOCK_SIZE 16384
 
+    // use zstd compression
+    #define TRACEFORK_ZSTD
+
     // zstd compression level
     #define TRACEFORK_COMPRESSION_LEVEL 3
 #endif
