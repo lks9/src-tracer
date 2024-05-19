@@ -9,16 +9,13 @@
 // assumes char is 8 bit!
 #define TRACE_USE_RINGBUFFER
 
-// to write ringbuffer to disk in a separate thread
-//#define TRACE_USE_PTHREAD
-
 // to write ringbuffer to disk in a separate process
 //#define TRACE_USE_FORK
 
 // do not edit here:
-#if defined TRACE_USE_PTHREAD || defined TRACE_USE_FORK
+#ifdef TRACE_USE_FORK
     #ifndef TRACE_USE_RINGBUFFER
-    #define TRACE_USE_RINGBUFFER
+        #define TRACE_USE_RINGBUFFER
     #endif
 #endif
 
@@ -30,15 +27,12 @@
     #define TRACE_BUF_SIZE 4096
 #endif
 
-// if TRACE_USE_POSIX is not set, we use the syscall directly
-#define TRACE_USE_POSIX
+// try to be posix compliant (conflicts with some of the other options)
+//#define TRACE_USE_POSIX
 
 // register variable for trace pos and trace ie byte
 // WARNING: GCC extension, breaks the ABI
 //#define TRACE_IE_BYTE_REG
-
-// text trace is meant for debugging, uncomment if you want efficiency
-//#define EFFICIENT_TEXT_TRACE
 
 // byte trace comes without any bit-tracing, trace gets is larger...
 //#define BYTE_TRACE
@@ -55,7 +49,7 @@
 // maximum number of symbolic values obtained with RETRO_SYMBOLIC()
 #define RETRACE_SYMBOLIC_SIZE 4096
 
-#if defined TRACE_USE_PTHREAD || defined TRACE_USE_FORK
+#ifdef TRACE_USE_FORK
     // synchronization via userfault fd linux api
     //#define TRACEFORK_SYNC_UFFD
 
@@ -91,6 +85,9 @@
 
     // zstd compression level
     #define TRACEFORK_COMPRESSION_LEVEL 3
+
+    // debugging
+    //#define TRACEFORK_DEBUG
 #endif
 
 #endif // SRC_TRACER_CONSTANSTS_H

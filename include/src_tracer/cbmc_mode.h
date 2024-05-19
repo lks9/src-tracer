@@ -57,17 +57,6 @@ extern int retrace_arr_len;
     } \
 }
 
-#define _RETRACE_SETJMP_CBMC(setjmp_stmt) ({ \
-    _RETRACE_CBMC('T', 0); \
-    _trace_setjmp_idx ++; \
-    int cur_setjmp_idx = _trace_setjmp_idx; \
-    int setjmp_res = setjmp_stmt; \
-    if (setjmp_res != 0) { \
-        _RETRACE_CBMC('J', _trace_setjmp_idx - cur_setjmp_idx); \
-    } \
-    setjmp_res; \
-})
-
 #define _RETRACE_FUNC_CBMC(num) \
     if (_TRACE_CALL_CHECK) { \
         _RETRACE_CBMC('C', num); \

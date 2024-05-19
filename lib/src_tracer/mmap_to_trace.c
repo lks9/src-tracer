@@ -1,22 +1,8 @@
 #include <src_tracer/constants.h>
 
-#if defined TRACE_USE_PTHREAD || defined TRACE_USE_FORK
+#ifdef TRACE_USE_FORK
 
-#include <src_tracer/trace_buf.h>
-
-#ifndef TRACE_USE_POSIX
-  #include "syscalls.h"
-#endif
-#ifdef TRACE_USE_PTHREAD
-  #include <pthread.h>
-#endif
-#ifdef TRACEFORK_SYNC_UFFD
-  #include "sync_uffd.h"
-#endif
-
-#ifdef TRACEFORK_FUTEX
-  #include "sync_futex.h"
-#endif
+#include <src_tracer/trace_mode.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -28,8 +14,28 @@
 #include <signal.h>
 #include <errno.h>
 
+#ifndef TRACE_USE_POSIX
+  #include "syscalls.h"
+  #include <linux/sched.h>
+  #include <sched.h>
+  #include <sys/prctl.h>
+  #include <linux/close_range.h>
+  #ifdef TRACEFORK_SYNC_UFFD
+    #include "sync_uffd.h"
+  #endif
+  #ifdef TRACEFORK_FUTEX
+    #include "sync_futex.h"
+  #endif
+#endif
+
 #ifdef TRACEFORK_ZSTD
   #include <zstd.h>
+#endif
+
+#ifndef TRACEFORK_DEBUG
+  #define perror(x) /* nothing here */
+#else
+  #include <stdio.h>
 #endif
 
 // computed constants
@@ -39,15 +45,23 @@
     (TRACEFORK_TIMEOUT_NSEC / LONG_SLEEP_NSEC)
 
 // other macros
-#define EXIT_WHEN(cond) \
+#ifdef TRACEFORK_DEBUG
+#define EXIT_WHEN(cond, str) \
+    if (cond) { \
+        fprintf(stderr, "[%s:%d] %s", __FILE__, __LINE__, str); \
+        my_exit(); \
+    }
+#else
+#define EXIT_WHEN(cond, str) \
     if (cond) { \
         my_exit(); \
     }
+#endif
 
-#define CHECK_ZSTD(fn) \
-    EXIT_WHEN(ZSTD_isError(fn))
-
-static int trace_fd;
+#define CHECK_ZSTD(fn) { \
+    size_t const err = (fn); \
+    EXIT_WHEN(ZSTD_isError(err), ZSTD_getErrorName(err)); \
+}
 
 #ifdef TRACEFORK_ZSTD
 static char z_in[ZSTD_BLOCKSIZE_MAX];
@@ -57,31 +71,16 @@ static ZSTD_outBuffer out_desc = { z_out, ZSTD_BLOCKSIZE_MAX, 0 };
 static ZSTD_CCtx* cctx;
 #endif
 
-#ifdef TRACE_USE_POSIX
-#define CLOSE(fd) close(fd)
-#define EXIT(n) _exit(n)
-#else
-#define CLOSE(fd) syscall_1(SYS_close, fd)
-#define EXIT(n) { \
-    syscall_1(SYS_exit, n); \
-    __builtin_unreachable(); \
-}
-#endif
-
 __attribute__((noreturn))
 static void my_exit(void) {
 #ifdef TRACEFORK_SYNC_UFFD
-    CLOSE(_trace_uffd);
+    close(_trace_uffd);
 #endif
-    CLOSE(trace_fd);
+    close(_trace_fd);
 #ifdef TRACEFORK_ZSTD
     ZSTD_freeCCtx(cctx);
 #endif
-#ifdef TRACE_USE_PTHREAD
-    pthread_exit((void *)0);
-#else // in fork
-    EXIT(0);
-#endif
+    _exit(0);
 }
 
 #ifdef TRACEFORK_ZSTD
@@ -102,14 +101,10 @@ static void my_write(void *ptr, int len, bool last) {
     CHECK_ZSTD(rem = ZSTD_compressStream2(cctx, &out_desc, &in_desc, mode));
     if (last) {
         // ZSTD_e_end guarantees rem == 0 except when out buffer is full
-        EXIT_WHEN(rem != 0);
-#ifdef TRACE_USE_POSIX
-        ssize_t written = write(trace_fd, z_out, out_desc.pos);
-#else
-        ssize_t written = syscall_3(SYS_write, trace_fd, (long)z_out, out_desc.pos);
-#endif
+        EXIT_WHEN(rem != 0, "");
+        ssize_t written = write(_trace_fd, z_out, out_desc.pos);
         // abort trace recording on write error
-        EXIT_WHEN(written != out_desc.pos);
+        EXIT_WHEN(written != out_desc.pos, "");
 
         in_desc.pos = 0;
         in_desc.size = 0;
@@ -121,16 +116,12 @@ static void my_write(void *ptr, int len, bool last) {
 
 // write uncompressed
 static void my_write(void *ptr, int len, bool last) {
-#ifdef TRACE_USE_POSIX
-    ssize_t written = write(trace_fd, ptr, len);
-#else
-    ssize_t written = syscall_3(SYS_write, trace_fd, (long)ptr, len);
-#endif
+    ssize_t written = write(_trace_fd, ptr, len);
 #ifdef TRACEFORK_POLLING
     *(long long*)ptr = 0;
 #endif
     // abort trace recording on write error
-    EXIT_WHEN(written != len);
+    EXIT_WHEN(written != len, "");
 }
 
 #endif
@@ -175,11 +166,7 @@ static void my_sleep(long nsec) {
         nsec / 1000000000,
         nsec % 1000000000
     };
-#ifdef TRACE_USE_POSIX
     nanosleep(&sleep_time, NULL);
-#else
-    syscall_2(SYS_nanosleep, (long)&sleep_time, 0);
-#endif
 }
 #endif // TRACEFORK_BUSY_WAITING
 
@@ -240,7 +227,7 @@ static void synchronize (unsigned char *ptr, unsigned short pos, unsigned short 
     ssize_t msg_len = read(_trace_uffd, &msg, sizeof(struct uffd_msg));
 
     // should not happen!
-    EXIT_WHEN(msg_len != sizeof(struct uffd_msg));
+    EXIT_WHEN(msg_len != sizeof(struct uffd_msg), "");
 
     if (msg.event == UFFD_EVENT_UNMAP) {
         // tracing finished
@@ -249,7 +236,7 @@ static void synchronize (unsigned char *ptr, unsigned short pos, unsigned short 
 
     // some other event?
     // should not happen!
-    EXIT_WHEN(msg.event != UFFD_EVENT_PAGEFAULT);
+    EXIT_WHEN(msg.event != UFFD_EVENT_PAGEFAULT, "");
 
     // insert the trap for the next page fault
     {
@@ -298,7 +285,7 @@ static void synchronize (unsigned char *ptr, unsigned short pos, unsigned short 
             write_and_exit(&(ptr[pos]), TRACEFORK_WRITE_BLOCK_SIZE);
         default:
             /* some other error */
-            my_exit();
+            EXIT_WHEN(true, "");
         }
     }
     unsigned short rem = cur_val - pos;
@@ -310,13 +297,7 @@ static void synchronize (unsigned char *ptr, unsigned short pos, unsigned short 
 }
 #endif
 
-void *forked_write (void *trace_fname) {
-    trace_fd = open(trace_fname,
-                    O_WRONLY | O_CREAT | O_EXCL | O_NOCTTY,
-                    S_IRUSR | S_IWUSR);
-    if (trace_fd < 0) {
-        my_exit();
-    }
+static void forked_main (void) {
 
     unsigned char *const ptr = _trace_ptr;
     unsigned short next_pos = TRACEFORK_WRITE_BLOCK_SIZE;
@@ -332,16 +313,7 @@ void *forked_write (void *trace_fname) {
     syscall_3(SYS_timer_create, CLOCK_BOOTTIME, (long)&sev, (long)&timerid);
 
     // register signal handler
-    const struct {
-        void (*handler)(int);
-        unsigned long flags;
-        void (*restorer)(void);
-        unsigned mask[2];
-    } ksa = {
-        .handler = counter_handler,
-        .flags = SA_RESETHAND | SA_NODEFER,
-    };
-    syscall_4(SYS_rt_sigaction, SIGRTMAX, (long)&ksa, (long)NULL, sizeof(ksa));
+    signal(SIGRTMAX, counter_handler);
 
     // start the timer
     time_t secs = TRACEFORK_TIMEOUT_NSEC / 1000000000;
@@ -352,7 +324,7 @@ void *forked_write (void *trace_fname) {
 #ifdef TRACEFORK_ZSTD
     // initialize zstd compression
     cctx = ZSTD_createCCtx();
-    EXIT_WHEN(cctx == NULL);
+    EXIT_WHEN(cctx == NULL, "");
     CHECK_ZSTD(ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, TRACEFORK_COMPRESSION_LEVEL));
     CHECK_ZSTD(ZSTD_CCtx_setParameter(cctx, ZSTD_c_checksumFlag, 0));
 #endif
@@ -367,4 +339,179 @@ void *forked_write (void *trace_fname) {
     }
 }
 
-#endif // defined TRACE_USE_PTHREAD || defined TRACE_USE_FORK
+#ifndef TRACE_USE_POSIX
+// custom fork / clone functions
+static
+int clone3(const struct clone_args *args, size_t size)
+{
+	long ret = syscall_2(SYS_clone3, (long)args, size);
+#ifdef TRACEFORK_DEBUG
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+#endif
+    return (int)ret;
+}
+
+/*
+  Fork using clone syscall, then exit in parent and return in child.
+  Safe to use with CLONE_VM, as there is no memory write access between the two syscalls in the
+  parent (not even stack is used), so there cannot be a race condition with the child.
+  (Relies on noipa and Os attribute, otherwise some stack push and pop could break this!)
+*/
+
+static long
+__attribute__((noipa,optimize("Os")))
+clone_parent_exit(const struct clone_args *args, size_t size)
+{
+	long ret = syscall_2(SYS_clone3, (long)args, size);
+    if (ret > 0) {
+        syscall_1(SYS_exit, 0);
+        __builtin_unreachable();
+    }
+    return ret;
+}
+
+#endif // not TRACE_USE_POSIX
+
+static void fork_parent_exit(void) {
+#ifdef TRACE_USE_POSIX
+    if (fork() != 0) _exit(0);
+#else
+    static const struct clone_args cl_args = {
+        /* for better performance, same memory is used (no race in clone_parent_exit) */
+        .flags = CLONE_VM | CLONE_FILES | CLONE_FS | CLONE_SIGHAND,
+    };
+    clone_parent_exit(&cl_args, sizeof(struct clone_args));
+#endif
+}
+
+static void setup_uffd(void) {
+#ifdef TRACEFORK_SYNC_UFFD
+    // we set up uffd events when (half of) trace pages are filled
+    // then trace writer can write in second thread/process
+    _trace_uffd = syscall(SYS_userfaultfd, UFFD_USER_MODE_ONLY);
+    if (_trace_uffd < 0) {
+#ifdef TRACEFORK_DEBUG
+        errno = -_trace_uffd;
+        perror("userfaultfd");
+#endif
+        _exit(0);
+    }
+    struct uffdio_api uffdio_api = {
+        .api = UFFD_API,
+        .features = UFFD_FEATURE_EVENT_UNMAP
+                  | UFFD_FEATURE_MISSING_SHMEM
+                  | UFFD_FEATURE_WP_HUGETLBFS_SHMEM,
+    };
+    if (ioctl(_trace_uffd, UFFDIO_API, &uffdio_api) == -1) {
+        perror("uffdio api");
+        _exit(0);
+    }
+
+    // do not generate page fault for first page
+    *(unsigned char*)_trace_ptr = 0xff;
+
+    // register page ranges to track
+    struct uffdio_register uffdio_register = {
+        .mode = UFFDIO_REGISTER_MODE_WP
+              | UFFDIO_REGISTER_MODE_MISSING,
+        .range.len = 4096,
+    };
+    for (int i = 0; i < TRACE_BUF_SIZE; i += TRACEFORK_WRITE_BLOCK_SIZE) {
+        uffdio_register.range.start = (unsigned long) _trace_ptr + i;
+        if (ioctl(_trace_uffd, UFFDIO_REGISTER, &uffdio_register) == -1) {
+            perror("uffdio register");
+            _exit(0);
+        }
+    }
+#endif
+}
+
+static int clone_function(void *trace_fname) {
+#ifndef TRACE_USE_POSIX
+    /* new name */
+    prctl(PR_SET_NAME, (unsigned long)"src_tracer");
+#endif
+
+    /* session leader
+          -> independ from the previous process session
+          -> independent from terminal */
+    setsid();
+
+    /* anything might happen to the current directory, be independent */
+    //chdir("/");
+    //umask(0);
+
+    /* close any fd */
+#ifdef TRACEFORK_DEBUG
+  #define FIRST_FD 3
+#else
+  #define FIRST_FD 0
+#endif
+#ifdef TRACE_USE_POSIX
+    /* cannot use sysconf() here, because of race conditions, see man fork(2), signal-safety(7) */
+    for (int fd = FIRST_FD; fd <= _POSIX_OPEN_MAX; fd++) {
+  #ifdef TRACEFORK_SYNC_UFFD
+        if (fd == _trace_uffd) continue;
+  #endif
+        close(fd);
+    }
+#else
+  #ifdef TRACEFORK_SYNC_UFFD
+    if (FIRST_FD < _trace_fd) {
+        syscall_3(SYS_close_range, FIRST_FD, _trace_uffd - 1, CLOSE_RANGE_UNSHARE);
+    }
+    syscall_3(SYS_close_range, _trace_uffd + 1, ~0U, CLOSE_RANGE_UNSHARE);
+  #else
+    syscall_3(SYS_close_range, FIRST_FD, ~0U, CLOSE_RANGE_UNSHARE);
+  #endif
+#endif
+
+    _trace_fd = open(trace_fname,
+                     O_WRONLY | O_CREAT | O_EXCL | O_NOCTTY,
+                     S_IRUSR | S_IWUSR);
+    if (_trace_fd < 0) {
+        perror("open trace_fd");
+        _exit(0);
+    }
+
+    /* fork again & exit parent, to avoid any waitpid... */
+    fork_parent_exit();
+
+    forked_main();
+    // will never return
+    __builtin_unreachable();
+}
+
+
+// daemon process
+int tracer_create_daemon(char *trace_fname) {
+    int res;
+
+    setup_uffd();
+
+#ifdef TRACE_USE_POSIX
+    res = fork();
+#else
+    static const struct clone_args cl_args = {
+        // CLONE_VFORK means that parent is suspended until child exits.
+        // Unlike CLONE_VM or vfork(), child still operates on separate memory.
+        .flags = CLONE_VFORK | CLONE_FILES | CLONE_FS,
+    };
+    res = clone3(&cl_args, sizeof(struct clone_args));
+#endif
+    if (res == 0) {
+        clone_function(trace_fname);
+        _exit(res);
+    }
+#ifdef TRACEFORK_UFFD
+    // only needed in the child process
+    close(_trace_uffd);
+#endif
+    return res;
+}
+
+
+#endif // TRACE_USE_FORK

@@ -60,4 +60,9 @@ static inline __attribute__((always_inline)) long syscall_6(long n, long a1, lon
 
 // end musl code
 
+// missing SYS_... definitions on my system
+#ifndef SYS_close_range
+  #define SYS_close_range 436
+#endif
+
 #endif // SRC_TRACER_SYSCALLS_H

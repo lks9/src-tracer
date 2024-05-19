@@ -27,6 +27,9 @@ struct uffdio_writeprotect {
 #define UFFDIO_WRITEPROTECT_MODE_WP		((__u64)1<<0)
 #define UFFDIO_WRITEPROTECT_MODE_DONTWAKE	((__u64)1<<1)
 #endif
+#ifndef UFFD_FEATURE_WP_HUGETLBFS_SHMEM
+#define UFFD_FEATURE_WP_HUGETLBFS_SHMEM		(1<<12)
+#endif
 
 extern int _trace_uffd;
 

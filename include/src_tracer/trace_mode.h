@@ -14,10 +14,16 @@
 #include <stdbool.h>
 #endif
 
-extern void _trace_open(const char *fname);
+extern void _trace_open(const char *fname, const char *suffix);
 extern void _trace_close(void);
 extern void _trace_before_fork(void);
 extern int _trace_after_fork(int pid);
+
+#ifdef TRACEFORK_ZSTD
+  #define _TRACE_FNAME_SUFFIX ".trace.zst"
+#else
+  #define _TRACE_FNAME_SUFFIX ".trace"
+#endif
 
 #define _TRACE_PUT(c) ;{ \
     _trace_buf[_trace_buf_pos] = (c); \
@@ -36,7 +42,7 @@ extern void _tracefork_sync(void);
 #else
 #define _TRACE_MAY_SYNC() \
     if (_trace_buf_pos == TRACE_BUF_SIZE) { \
-        _trace_write(_trace_buf); \
+        _trace_write(); \
         _trace_buf_pos = 0; \
     }
 #endif
@@ -45,7 +51,8 @@ extern void _tracefork_sync(void);
 
 #define _TRACE_IF()     _TRACE_PUT('I')
 #define _TRACE_ELSE()   _TRACE_PUT('O')
-#define _TRACE_IE_FINISH
+#define _TRACE_IE_INIT  /* nothing here */
+#define _TRACE_IE_FINISH /* nothing here */
 #define _TRACE_IE(if_true) \
     if (if_true) { \
         _TRACE_IF(); \
@@ -63,6 +70,9 @@ extern void _tracefork_sync(void);
 // will get optimized as rotate instruction
 #define rotate_8(x, n) \
     ((x << n) | (x >> (8 - n)))
+
+#define _TRACE_IE_INIT \
+    _trace_ie_byte = _TRACE_SET_IE_INIT;
 
 #define _TRACE_IE_PREPARE_NEXT \
     if (_trace_ie_byte < 0b11000000) { \
@@ -241,17 +251,6 @@ extern void _tracefork_sync(void);
 #else
 #define _TRACE_TRY_END() /* nothing here */
 #endif
-
-#define _TRACE_SETJMP(setjmp_stmt) ({ \
-    _trace_setjmp_idx ++; \
-    int cur_setjmp_idx = _trace_setjmp_idx; \
-    _TRACE_TRY(); \
-    int setjmp_res = setjmp_stmt; \
-    if (setjmp_res != 0) { \
-        _TRACE_CATCH(cur_setjmp_idx); \
-    } \
-    setjmp_res; \
-})
 
 // same as the macro version
 // but returns num

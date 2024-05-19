@@ -17,7 +17,7 @@
 #ifdef _TRACE_MODE
     #include "src_tracer/trace_mode.h"
 #endif
-#ifdef _TRACE_MODE_TEXT
+#ifdef _TEXT_TRACE_MODE
     #include "src_tracer/text_trace_mode.h"
 #endif
 
@@ -38,6 +38,38 @@
 #define _RETRO(normal, retro) \
     _RETRO_SKIP(normal) \
     _RETRO_ONLY(retro)
+
+/* Macros that translate to macros */
+#if defined _TRACE_MODE || defined _RETRACE_MODE || defined _TEXT_TRACE_MODE || defined _CBMC_MODE
+#define _SETJMP(setjmp_stmt) ({ \
+    _TRY \
+    _trace_setjmp_idx ++; \
+    int cur_setjmp_idx = _trace_setjmp_idx; \
+    int setjmp_res = setjmp_stmt; \
+    if (setjmp_res != 0) { \
+        _CATCH(cur_setjmp_idx) \
+    } \
+    setjmp_res; \
+})
+
+#define _FORK(fork_stmt) ({ \
+    _BEFORE_FORK \
+    _TRACING_PAUSE \
+    int fork_res = fork_stmt; \
+    if (fork_res != 0) { \
+        /* in parent */ \
+        _TRACING_RESUME \
+        _IF \
+    } else { \
+        _IN_FORK_CHILD \
+        _ELSE \
+    } \
+    fork_res; \
+})
+#else
+#define _SETJMP(setjmp_stmt) setjmp_stmt
+#define _FORK(fork_stmt) fork_stmt
+#endif
 
 /*
  * Macros used in the instrumentation.
@@ -71,19 +103,24 @@
 #define _TRY                _IS_RETRACE(_RETRACE_TRY(), _TRACE_TRY())
 #define _CATCH(idx)         _IS_RETRACE(_RETRACE_CATCH(idx), _TRACE_CATCH(idx))
 #define _TRY_END            _IS_RETRACE(_RETRACE_TRY_END(), _TRACE_TRY_END())
-#define _SETJMP(stmt)       _IS_RETRACE(_RETRACE_SETJMP(stmt), _TRACE_SETJMP(stmt))
 
-#ifdef BYTE_TRACE
-#define _TRACE_OPEN(fname)  _IS_RETRACE( ,_trace_open((fname))); \
+#define _TRACE_OPEN(fname)  _IS_RETRACE( ,_trace_open((fname), _TRACE_FNAME_SUFFIX)); \
                             _IS_RETRACE( ,_trace_buf_pos = 0); \
+                            _IS_RETRACE( ,_TRACE_IE_INIT); \
                             _TRACE_POINTER_CALL_SET;
-#else
-#define _TRACE_OPEN(fname)  _IS_RETRACE( ,_trace_open((fname))); \
+#define _TRACE_CLOSE        _IS_RETRACE(_RETRACE_END(), _TRACE_END()); \
+                            _IS_RETRACE( ,_trace_close())
+
+#define _BEFORE_FORK        ;_trace_fork_count += 1; \
+                            _IS_RETRACE(_RETRACE_ELEM('F', _trace_fork_count), \
+                                        _TRACE_NUM(_TRACE_SET_FORK, _trace_fork_count));
+#define _TRACING_PAUSE      _IS_RETRACE( ,_TRACE_IE_FINISH); \
+                            _IS_RETRACE( ,_trace_pause());
+#define _TRACING_RESUME     _IS_RETRACE( ,_trace_resume()); \
+                            _IS_RETRACE( ,_TRACE_IE_INIT);
+#define _IN_FORK_CHILD      _IS_RETRACE( ,_trace_in_fork_child()); \
                             _IS_RETRACE( ,_trace_buf_pos = 0); \
-                            _IS_RETRACE( ,_trace_ie_byte = _TRACE_SET_IE_INIT); \
-                            _TRACE_POINTER_CALL_SET;
-#endif
-#define _TRACE_CLOSE        _IS_RETRACE(_RETRACE_END() ,_trace_close())
+                            _IS_RETRACE( ,_TRACE_IE_INIT);
 
 #define _POINTER_CALL(call) _TRACE_POINTER_CALL(call)
 #define _POINTER_CALL_AFTER(type, call) \
@@ -115,24 +152,26 @@
 #define _LOOP_BODY(id)      ;_TRACE_IF();
 #define _LOOP_END(id)       ;_TRACE_ELSE();
 
-#ifdef BYTE_TRACE
-#define _TRACE_OPEN(fname)  _trace_open((fname)); \
-                            _trace_buf_pos = 0; \
-                            _TRACE_POINTER_CALL_SET;
-#else
-#define _TRACE_OPEN(fname)  _trace_open((fname)); \
-                            _trace_buf_pos = 0; \
-                            _trace_ie_byte = _TRACE_SET_IE_INIT; \
-                            _TRACE_POINTER_CALL_SET;
-#endif
-#define _TRACE_CLOSE        ;_trace_close();
+#define _TRACE_OPEN(fname)  ;_trace_open((fname), _TRACE_FNAME_SUFFIX); \
+                             _trace_buf_pos = 0; \
+                             _TRACE_IE_INIT; \
+                             _TRACE_POINTER_CALL_SET;
+#define _TRACE_CLOSE        ;_TRACE_END(); \
+                             _trace_close();
 
-#define _FORK(fork_stmt)    (_trace_before_fork(), \
-                             _trace_after_fork(fork_stmt))
+#define _BEFORE_FORK        ;_trace_fork_count += 1; \
+                             _TRACE_NUM(_TRACE_SET_FORK, _trace_fork_count);
+#define _TRACING_PAUSE      ;_TRACE_IE_FINISH; \
+                             _trace_pause();
+#define _TRACING_RESUME     ;_trace_resume(); \
+                             _TRACE_IE_INIT;
+#define _IN_FORK_CHILD      ;_trace_in_fork_child(); \
+                             _trace_buf_pos = 0; \
+                             _TRACE_IE_INIT;
+
 #define _TRY                ;_TRACE_TRY();
 #define _CATCH(idx)         ;_TRACE_CATCH(idx);
 #define _TRY_END            ;_TRACE_TRY_END();
-#define _SETJMP(stmt)       _TRACE_SETJMP(stmt)
 
 #define _POINTER_CALL(call) _TRACE_POINTER_CALL(call)
 #define _POINTER_CALL_AFTER(type, call) \
@@ -164,8 +203,14 @@
 #define _LOOP_BODY(id)      ;_TRACE_PUT_TEXT('I');
 #define _LOOP_END(id)       ;_TRACE_PUT_TEXT('O');
 
-#define _TRACE_OPEN(fname)  ;_trace_open(fname ".txt");
-#define _TRACE_CLOSE        ;_trace_close();
+#define _TRACE_OPEN(fname)  ;_trace_open(fname, _TRACE_FNAME_SUFFIX);
+#define _TRACE_CLOSE        ;_TRACE_PUT_TEXT('E'); \
+                             _trace_close();
+#define _BEFORE_FORK        ;_trace_fork_count += 1; \
+                             _TRACE_NUM_TEXT('F', _trace_fork_count);
+#define _TRACING_PAUSE      ;_trace_pause();
+#define _TRACING_RESUME     ;_trace_resume();
+#define _IN_FORK_CHILD      ;_trace_in_fork_child();
 
 #define _RETRO_ONLY(code)   /* nothing here */
 #define _RETRO_SKIP(code)   code
@@ -196,13 +241,16 @@
 #define _TRY                ;_RETRACE_TRY();
 #define _CATCH(idx)         ;_RETRACE_CATCH(idx);
 #define _TRY_END            ;_RETRACE_TRY_END();
-#define _SETJMP(stmt)       _RETRACE_SETJMP(stmt)
 
 #define _TRACE_OPEN(fname)  ;_TRACE_POINTER_CALL_SET;
 #define _TRACE_CLOSE        ;_RETRACE_END();
 
-#define _FORK(fork_stmt)    (_retrace_elem('F', _trace_fork_count), \
-                             _retrace_after_fork(fork_stmt))
+#define _BEFORE_FORK        ;_trace_fork_count += 1; \
+                             _RETRACE_ELEM('F', _trace_fork_count);
+// TODO
+#define _TRACING_PAUSE      /* nothing here */
+#define _TRACING_RESUME     /* nothing here */
+#define _IN_FORK_CHILD      _TRACING_RESUME
 
 #define _POINTER_CALL(call) _TRACE_POINTER_CALL(call)
 #define _POINTER_CALL_AFTER(type, call) \
@@ -230,12 +278,19 @@
 #define _LOOP_BODY(id)      ;_RETRACE_CBMC('I', 0);
 #define _LOOP_END(id)       ;_RETRACE_CBMC('O', 0);
 
-#define _SETJMP(stmt)       _RETRACE_SETJMP_CBMC(stmt)
-
 #define _TRACE_OPEN(fname)  ;_TRACE_POINTER_CALL_SET; retrace_i = 0;
 #define _TRACE_CLOSE        ;_RETRACE_END_CBMC();
 
-#define _FORK(fork_stmt)    fork_stmt
+// TODO
+#define _TRACING_PAUSE      /* nothing here */
+#define _TRACING_RESUME     /* nothing here */
+
+#define _BEFORE_FORK        ;_trace_fork_count += 1; \
+                             _RETRACE_CBMC('F', _trace_fork_count);
+#define _IN_FORK_CHILD      _TRACING_RESUME
+
+#define _TRY                ;_RETRACE_CBMC('T', 0);
+#define _CATCH(idx)         ;_RETRACE_CBMC('J', _trace_setjmp_idx - idx);
 
 #define _POINTER_CALL(call) _TRACE_POINTER_CALL(call)
 #define _POINTER_CALL_AFTER(type, call) \
@@ -263,11 +318,11 @@
 #define _TRACE_OPEN(fname)  /* nothing here */
 #define _TRACE_CLOSE        /* nothing here */
 
-#define _FORK(fork_stmt)    fork_stmt
+#define _TRACING_PAUSE      /* nothing here */
+#define _TRACING_RESUME     /* nothing here */
 #define _TRY                /* nothing here */
 #define _CATCH(idx)         /* nothing here */
 #define _TRY_END            /* nothing here */
-#define _SETJMP(setjmp_stmt) setjmp_stmt
 
 #define _POINTER_CALL(call) call
 #define _POINTER_CALL_AFTER(type, call) call

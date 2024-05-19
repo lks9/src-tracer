@@ -8,7 +8,7 @@
 #include "src_tracer/constants.h"
 
 // trace buffer
-#if defined TRACE_USE_PTHREAD || defined TRACE_USE_FORK
+#ifdef TRACE_USE_FORK
     extern void __attribute__((aligned(4096))) *_trace_ptr;
     extern __attribute__((aligned(4096))) unsigned char *restrict _trace_buf;
 #else
@@ -36,10 +36,11 @@
 // write trace to disk
 #ifndef TRACE_USE_RINGBUFFER
     // no disk-writing for ringbuffers
-    extern void _trace_write(const void *buf);
-    #ifndef EFFICIENT_TEXT_TRACE
-        extern void _trace_write_text(const void *buf, unsigned long count);
-    #endif
+    extern void _trace_write(void);
 #endif
+
+extern void _trace_pause(void);
+extern void _trace_resume(void);
+extern void _trace_in_fork_child(void);
 
 #endif //SRC_TRACER_TRACE_BUF_H
