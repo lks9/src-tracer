@@ -71,12 +71,14 @@ static ZSTD_outBuffer out_desc = { z_out, ZSTD_BLOCKSIZE_MAX, 0 };
 static ZSTD_CCtx* cctx;
 #endif
 
+static int trace_fd;
+
 __attribute__((noreturn))
 static void my_exit(void) {
 #ifdef TRACEFORK_SYNC_UFFD
     close(_trace_uffd);
 #endif
-    close(_trace_fd);
+    close(trace_fd);
 #ifdef TRACEFORK_ZSTD
     ZSTD_freeCCtx(cctx);
 #endif
@@ -102,7 +104,7 @@ static void my_write(void *ptr, int len, bool last) {
     if (last) {
         // ZSTD_e_end guarantees rem == 0 except when out buffer is full
         EXIT_WHEN(rem != 0, "");
-        ssize_t written = write(_trace_fd, z_out, out_desc.pos);
+        ssize_t written = write(trace_fd, z_out, out_desc.pos);
         // abort trace recording on write error
         EXIT_WHEN(written != out_desc.pos, "");
 
@@ -116,7 +118,7 @@ static void my_write(void *ptr, int len, bool last) {
 
 // write uncompressed
 static void my_write(void *ptr, int len, bool last) {
-    ssize_t written = write(_trace_fd, ptr, len);
+    ssize_t written = write(trace_fd, ptr, len);
 #ifdef TRACEFORK_POLLING
     *(long long*)ptr = 0;
 #endif
@@ -460,7 +462,7 @@ static int clone_function(void *trace_fname) {
     }
 #else
   #ifdef TRACEFORK_SYNC_UFFD
-    if (FIRST_FD < _trace_fd) {
+    if (FIRST_FD < trace_fd) {
         syscall_3(SYS_close_range, FIRST_FD, _trace_uffd - 1, CLOSE_RANGE_UNSHARE);
     }
     syscall_3(SYS_close_range, _trace_uffd + 1, ~0U, CLOSE_RANGE_UNSHARE);
@@ -469,10 +471,10 @@ static int clone_function(void *trace_fname) {
   #endif
 #endif
 
-    _trace_fd = open(trace_fname,
+    trace_fd = open(trace_fname,
                      O_WRONLY | O_CREAT | O_EXCL | O_NOCTTY,
                      S_IRUSR | S_IWUSR);
-    if (_trace_fd < 0) {
+    if (trace_fd < 0) {
         perror("open trace_fd");
         _exit(0);
     }
