@@ -627,7 +627,7 @@ extern bool _trace_pointer_call;
 #define _SETJMP(stmt)       _IS_RETRACE(_RETRACE_SETJMP(stmt), _TRACE_SETJMP(stmt))
 
 #define _TRACE_OPEN(fname)  _IS_RETRACE( ,_trace_open((fname))); \
-                            _IS_RETRACE( ,_trace_buf_pos = 0); \
+                            _IS_RETRACE( ,_trace_pos = 0); \
                             _IS_RETRACE( ,_trace_ie_byte = _TRACE_IE_BYTE_INIT); \
                             _TRACE_POINTER_CALL_SET;
 #define _TRACE_CLOSE        _IS_RETRACE(_RETRACE_END() ,_trace_close())
@@ -663,7 +663,7 @@ extern bool _trace_pointer_call;
 #define _LOOP_END(id)       ;_TRACE_ELSE();
 
 #define _TRACE_OPEN(fname)  _trace_open((fname)); \
-                            _trace_buf_pos = 0; \
+                            _trace_pos = 0; \
                             _trace_ie_byte = _TRACE_IE_BYTE_INIT; \
                             _TRACE_POINTER_CALL_SET;
 #define _TRACE_CLOSE        ;_trace_close();
