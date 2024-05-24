@@ -12,6 +12,9 @@
 // to write ringbuffer to disk in a separate process
 //#define TRACE_USE_FORK
 
+// Use thread_local storage to allow tracing a single thread, avoids race conditions
+//#define TRACE_USE_THREAD_LOCAL
+
 // do not edit here:
 #ifdef TRACE_USE_FORK
     #ifndef TRACE_USE_RINGBUFFER

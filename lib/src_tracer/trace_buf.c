@@ -33,25 +33,35 @@
 
 extern int tracer_create_daemon(char *trace_fname);
 
+
+#ifdef TRACE_USE_THREAD_LOCAL
+  #define MY_THREAD_LOCAL  __thread
+#else
+  #define MY_THREAD_LOCAL  /* nothing here */
+#endif
+
 // trace buffer
 #ifdef TRACE_USE_FORK
   static unsigned char dummy[TRACE_BUF_SIZE] __attribute__ ((aligned (4096)));
   void __attribute__((aligned(4096))) *_trace_ptr = dummy;
-  __attribute__((aligned(4096))) unsigned char *restrict _trace_buf = dummy;
+  __attribute__((aligned(4096))) MY_THREAD_LOCAL unsigned char *restrict _trace_buf = dummy;
 #else
-  unsigned char _trace_buf[TRACE_BUF_SIZE];
+  MY_THREAD_LOCAL unsigned char _trace_buf[TRACE_BUF_SIZE];
 #endif
 
 // trace position
 #ifdef TRACE_USE_RINGBUFFER
+  MY_THREAD_LOCAL
   unsigned short _trace_buf_pos = 0;
 #else
+  MY_THREAD_LOCAL
   int _trace_buf_pos = 0;
 #endif
 
 // trace ie byte
 #ifndef BYTE_TRACE
   #ifndef TRACE_IE_BYTE_REG
+    MY_THREAD_LOCAL
     unsigned char _trace_ie_byte = _TRACE_SET_IE_INIT;
   #endif
 #endif
@@ -214,7 +224,7 @@ static void trace_open_fname(const char *suffix) {
 void _trace_open(const char *fname, const char *suffix) {
     if (TRACE_IS_OPEN()) {
         // already opened
-        _trace_close();
+        return;
     }
     // Make the file name time dependent
     char timed_fname[160];
