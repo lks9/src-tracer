@@ -157,7 +157,7 @@ class Instrumenter:
                     if close:
                         self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
                     semi_off = self.find_next_semi(ret_stmt.extent.end)
-                    self.prepent_annotation(b" }", ret_stmt.extent.end, semi_off + 1)
+                    self.prepent_annotation(b"; }", ret_stmt.extent.end, semi_off)
                 elif self.assume_tailcall:
                     self.add_annotation(b"{ ", ret_stmt.extent.start)
                     if ret:
@@ -165,7 +165,7 @@ class Instrumenter:
                     if close:
                         self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
                     semi_off = self.find_next_semi(ret_stmt.extent.end)
-                    self.prepent_annotation(b" }", ret_stmt.extent.end, semi_off + 1)
+                    self.prepent_annotation(b"; }", ret_stmt.extent.end, semi_off)
                 else:
                     childs = [c for c in ret_stmt.get_children()]
                     ret_expr = childs[0]
@@ -399,9 +399,10 @@ class Instrumenter:
             if (child.kind == CursorKind.COMPOUND_STMT):
                 body = child
 #        self.add_annotation(b" _LOOP_START(" + loop_id + b") ", node.extent.start)
+        self.add_annotation(b" { ", node.extent.start)
         if body:
             self.prepent_annotation(b" _LOOP_BODY(" + loop_id + b") ", body.extent.start, 1)
-            self.prepent_annotation(b" _LOOP_END(" + loop_id + b") ", node.extent.end)
+            self.prepent_annotation(b" _LOOP_END(" + loop_id + b") } ", node.extent.end)
         else:
             childs = [c for c in node.get_children()]
             if len(childs) >= 2:
@@ -411,15 +412,15 @@ class Instrumenter:
                     semi_off2 = self.find_next_semi(node.extent.end)
                     self.prepent_annotation(b" { _LOOP_BODY(" + loop_id + b") ", stmt.extent.start)
                     self.prepent_annotation(b" } ", stmt.extent.end, semi_off + 1)
-                    self.prepent_annotation(b" _LOOP_END(" + loop_id + b") ", node.extent.end, semi_off2 + 1)
+                    self.prepent_annotation(b" _LOOP_END(" + loop_id + b") } ", node.extent.end, semi_off2 + 1)
                 else:
                     stmt = childs[-1]
                     semi_off = self.find_next_semi(node.extent.end)
                     self.prepent_annotation(b" { _LOOP_BODY(" + loop_id + b") ", stmt.extent.start)
-                    self.prepent_annotation(b" } _LOOP_END(" + loop_id + b") ", node.extent.end, semi_off + 1)
+                    self.prepent_annotation(b" } _LOOP_END(" + loop_id + b") } ", node.extent.end, semi_off + 1)
             else:
                 semi_off = self.find_next_semi(node.extent.end)
-                self.prepent_annotation(b" { _LOOP_BODY(" + loop_id + b") } _LOOP_END(" + loop_id + b") ",
+                self.prepent_annotation(b" { _LOOP_BODY(" + loop_id + b") } _LOOP_END(" + loop_id + b") } ",
                                         node.extent.end, semi_off + 1)
 
 #        # handle returns & gotos
@@ -494,7 +495,8 @@ class Instrumenter:
                 # we will add an extra case below
                 case_count = case_count + 1
             bits_needed = bytes(hex(int.bit_length(case_count-1)), "utf-8")
-            self.add_annotation(b" _SWITCH_START(" + switch_id + b", " + bits_needed + b") ", node.extent.start)
+            self.add_annotation(b" { _SWITCH_START(" + switch_id + b", " + bits_needed + b") ", node.extent.start)
+            self.prepent_annotation(b"}", node.extent.end)
 
             for case_index in range(len(case_node_list)):
                 case_node = case_node_list[case_index]
@@ -504,9 +506,10 @@ class Instrumenter:
             # append missing default if necessary
             if not has_default:
                 case_id = bytes(hex(case_count - 1), "utf-8")
-                self.add_annotation(b" break; default: _CASE(" + case_id + b", "
-                                                               + switch_id + b", " + bits_needed + b") ",
-                                    node.extent.end, -1)
+                self.add_annotation(b" default: _CASE(" + case_id + b", "
+                                                        + switch_id + b", " + bits_needed + b") "
+                                    + b" break; ",
+                                    children[1].extent.start, 1)
         else:
             # simpler, default
             switch_num = children[0]
@@ -678,7 +681,7 @@ class Instrumenter:
                 function_scope = False
         except:
             message = "Failed to annotate a " + str(node.kind)
-            raise Exception(message)
+            #raise Exception(message)
 
         for child in node.get_children():
             self.traverse(child, function_scope=function_scope)

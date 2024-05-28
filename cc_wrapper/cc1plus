@@ -55,6 +55,7 @@ if [ "$1" = "-E" ]; then
         exec $(${COLLECT_GCC} --print-prog-name=cc1plus) $@
     else
         # call gcc (or the preprocessor)
+        #echo $(${COLLECT_GCC} --print-prog-name=cc1plus) $@
         $(${COLLECT_GCC} --print-prog-name=cc1plus) $@
 
         # save the pre-pocessed output
@@ -64,10 +65,12 @@ if [ "$1" = "-E" ]; then
         python3 "${SRC_TRACER_DIR}/instrumenter.py" "${outfile}.tmp.cpp" "${SRC_TRACER_STORE_DIR}" || exit $?
 
         # rerun preprocessor to resolve instrumentation macros
-        cpp ${SRC_TRACER} "${outfile}.tmp.cpp" -o "${outfile}.tmp.ii" -I "${SRC_TRACER_DIR}/instrumentation/"
+        #echo cpp ${SRC_TRACER} "${outfile}.tmp.cpp" -o "${outfile}.tmp.ii" -I "${SRC_TRACER_DIR}/include/"
+        cpp ${SRC_TRACER} "${outfile}.tmp.cpp" -o "${outfile}.tmp.ii" -I "${SRC_TRACER_DIR}/include/"
         cp "${outfile}.tmp.ii" "${outfile}"
     fi
 elif [ "$1" = "-fpreprocessed" ]; then
     # just compile it
+    #echo $(${COLLECT_GCC} --print-prog-name=cc1plus) $@
     exec $(${COLLECT_GCC} --print-prog-name=cc1plus) $@
 fi

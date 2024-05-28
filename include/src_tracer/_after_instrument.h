@@ -2,6 +2,11 @@
    src_tracer/_after_instrument.h
    automatically included after running instrumenter.py
 */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // This file comes without any standard library include.
 // Reason: It works on pre-processed files.
 // A "#include <stdbool.h>" would result in double included files!
