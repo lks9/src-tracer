@@ -506,10 +506,11 @@ class Instrumenter:
             # append missing default if necessary
             if not has_default:
                 case_id = bytes(hex(case_count - 1), "utf-8")
-                self.add_annotation(b" default: _CASE(" + case_id + b", "
+                self.add_annotation(b" { default: _CASE(" + case_id + b", "
                                                         + switch_id + b", " + bits_needed + b") "
                                     + b" break; ",
-                                    children[1].extent.start, 1)
+                                    children[1].extent.start)
+                self.prepent_annotation(b"}", node.extent.end)
         else:
             # simpler, default
             switch_num = children[0]
