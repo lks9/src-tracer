@@ -25,8 +25,8 @@ ap_instru.add_argument("--tailcall-returns", action='store_true', default=True,
 ap_instru.add_argument("--no-tailcall-returns", action='store_false', dest='tailcall_returns')
 ap_instru.add_argument("--cases", action='store_true', default=True,
                 help="Instrument each switch case for bit-tracing (default).")
-ap_instru.add_argument("--switch-number", action='store_false', dest='cases'
-                help="Instrument to trace switch number (default off, disables --cases).")
+ap_instru.add_argument("--switch-number", action='store_false', dest='cases',
+                help="Instrument to trace switch number (default off; disables --cases).")
 ap_instru.add_argument("--short-circuit", action='store_true', default=False,
                 help="Instrument short circuit operators (default off).")
 ap_instru.add_argument("--no-short-circuit", action='store_false', dest='short_circuit')
@@ -59,7 +59,7 @@ ap_instru.add_argument("--pointer-calls", action='store_true', default=False,
                 help="Instrument all function calls via pointers (default off). "
                 "In effect, other function calls and returns wont be traced.")
 ap.add_argument("--full", action='store_true',
-                help="Instrument everything. Implies most positive instrumentation options.")
+                help="Instrument whatever possible. Implies most positive instrumentation options.")
 args = ap.parse_args()
 
 # trace store dir

@@ -93,7 +93,7 @@ if [ "$1" = "-E" ]; then
 
         # do the instrumentation
         #   you could add any of --no-return --switch-number --short-circuit --inline --no-functions --anon --no-inner --no-main --pointer-calls
-        python3 "${SRC_TRACER_DIR}/instrumenter.py" --no-return --short-circuit "${outfile}.tmp.c" "${SRC_TRACER_STORE_DIR}" || exit $?
+        python3 "${SRC_TRACER_DIR}/instrumenter.py" "${outfile}.tmp.c" "${SRC_TRACER_STORE_DIR}" || exit $?
 
         # rerun preprocessor to resolve instrumentation macros (you could add -DBYTE_TRACE)
         #echo cpp ${SRC_TRACER} "${outfile}.tmp.c" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/include/"
