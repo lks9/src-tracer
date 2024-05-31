@@ -12,6 +12,7 @@
 
 #ifndef SRC_TRACER_STDINC_REPLACE_H
 #include <stdbool.h>
+#define my_bool bool
 #endif
 
 extern void _trace_open(const char *fname, const char *suffix);
@@ -26,7 +27,7 @@ extern int _trace_after_fork(int pid);
 #endif
 
 #define _TRACE_PUT(c) ;{ \
-    _trace_buf[_trace_buf_pos] = (c); \
+    _trace_buf[_trace_buf_pos] = (unsigned char)(c); \
     _trace_buf_pos += 1; \
     _TRACE_MAY_SYNC(); \
 }
@@ -82,7 +83,7 @@ extern void _tracefork_sync(void);
 
 #define _TRACE_IE(if_true) { \
     _trace_ie_byte <<= 1; \
-    _trace_ie_byte |= (bool)(if_true); \
+    _trace_ie_byte |= (my_bool)(if_true); \
     _TRACE_IE_PREPARE_NEXT \
 }
 #define _TRACE_IF() { \
@@ -107,7 +108,7 @@ extern void _tracefork_sync(void);
         bit_cnt_left -= 6; \
         _TRACE_PUT(((num_left >> bit_cnt_left) & 0b00111111) | 0b10000000); \
     } \
-    _trace_ie_byte = (num_left & ~(0b11111111 << bit_cnt_left) & 0b00111111) - (2 << bit_cnt_left); \
+    _trace_ie_byte = (unsigned char)((num_left & ~(0b11111111 << bit_cnt_left) & 0b00111111) - (2 << bit_cnt_left)); \
 }
 
 #endif // BYTE_TRACE
@@ -260,7 +261,7 @@ static inline __attribute__((always_inline)) long long int _trace_num(char type,
     return num;
 }
 
-static inline __attribute__((always_inline)) bool _trace_condition(bool cond) {
+static inline __attribute__((always_inline)) my_bool _trace_condition(my_bool cond) {
     _TRACE_IE(cond);
     return cond;
 }

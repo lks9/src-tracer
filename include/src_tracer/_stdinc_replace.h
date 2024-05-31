@@ -6,11 +6,11 @@
 #define SRC_TRACER_STDINC_REPLACE_H
 
 // stdbool.h
-#ifndef __cplusplus
+#ifdef __cplusplus
+    #define my_bool bool
+#else
     // bool is available in C++ but not in C without stdbool.h
-    #ifndef bool
-        #define bool _Bool
-    #endif
+    #define my_bool _Bool
 #endif
 
 #endif // SRC_TRACER_STDINC_REPLACE_H

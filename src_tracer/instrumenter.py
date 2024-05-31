@@ -554,19 +554,7 @@ class Instrumenter:
         return None
 
     def visit_call(self, node):
-        # Some calls need to be anotated
-        if node.spelling == "fork":
-            self.add_annotation(b"_FORK(", node.extent.start)
-            self.prepent_annotation(b")", node.extent.end)
-        elif node.spelling in ("setjmp", "sigsetjmp", "_setjmp", "__sigsetjmp"):
-            self.add_annotation(b"_SETJMP(", node.extent.start)
-            self.prepent_annotation(b")", node.extent.end)
-        elif node.spelling in ("exit", "_Exit", "_exit"):
-            self.add_annotation(b"(({int exitcode = ", node.extent.start, len(node.spelling))
-            self.prepent_annotation(b"; _TRACE_CLOSE; exitcode; }))", node.extent.end)
-        elif node.spelling == "abort":
-            self.add_annotation(b"_TRACE_CLOSE ", node.extent.start)
-        elif self.pointer_call_instrument and self.is_pointer_call(node):
+        if self.pointer_call_instrument and self.is_pointer_call(node):
             last_call = self.last_call_before(node)
             if last_call is None:
                 self.add_annotation(b"_POINTER_CALL(", node.extent.start)
@@ -575,6 +563,28 @@ class Instrumenter:
                 last_call_type = bytes(last_call.type.spelling, "utf-8")
                 self.prepent_annotation(b"_POINTER_CALL_AFTER(" + last_call_type + b", ", last_call.extent.start)
                 self.add_annotation(b")", last_call.extent.end)
+        # Some calls need to be anotated
+        elif node.spelling == "fork":
+            if not self.pointer_call_instrument and self.is_pointer_call(node):
+                # a pointer named "fork" to some function...
+                return
+            self.add_annotation(b"_FORK(", node.extent.start)
+            self.prepent_annotation(b")", node.extent.end)
+        elif node.spelling in ("setjmp", "sigsetjmp", "_setjmp", "__sigsetjmp"):
+            if not self.pointer_call_instrument and self.is_pointer_call(node):
+                return
+            self.add_annotation(b"_SETJMP(", node.extent.start)
+            self.prepent_annotation(b")", node.extent.end)
+        elif node.spelling in ("exit", "_Exit", "_exit"):
+            if not self.pointer_call_instrument and self.is_pointer_call(node):
+                return
+            self.add_annotation(b"(({int exitcode = ", node.extent.start, len(node.spelling))
+            self.prepent_annotation(b"; _TRACE_CLOSE; exitcode; }))", node.extent.end)
+        elif node.spelling == "abort":
+            if not self.pointer_call_instrument and self.is_pointer_call(node):
+                return
+            self.add_annotation(b"({_TRACE_CLOSE; ", node.extent.start)
+            self.prepent_annotation(b";})", node.extent.end)
 
     def visit_try(self, node):
         childs = [c for c in node.get_children()]

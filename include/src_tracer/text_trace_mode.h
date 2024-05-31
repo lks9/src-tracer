@@ -55,7 +55,7 @@ static inline __attribute__((always_inline)) long long int _trace_num_text(char 
     return num;
 }
 
-static inline __attribute__((always_inline)) bool _text_trace_condition(bool cond) {
+static inline __attribute__((always_inline)) my_bool _text_trace_condition(my_bool cond) {
     if (cond) {
         _TRACE_PUT_TEXT('I');
     } else {

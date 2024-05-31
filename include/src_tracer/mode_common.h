@@ -17,10 +17,10 @@ extern int _trace_fork_count;
 /* Pointer calls */
 #ifdef _TRACE_POINTER_CALLS_ONLY
 
-extern bool _trace_pointer_call;
+extern my_bool _trace_pointer_call;
 
 #define _TRACE_POINTER_CALL_INIT \
-    bool _trace_local_return __attribute__((unused)) = 0;
+    my_bool _trace_local_return __attribute__((unused)) = 0;
 
 #define _TRACE_POINTER_CALL_SET \
     _trace_pointer_call = 1;

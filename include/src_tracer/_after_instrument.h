@@ -95,7 +95,7 @@ extern "C" {
 // non-macro version for switch
 #define _SWITCH(num)        _is_retrace_switch(num)
 // bit-trace version for switch
-#define _SWITCH_START(id,cnt) ;bool _cflow_switch_##id = 1;
+#define _SWITCH_START(id,cnt) ;my_bool _cflow_switch_##id = 1;
 #define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
                                 _IS_RETRACE(_RETRACE_CASE(num, cnt), \
                                             _TRACE_CASE(num, cnt)) \
@@ -148,7 +148,7 @@ extern "C" {
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num(_TRACE_SET_DATA, num)
 // bit-trace version for switch
-#define _SWITCH_START(id,cnt) ;bool _cflow_switch_##id = 1;
+#define _SWITCH_START(id,cnt) ;my_bool _cflow_switch_##id = 1;
 #define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
                                 _TRACE_CASE(num, cnt) \
                                 _cflow_switch_##id = 0; \
@@ -199,7 +199,7 @@ extern "C" {
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num_text('D', ((unsigned int)(num)))
 // experimental version for switch
-#define _SWITCH_START(id,cnt) ;bool _cflow_switch_##id = 1;
+#define _SWITCH_START(id,cnt) ;my_bool _cflow_switch_##id = 1;
 #define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
                                 _TRACE_CASE_TEXT(num, cnt); \
                                 _cflow_switch_##id = 0; \
@@ -234,7 +234,7 @@ extern "C" {
 // non-macro version for switch
 #define _SWITCH(num)        _retrace_elem('D', num)
 // bit-trace version for switch
-#define _SWITCH_START(id,cnt) ;bool _cflow_switch_##id = 1;
+#define _SWITCH_START(id,cnt) ;my_bool _cflow_switch_##id = 1;
 #define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
                                 _RETRACE_CASE(num, cnt) \
                                 _cflow_switch_##id = 0; \
@@ -274,7 +274,7 @@ extern "C" {
 #define _FUNC_RETURN        ;if(_TRACE_RETURN_CHECK) { _RETRACE_CBMC('R', 0); };
 #define _FUNC_RETURN_TAIL   ;if(_TRACE_RETURN_CHECK) { _RETRACE_CBMC('S', 0); };
 #define _SWITCH(num)        ;_RETRACE_CBMC('D', num);
-#define _SWITCH_START(id,cnt) ;bool _cflow_switch_##id = 1;
+#define _SWITCH_START(id,cnt) ;my_bool _cflow_switch_##id = 1;
 #define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
                                 _RETRACE_CASE_CBMC(num, cnt); \
                                 _cflow_switch_##id = 0; \
@@ -336,12 +336,6 @@ extern "C" {
 #define _RETRO_SKIP(code)   code
 
 #endif // _TRACE_MODE or _RETRACE_MODE
-
-
-// quickfix...
-#ifdef BOOL_ALREADY_DEFINED
-    #undef bool
-#endif
 
 #ifdef __cplusplus
 } // end extern "C"

@@ -10,6 +10,7 @@
 
 #ifndef SRC_TRACER_STDINC_REPLACE_H
 #include <stdbool.h>
+#define my_bool bool
 #endif
 
 extern volatile char _retrace_letter;
@@ -76,7 +77,7 @@ static inline __attribute__((always_inline)) long long int _retrace_elem(char ty
     return num;
 }
 
-static inline __attribute__((always_inline)) bool _retrace_condition(bool cond) {
+static inline __attribute__((always_inline)) my_bool _retrace_condition(my_bool cond) {
     if (cond) {
         _retrace_letter = 'I';
     } else {

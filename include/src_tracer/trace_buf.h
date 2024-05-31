@@ -16,7 +16,7 @@
 // trace buffer
 #ifdef TRACE_USE_FORK
     extern void __attribute__((aligned(4096))) *_trace_ptr;
-    extern __attribute__((aligned(4096))) MY_THREAD_LOCAL unsigned char *restrict _trace_buf;
+    extern __attribute__((aligned(4096))) MY_THREAD_LOCAL unsigned char *_trace_buf;
 #else
     extern MY_THREAD_LOCAL unsigned char _trace_buf[TRACE_BUF_SIZE];
 #endif

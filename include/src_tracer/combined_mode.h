@@ -10,7 +10,7 @@
 #include "src_tracer/trace_buf.h"
 #include "src_tracer/trace_elem.h"
 
-extern volatile bool _is_retrace_mode;
+extern volatile my_bool _is_retrace_mode;
 
 #define _IS_RETRACE(a,b)    ; \
     if (_is_retrace_mode) { \
@@ -19,7 +19,7 @@ extern volatile bool _is_retrace_mode;
         b; \
     }
 
-static inline __attribute__((always_inline)) bool _is_retrace_condition(bool cond) {
+static inline __attribute__((always_inline)) my_bool _is_retrace_condition(my_bool cond) {
     if (cond) {
         _IS_RETRACE(_RETRACE_IF(), _TRACE_IF());
     } else {

@@ -19,7 +19,7 @@ echo_outfile () {
 echo_infile () {
     while [ ! -z "$1" ]; do
         case "$1" in
-            *.cpp)
+            *.cc | *.cp | *.cxx | *.cpp | *.cc | *.CPP | *.c++ | *.C)
                 echo "$1"
                 ;;
             *)
@@ -46,11 +46,11 @@ if [ "$1" = "-E" ]; then
 
     # annotate if needed
     if [ -z "${infile}" ]; then
-        # echo "no file to annotate"
+        #echo "no file to annotate"
         # just call gcc (or the preprocessor)
         exec $(${COLLECT_GCC} --print-prog-name=cc1plus) $@
     elif [ $(grep -c "src_tracer" "${infile}") -gt 0 ]; then
-        # echo "skipping ${infile} (already annotated)"
+        #echo "skipping ${infile} (already annotated)"
         # just call gcc (or the preprocessor)
         exec $(${COLLECT_GCC} --print-prog-name=cc1plus) $@
     else

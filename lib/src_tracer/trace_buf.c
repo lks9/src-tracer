@@ -44,7 +44,7 @@ extern int tracer_create_daemon(char *trace_fname);
 #ifdef TRACE_USE_FORK
   static unsigned char dummy[TRACE_BUF_SIZE] __attribute__ ((aligned (4096)));
   void __attribute__((aligned(4096))) *_trace_ptr = dummy;
-  __attribute__((aligned(4096))) MY_THREAD_LOCAL unsigned char *restrict _trace_buf = dummy;
+  __attribute__((aligned(4096))) MY_THREAD_LOCAL unsigned char *_trace_buf = dummy;
 #else
   MY_THREAD_LOCAL unsigned char _trace_buf[TRACE_BUF_SIZE];
 #endif
