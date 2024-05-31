@@ -578,7 +578,9 @@ class Instrumenter:
         elif node.spelling in ("exit", "_Exit", "_exit"):
             if not self.pointer_call_instrument and self.is_pointer_call(node):
                 return
-            self.add_annotation(b"(({int exitcode = ", node.extent.start, len(node.spelling))
+            content = self.node_content(node)
+            endpos = re.search(node.spelling, content).endpos
+            self.add_annotation(b"(({int exitcode = ", node.extent.start, endpos)
             self.prepent_annotation(b"; _TRACE_CLOSE; exitcode; }))", node.extent.end)
         elif node.spelling == "abort":
             if not self.pointer_call_instrument and self.is_pointer_call(node):
