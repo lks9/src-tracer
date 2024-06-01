@@ -96,7 +96,10 @@ class Instrumenter:
         else:
             self.annotations[filename][offset] = annotation + self.annotations[filename][offset]
 
-    def annotate_function(self, node, body):
+    def annotate_function(self, node, body, shadow):
+        if shadow:
+            self.add_annotation(b" _SHADOW_FUNC ", body.extent.start, 1)
+            return
         if node.storage_class == StorageClass.STATIC:
             func_annotation = b" _STATIC_FUNC("
         else:
@@ -108,7 +111,7 @@ class Instrumenter:
             func_annotation += bytes(hex(func_num), "utf-8") + b") "
         self.add_annotation(func_annotation, body.extent.start, 1)
 
-    def visit_function(self, node):
+    def visit_function(self, node, shadow):
         body = None
         for child in node.get_children():
             if child.kind == CursorKind.COMPOUND_STMT:
@@ -119,7 +122,7 @@ class Instrumenter:
             print("Check location failed for function " + node.spelling)
             return
         if self.function_instrument:
-            self.annotate_function(node, body)
+            self.annotate_function(node, body, shadow)
 
         # special treatment for main function
         close = False
@@ -141,17 +144,18 @@ class Instrumenter:
                 close = True
 
         # handle returns
-        self.visit_function_returns(node, close, self.return_instrument)
+        self.visit_function_returns(node, close, self.return_instrument, shadow)
 
-    def visit_function_returns(self, node, close, ret):
-        if not ret and not close:
-            # nothing to do
-            return
+    def visit_function_returns(self, node, close, ret, shadow):
+        shadow = shadow or (not ret and not close)
+        ret = ret and not shadow
 
         for ret_stmt in node.walk_preorder():
             if ret_stmt.kind == CursorKind.RETURN_STMT:
                 if self.is_expr_only(ret_stmt):
                     self.add_annotation(b"{ ", ret_stmt.extent.start)
+                    if shadow:
+                        self.add_annotation(b"_SHADOW_RETURN ", ret_stmt.extent.start)
                     if ret:
                         self.add_annotation(b"_FUNC_RETURN ", ret_stmt.extent.start)
                     if close:
@@ -160,6 +164,8 @@ class Instrumenter:
                     self.prepent_annotation(b"; }", ret_stmt.extent.end, semi_off)
                 elif self.assume_tailcall:
                     self.add_annotation(b"{ ", ret_stmt.extent.start)
+                    if shadow:
+                        self.add_annotation(b"_SHADOW_RETURN ", ret_stmt.extent.start)
                     if ret:
                         self.add_annotation(b"_FUNC_RETURN_TAIL ", ret_stmt.extent.start)
                     if close:
@@ -171,6 +177,8 @@ class Instrumenter:
                     ret_expr = childs[0]
                     ret_type = bytes(ret_expr.type.spelling, "utf-8")
                     macro = b""
+                    if shadow:
+                        macro = macro + b"_SHADOW_RETURN"
                     if ret:
                         macro = macro + b"_FUNC_RETURN"
                     if close:
@@ -181,6 +189,8 @@ class Instrumenter:
                     self.prepent_annotation(b", " + ret_type + b", ", ret_expr.extent.start)
                     self.add_annotation(b")", ret_expr.extent.end)
         # void functions just end, and even non-void main needs no return
+        if shadow:
+            self.add_annotation(b"_SHADOW_RETURN ", node.extent.end, -1)
         if ret:
             self.add_annotation(b"_FUNC_RETURN ", node.extent.end, -1)
         if close:
@@ -660,9 +670,9 @@ class Instrumenter:
                     return
                 function_scope = True
                 if not self.inline_instrument and self.check_inline_method(node):
-                    pass
+                    self.visit_function(node, True)
                 else:
-                    self.visit_function(node)
+                    self.visit_function(node, False)
             elif not self.inner_instrument:
                 pass
             elif node.kind == CursorKind.IF_STMT:

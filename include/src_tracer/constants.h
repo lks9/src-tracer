@@ -40,6 +40,9 @@
 // byte trace comes without any bit-tracing, trace gets is larger...
 //#define BYTE_TRACE
 
+// local ie trace is more efficient by re-ordering bytes function-wise, retrace theoretically possible but not implemented
+#define TRACE_IE_LOCAL
+
 // only used in CBMC MODE
 #define RETRACE_ARR_LEN_MAX 4096
 

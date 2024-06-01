@@ -60,9 +60,11 @@ extern int tracer_create_daemon(char *trace_fname);
 
 // trace ie byte
 #ifndef BYTE_TRACE
-  #ifndef TRACE_IE_BYTE_REG
-    MY_THREAD_LOCAL
-    unsigned char _trace_ie_byte = _TRACE_SET_IE_INIT;
+  #ifndef TRACE_IE_LOCAL
+    #ifndef TRACE_IE_BYTE_REG
+      MY_THREAD_LOCAL
+      unsigned char _trace_ie_byte = _TRACE_SET_IE_INIT;
+    #endif
   #endif
 #endif
 
@@ -348,9 +350,6 @@ void _trace_pause(void) {
 
 void _trace_resume(void) {
     _trace_buf_pos = temp_trace_buf_pos;
-#ifndef BYTE_TRACE
-    _trace_ie_byte = _TRACE_SET_IE_INIT;
-#endif
 }
 
 void _trace_in_fork_child(void) {

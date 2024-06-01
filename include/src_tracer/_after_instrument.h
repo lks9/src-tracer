@@ -90,8 +90,10 @@ extern "C" {
 #define _CONDITION(cond)    _is_retrace_condition(cond)
 #define _FUNC(num)          _IS_RETRACE(_RETRACE_FUNC(num), _TRACE_FUNC(num))
 #define _STATIC_FUNC(num)   _IS_RETRACE(_RETRACE_FUNC(num), _TRACE_STATIC_FUNC(num))
+#define _SHADOW_FUNC        _IS_RETRACE( ,_TRACE_FUNC_INIT)
 #define _FUNC_RETURN        _IS_RETRACE(_RETRACE_RETURN('R'), _TRACE_RETURN(_TRACE_SET_RETURN))
 #define _FUNC_RETURN_TAIL   _IS_RETRACE(_RETRACE_RETURN('S'), _TRACE_RETURN(_TRACE_SET_RETURN_TAIL))
+#define _SHADOW_RETURN       _IS_RETRACE( ,_TRACE_FUNC_END)
 // non-macro version for switch
 #define _SWITCH(num)        _is_retrace_switch(num)
 // bit-trace version for switch
@@ -143,8 +145,10 @@ extern "C" {
 #define _CONDITION(cond)    _trace_condition(cond)
 #define _FUNC(num)          ;_TRACE_FUNC(num);
 #define _STATIC_FUNC(num)   ;_TRACE_STATIC_FUNC(num);
+#define _SHADOW_FUNC        ;_TRACE_FUNC_INIT;
 #define _FUNC_RETURN        ;_TRACE_RETURN(_TRACE_SET_RETURN);
 #define _FUNC_RETURN_TAIL   ;_TRACE_RETURN(_TRACE_SET_RETURN_TAIL);
+#define _SHADOW_RETURN      ;_TRACE_FUNC_END;
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num(_TRACE_SET_DATA, num)
 // bit-trace version for switch
@@ -194,8 +198,10 @@ extern "C" {
 #define _CONDITION(cond)    _text_trace_condition(cond)
 #define _FUNC(num)          ;_TRACE_NUM_TEXT('C', ((unsigned int)(num)));
 #define _STATIC_FUNC(num)   _FUNC(num)
+#define _SHADOW_FUNC        /* nothing here */
 #define _FUNC_RETURN        ;_TRACE_PUT_TEXT('R');
 #define _FUNC_RETURN_TAIL   ;_TRACE_PUT_TEXT('S');
+#define _SHADOW_RETURN      /* nothing here */
 // non-macro version for switch
 #define _SWITCH(num)        _trace_num_text('D', ((unsigned int)(num)))
 // experimental version for switch
@@ -229,8 +235,10 @@ extern "C" {
 #define _CONDITION(cond)    _retrace_condition(cond)
 #define _FUNC(num)          ;_RETRACE_FUNC(num);
 #define _STATIC_FUNC(num)   _FUNC(num)
+#define _SHADOW_FUNC        /* nothing here */
 #define _FUNC_RETURN        ;_RETRACE_RETURN('R');
 #define _FUNC_RETURN_TAIL   ;_RETRACE_RETURN('S');
+#define _SHADOW_RETURN      /* nothing here */
 // non-macro version for switch
 #define _SWITCH(num)        _retrace_elem('D', num)
 // bit-trace version for switch
@@ -271,8 +279,10 @@ extern "C" {
 #define _CONDITION(cond)    cond
 #define _FUNC(num)          _TRACE_POINTER_CALL_INIT; _RETRACE_FUNC_CBMC(num);
 #define _STATIC_FUNC(num)   _FUNC(num)
+#define _SHADOW_FUNC        /* nothing here */
 #define _FUNC_RETURN        ;if(_TRACE_RETURN_CHECK) { _RETRACE_CBMC('R', 0); };
 #define _FUNC_RETURN_TAIL   ;if(_TRACE_RETURN_CHECK) { _RETRACE_CBMC('S', 0); };
+#define _SHADOW_RETURN      /* nothing here */
 #define _SWITCH(num)        ;_RETRACE_CBMC('D', num);
 #define _SWITCH_START(id,cnt) ;my_bool _cflow_switch_##id = 1;
 #define _CASE(num, id, cnt) ;if (_cflow_switch_##id) { \
@@ -311,8 +321,10 @@ extern "C" {
 #define _CONDITION(cond)    cond
 #define _FUNC(num)          /* nothing here */
 #define _STATIC_FUNC(num)   /* nothing here */
+#define _SHADOW_FUNC        /* nothing here */
 #define _FUNC_RETURN        /* nothing here */
 #define _FUNC_RETURN_TAIL   /* nothing here */
+#define _SHADOW_RETURN      /* nothing here */
 #define _SWITCH(num)        num
 #define _SWITCH_START(id,cnt) /* nothing here */
 #define _CASE(num, id, cnt) /* nothing here */

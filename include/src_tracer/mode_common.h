@@ -63,6 +63,16 @@ extern my_bool _trace_pointer_call;
     _FUNC_RETURN \
     return; \
 }
+#define _SHADOW_RETURN_AFTER(ret, type, expr) { \
+    type _trace_return_result = (expr); \
+    _SHADOW_RETURN \
+    return _trace_return_result; \
+}
+#define _SHADOW_RETURN_VOID_AFTER(ret, type, expr) { \
+    (expr); \
+    _SHADOW_RETURN \
+    return; \
+}
 #define _TRACE_CLOSE_AFTER(ret, type, expr) { \
     type _trace_return_result = (expr); \
     _TRACE_CLOSE \

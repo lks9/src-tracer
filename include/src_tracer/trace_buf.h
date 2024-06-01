@@ -32,11 +32,13 @@
 
 // trace ie byte
 #ifndef BYTE_TRACE
+  #ifndef TRACE_IE_LOCAL
     #ifdef TRACE_IE_BYTE_REG
         register unsigned char _trace_ie_byte __asm__("r12");
     #else
         extern MY_THREAD_LOCAL unsigned char _trace_ie_byte;
     #endif
+  #endif
 #endif
 
 // write trace to disk
