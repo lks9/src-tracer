@@ -88,9 +88,9 @@ extern "C" {
 #define _IF                 _IS_RETRACE(_RETRACE_IF(), _TRACE_IF())
 #define _ELSE               _IS_RETRACE(_RETRACE_ELSE(), _TRACE_ELSE())
 #define _CONDITION(cond)    _is_retrace_condition(cond)
+#define _FUNC_START         _IS_RETRACE( ,_TRACE_FUNC_INIT)
 #define _FUNC(num)          _IS_RETRACE(_RETRACE_FUNC(num), _TRACE_FUNC(num))
 #define _STATIC_FUNC(num)   _IS_RETRACE(_RETRACE_FUNC(num), _TRACE_STATIC_FUNC(num))
-#define _SHADOW_FUNC        _IS_RETRACE( ,_TRACE_FUNC_INIT)
 #define _FUNC_RETURN        _IS_RETRACE(_RETRACE_RETURN('R'), _TRACE_RETURN(_TRACE_SET_RETURN))
 #define _FUNC_RETURN_TAIL   _IS_RETRACE(_RETRACE_RETURN('S'), _TRACE_RETURN(_TRACE_SET_RETURN_TAIL))
 #define _SHADOW_RETURN       _IS_RETRACE( ,_TRACE_FUNC_END)
@@ -143,9 +143,9 @@ extern "C" {
 #define _IF                 ;_TRACE_IF();
 #define _ELSE               ;_TRACE_ELSE();
 #define _CONDITION(cond)    _trace_condition(cond)
+#define _FUNC_START         ;_TRACE_FUNC_INIT;
 #define _FUNC(num)          ;_TRACE_FUNC(num);
 #define _STATIC_FUNC(num)   ;_TRACE_STATIC_FUNC(num);
-#define _SHADOW_FUNC        ;_TRACE_FUNC_INIT;
 #define _FUNC_RETURN        ;_TRACE_RETURN(_TRACE_SET_RETURN);
 #define _FUNC_RETURN_TAIL   ;_TRACE_RETURN(_TRACE_SET_RETURN_TAIL);
 #define _SHADOW_RETURN      ;_TRACE_FUNC_END;
@@ -196,9 +196,9 @@ extern "C" {
 #define _IF                 ;_TRACE_PUT_TEXT('I');
 #define _ELSE               ;_TRACE_PUT_TEXT('O');
 #define _CONDITION(cond)    _text_trace_condition(cond)
+#define _FUNC_START         /* nothing here */
 #define _FUNC(num)          ;_TRACE_NUM_TEXT('C', ((unsigned int)(num)));
 #define _STATIC_FUNC(num)   _FUNC(num)
-#define _SHADOW_FUNC        /* nothing here */
 #define _FUNC_RETURN        ;_TRACE_PUT_TEXT('R');
 #define _FUNC_RETURN_TAIL   ;_TRACE_PUT_TEXT('S');
 #define _SHADOW_RETURN      /* nothing here */
@@ -233,9 +233,9 @@ extern "C" {
 #define _IF                 ;_RETRACE_IF();
 #define _ELSE               ;_RETRACE_ELSE();
 #define _CONDITION(cond)    _retrace_condition(cond)
+#define _FUNC_START         /* nothing here */
 #define _FUNC(num)          ;_RETRACE_FUNC(num);
 #define _STATIC_FUNC(num)   _FUNC(num)
-#define _SHADOW_FUNC        /* nothing here */
 #define _FUNC_RETURN        ;_RETRACE_RETURN('R');
 #define _FUNC_RETURN_TAIL   ;_RETRACE_RETURN('S');
 #define _SHADOW_RETURN      /* nothing here */
@@ -277,9 +277,9 @@ extern "C" {
 #define _IF                 ;_RETRACE_CBMC('I', 0);
 #define _ELSE               ;_RETRACE_CBMC('O', 0);
 #define _CONDITION(cond)    cond
+#define _FUNC_START         /* nothing here */
 #define _FUNC(num)          _TRACE_POINTER_CALL_INIT; _RETRACE_FUNC_CBMC(num);
 #define _STATIC_FUNC(num)   _FUNC(num)
-#define _SHADOW_FUNC        /* nothing here */
 #define _FUNC_RETURN        ;if(_TRACE_RETURN_CHECK) { _RETRACE_CBMC('R', 0); };
 #define _FUNC_RETURN_TAIL   ;if(_TRACE_RETURN_CHECK) { _RETRACE_CBMC('S', 0); };
 #define _SHADOW_RETURN      /* nothing here */
@@ -319,9 +319,9 @@ extern "C" {
 #define _IF                 /* nothing here */
 #define _ELSE               /* nothing here */
 #define _CONDITION(cond)    cond
+#define _FUNC_START         /* nothing here */
 #define _FUNC(num)          /* nothing here */
 #define _STATIC_FUNC(num)   /* nothing here */
-#define _SHADOW_FUNC        /* nothing here */
 #define _FUNC_RETURN        /* nothing here */
 #define _FUNC_RETURN_TAIL   /* nothing here */
 #define _SHADOW_RETURN      /* nothing here */

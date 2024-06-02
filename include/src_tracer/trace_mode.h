@@ -32,33 +32,6 @@ extern int _trace_after_fork(int pid);
     _TRACE_MAY_SYNC(); \
 }
 
-
-#ifdef TRACE_IE_LOCAL
-#define _TRACE_IE_LOCAL_INIT \
-    unsigned char _trace_ie_byte = _TRACE_SET_IE_INIT; \
-    int _trace_buf_pos_ie;
-#define _TRACE_IE_LOCAL_NEXT \
-    if (_trace_ie_byte == _TRACE_SET_IE_INIT) { \
-        _trace_buf_pos_ie = _trace_buf_pos; \
-        _trace_buf_pos += 1; \
-    }
-#define _TRACE_PUT_IE() \
-    _trace_buf[_trace_buf_pos_ie] = _trace_ie_byte; \
-    _trace_ie_byte = _TRACE_SET_IE_INIT; \
-    _TRACE_MAY_SYNC();
-#define _TRACE_FUNC_END \
-    _TRACE_PUT_IE()
-#else
-#define _TRACE_IE_LOCAL_INIT /* nothing here */
-#define _TRACE_IE_LOCAL_NEXT /* nothing here */
-#define _TRACE_PUT_IE() \
-    _TRACE_PUT(_trace_ie_byte); \
-    _trace_ie_byte = _TRACE_SET_IE_INIT;
-#define _TRACE_FUNC_END      /* nothing here */
-#endif
-
-
-
 #ifdef TRACEFORK_FUTEX
 extern void _tracefork_sync(void);
 #define _TRACE_MAY_SYNC() \
@@ -74,6 +47,18 @@ extern void _tracefork_sync(void);
         _trace_buf_pos = 0; \
     }
 #endif
+
+
+#ifdef TRACE_IE_LOCAL
+#define _TRACE_IE_LOCAL_INIT \
+    unsigned char _trace_ie_byte = _TRACE_SET_IE_INIT;
+#define _TRACE_FUNC_END \
+    _TRACE_IE_FINISH
+#else
+#define _TRACE_IE_LOCAL_INIT /* nothing here */
+#define _TRACE_FUNC_END      /* nothing here */
+#endif
+
 
 #ifdef BYTE_TRACE
 
@@ -100,7 +85,7 @@ extern void _tracefork_sync(void);
     ((x << n) | (x >> (8 - n)))
 
 #ifdef TRACE_IE_LOCAL
-#define _TRACE_IE_INIT /* nothing here */
+#define _TRACE_IE_INIT /* nothing here, use _TRACE_IE_LOCAL_INIT */
 #else
 #define _TRACE_IE_INIT \
     _trace_ie_byte = _TRACE_SET_IE_INIT;
@@ -108,7 +93,8 @@ extern void _tracefork_sync(void);
 
 #define _TRACE_IE_PREPARE_NEXT \
     if (_trace_ie_byte < 0b11000000) { \
-        _TRACE_PUT_IE() \
+        _TRACE_PUT(_trace_ie_byte); \
+        _trace_ie_byte = _TRACE_SET_IE_INIT; \
     }
 
 #define _TRACE_IE(if_true) { \
@@ -117,18 +103,17 @@ extern void _tracefork_sync(void);
     _TRACE_IE_PREPARE_NEXT \
 }
 #define _TRACE_IF() { \
-    _TRACE_IE_LOCAL_NEXT \
     _trace_ie_byte = rotate_8(_trace_ie_byte, 1); \
     _TRACE_IE_PREPARE_NEXT \
 }
 #define _TRACE_ELSE() { \
-    _TRACE_IE_LOCAL_NEXT \
     _trace_ie_byte <<= 1; \
     _TRACE_IE_PREPARE_NEXT \
 }
 #define _TRACE_IE_FINISH \
     if (_trace_ie_byte != _TRACE_SET_IE_INIT) { \
-        _TRACE_PUT_IE() \
+        _TRACE_PUT(_trace_ie_byte); \
+        _trace_ie_byte = _TRACE_SET_IE_INIT; \
     }
 
 #define _TRACE_CASE(num, bit_cnt) { \
@@ -139,7 +124,6 @@ extern void _tracefork_sync(void);
         bit_cnt_left -= 6; \
         _TRACE_PUT(((num_left >> bit_cnt_left) & 0b00111111) | 0b10000000); \
     } \
-    _TRACE_IE_LOCAL_NEXT \
     _trace_ie_byte = (unsigned char)((num_left & ~(0b11111111 << bit_cnt_left) & 0b00111111) - (2 << bit_cnt_left)); \
 }
 
@@ -179,7 +163,6 @@ extern void _tracefork_sync(void);
     _TRACE_IE_LOCAL_INIT
 
 #define _TRACE_FUNC(num) \
-    _TRACE_FUNC_INIT \
     _TRACE_IE_FINISH \
     if (_TRACE_CALL_CHECK) { \
         _TRACE_FUNC_CORE(num) \
@@ -187,7 +170,6 @@ extern void _tracefork_sync(void);
     }
 
 #define _TRACE_STATIC_FUNC(num) \
-    _TRACE_FUNC_INIT \
     if (_TRACE_CALL_CHECK) { \
         _TRACE_IE_FINISH \
         _TRACE_FUNC_CORE(num) \
@@ -200,7 +182,6 @@ extern void _tracefork_sync(void);
     _TRACE_IE_LOCAL_INIT
 
 #define _TRACE_FUNC(num) \
-    _TRACE_FUNC_INIT \
     _TRACE_IE_FINISH \
     _TRACE_FUNC_CORE(num)
 #define _TRACE_STATIC_FUNC(num) \

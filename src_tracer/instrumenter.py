@@ -117,15 +117,17 @@ class Instrumenter:
             if child.kind == CursorKind.COMPOUND_STMT:
                 body = child
         if not body:
-            return
+            return False, False
         if not self.check_location(body.extent.start, [b"{"]):
             print("Check location failed for function " + node.spelling)
-            return
+            return False, False
+
+        self.add_annotation(b" _TRACE_FUNC_INIT ", body.extent.start, 1)
+
         if self.function_instrument:
             self.annotate_function(node, body, shadow)
 
         # special treatment for main function
-        close = False
         if self.main_instrument and node.spelling == self.main_spelling:
             if not self.function_instrument:
                 # well, we need something to start...
@@ -139,55 +141,56 @@ class Instrumenter:
             trace_fname = "%F-%H%M%S-%%lx-" + os.path.basename(orig_fname)
             trace_path = os.path.join(os.path.abspath(self.trace_store_dir), trace_fname)
             self.prepent_annotation(b' _TRACE_OPEN("' + bytes(trace_path, "utf8") + b'") ', body.extent.start, 1)
+            return True, self.main_close
+        return True, False
 
-            if self.main_close:
-                close = True
-
-        # handle returns
-        self.visit_function_returns(node, close, self.return_instrument, shadow)
-
-    def visit_function_returns(self, node, close, ret, shadow):
+    def visit_return(self, node, shadow, close):
+        ret = self.return_instrument and not shadow
         shadow = shadow or (not ret and not close)
-        ret = ret and not shadow
 
-        for ret_stmt in node.walk_preorder():
-            if ret_stmt.kind == CursorKind.RETURN_STMT:
-                if self.is_expr_only(ret_stmt):
-                    self.add_annotation(b"{ ", ret_stmt.extent.start)
-                    if shadow:
-                        self.add_annotation(b"_SHADOW_RETURN ", ret_stmt.extent.start)
-                    if ret:
-                        self.add_annotation(b"_FUNC_RETURN ", ret_stmt.extent.start)
-                    if close:
-                        self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
-                    semi_off = self.find_next_semi(ret_stmt.extent.end)
-                    self.prepent_annotation(b"; }", ret_stmt.extent.end, semi_off)
-                elif self.assume_tailcall:
-                    self.add_annotation(b"{ ", ret_stmt.extent.start)
-                    if shadow:
-                        self.add_annotation(b"_SHADOW_RETURN ", ret_stmt.extent.start)
-                    if ret:
-                        self.add_annotation(b"_FUNC_RETURN_TAIL ", ret_stmt.extent.start)
-                    if close:
-                        self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
-                    semi_off = self.find_next_semi(ret_stmt.extent.end)
-                    self.prepent_annotation(b"; }", ret_stmt.extent.end, semi_off)
-                else:
-                    childs = [c for c in ret_stmt.get_children()]
-                    ret_expr = childs[0]
-                    ret_type = bytes(ret_expr.type.spelling, "utf-8")
-                    macro = b""
-                    if shadow:
-                        macro = macro + b"_SHADOW_RETURN"
-                    if ret:
-                        macro = macro + b"_FUNC_RETURN"
-                    if close:
-                        macro = macro + b"_TRACE_CLOSE"
-                    if ret_type == b"void":
-                        macro = macro + b"_VOID"
-                    self.add_annotation(macro + b"_AFTER(", ret_stmt.extent.start)
-                    self.prepent_annotation(b", " + ret_type + b", ", ret_expr.extent.start)
-                    self.add_annotation(b")", ret_expr.extent.end)
+        ret_stmt = node
+        if self.is_expr_only(ret_stmt):
+            self.add_annotation(b"{ ", ret_stmt.extent.start)
+            if shadow:
+                self.add_annotation(b"_SHADOW_RETURN ", ret_stmt.extent.start)
+            if ret:
+                self.add_annotation(b"_FUNC_RETURN ", ret_stmt.extent.start)
+            if close:
+                self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
+            semi_off = self.find_next_semi(ret_stmt.extent.end)
+            self.prepent_annotation(b" } ", ret_stmt.extent.end, semi_off + 1)
+        elif self.assume_tailcall:
+            self.add_annotation(b"{ ", ret_stmt.extent.start)
+            if shadow:
+                self.add_annotation(b"_SHADOW_RETURN ", ret_stmt.extent.start)
+            if ret:
+                self.add_annotation(b"_FUNC_RETURN_TAIL ", ret_stmt.extent.start)
+            if close:
+                self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
+            semi_off = self.find_next_semi(ret_stmt.extent.end)
+            self.prepent_annotation(b" } ", ret_stmt.extent.end, semi_off + 1)
+        else:
+            childs = [c for c in ret_stmt.get_children()]
+            ret_expr = childs[0]
+            ret_type = bytes(ret_expr.type.spelling, "utf-8")
+            macro = b""
+            if shadow:
+                macro = macro + b"_SHADOW_RETURN"
+            if ret:
+                macro = macro + b"_FUNC_RETURN"
+            if close:
+                macro = macro + b"_TRACE_CLOSE"
+            if ret_type == b"void":
+                macro = macro + b"_VOID"
+            self.add_annotation(macro + b"_AFTER(", ret_stmt.extent.start)
+            self.prepent_annotation(b", " + ret_type + b", ", ret_expr.extent.start)
+            self.add_annotation(b")", ret_expr.extent.end)
+
+
+    def visit_function_end(self, node, shadow, close):
+        ret = self.return_instrument and not shadow
+        shadow = shadow or (not ret and not close)
+
         # void functions just end, and even non-void main needs no return
         if shadow:
             self.add_annotation(b"_SHADOW_RETURN ", node.extent.end, -1)
@@ -659,7 +662,7 @@ class Instrumenter:
             # print("Skipping " + filename + " (nothing to annotate)")
             return False
 
-    def traverse(self, node, function_scope=False):
+    def traverse(self, node, function_scope=False, shadow=False, close=False):
         try:
             if node.kind in (CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE):
                 # no recursive annotation
@@ -668,13 +671,23 @@ class Instrumenter:
                 # no instrumentation of C++ constant functions
                 if self.check_const_method(node):
                     return
-                function_scope = True
                 if not self.inline_instrument and self.check_inline_method(node):
-                    self.visit_function(node, True)
+                    shadow = True
                 else:
-                    self.visit_function(node, False)
-            elif not self.inner_instrument:
+                    shadow = False
+                check,close = self.visit_function(node, shadow)
+                if check:
+                    function_scope = True
+                    self.visit_function_end(node, shadow, close)
+                else:
+                    function_scope = False
+            elif node.kind in (CursorKind.CXX_METHOD, CursorKind.CONSTRUCTOR, CursorKind.DESTRUCTOR, CursorKind.CONVERSION_FUNCTION):
+                # not yet supported...
+                function_scope = False
+            elif not function_scope or not self.inner_instrument:
                 pass
+            elif node.kind == CursorKind.RETURN_STMT:
+                self.visit_return(node, shadow, close)
             elif node.kind == CursorKind.IF_STMT:
                 self.visit_if(node)
             elif node.kind == CursorKind.BINARY_OPERATOR:
@@ -707,4 +720,4 @@ class Instrumenter:
             #raise Exception(message)
 
         for child in node.get_children():
-            self.traverse(child, function_scope=function_scope)
+            self.traverse(child, function_scope=function_scope, shadow=shadow, close=close)
