@@ -96,10 +96,7 @@ class Instrumenter:
         else:
             self.annotations[filename][offset] = annotation + self.annotations[filename][offset]
 
-    def annotate_function(self, node, body, shadow):
-        if shadow:
-            self.add_annotation(b" _SHADOW_FUNC ", body.extent.start, 1)
-            return
+    def annotate_function(self, node, body):
         if node.storage_class == StorageClass.STATIC:
             func_annotation = b" _STATIC_FUNC("
         else:
@@ -124,8 +121,11 @@ class Instrumenter:
 
         self.add_annotation(b" _TRACE_FUNC_INIT ", body.extent.start, 1)
 
+        if shadow:
+            return True, False
+
         if self.function_instrument:
-            self.annotate_function(node, body, shadow)
+            self.annotate_function(node, body)
 
         # special treatment for main function
         if self.main_instrument and node.spelling == self.main_spelling:
