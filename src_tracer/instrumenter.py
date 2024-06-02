@@ -158,7 +158,7 @@ class Instrumenter:
                         self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
                     semi_off = self.find_next_semi(ret_stmt.extent.end)
                     self.prepent_annotation(b"; }", ret_stmt.extent.end, semi_off)
-                elif self.assume_tailcall:
+                elif self.assume_tailcall and not close:
                     self.add_annotation(b"{ ", ret_stmt.extent.start)
                     if ret:
                         self.add_annotation(b"_FUNC_RETURN_TAIL ", ret_stmt.extent.start)
@@ -651,7 +651,7 @@ class Instrumenter:
 
     def traverse(self, node, function_scope=False):
         try:
-            if node.kind in (CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE):
+            if node.kind in (CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE, CursorKind.CXX_METHOD):
                 # no recursive annotation
                 if "_trace" in node.spelling or "_retrace" in node.spelling:
                     return
