@@ -61,11 +61,26 @@ extern void _tracefork_sync(void);
         _TRACE_ELSE(); \
     }
 
+#if 0
 #define _TRACE_CASE(num, bit_cnt) { \
     for (int i = bit_cnt-1; i >= 0; i--) { \
         _TRACE_IE(num & (1 << i)); \
     } \
 }
+#else
+#define _TRACE_CASE(num, bit_cnt) { \
+    int bit_cnt_left = bit_cnt; \
+    const int num_left = num; \
+    while (bit_cnt_left >= 6) { \
+        bit_cnt_left -= 6; \
+        _TRACE_PUT(((num_left >> bit_cnt_left) & 0b00111111) | 0b10000000); \
+    } \
+    if (bit_cnt_left != 0) { \
+        _TRACE_PUT((unsigned char)((num_left & ~(0b11111111 << bit_cnt_left) & 0b00111111) - (2 << bit_cnt_left))); \
+    } \
+}
+#endif
+
 #else
 
 // will get optimized as rotate instruction

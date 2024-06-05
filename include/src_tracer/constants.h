@@ -37,7 +37,8 @@
 // WARNING: GCC extension, breaks the ABI
 //#define TRACE_IE_BYTE_REG
 
-// byte trace comes without any bit-tracing, trace gets is larger...
+// byte trace comes without any bit-tracing
+// (trace gets larger but it might be faster for ringbuffer-only)
 //#define BYTE_TRACE
 
 // only used in CBMC MODE
