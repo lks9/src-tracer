@@ -38,6 +38,9 @@ ap_instru.add_argument("--no-inner", action='store_false', dest='inner')
 ap_instru.add_argument("--inline", action='store_true', default=False,
                 help="Instrument inline function calls and returns (default off).")
 ap_instru.add_argument("--no-inline", action='store_false', dest='inline')
+ap_instru.add_argument("--trivial", action='store_true', default=False,
+                help="Instrument trivial functions (default off).")
+ap_instru.add_argument("--no-trivial", action='store_false', dest='trivial')
 ap_instru.add_argument("--main", action='store_true', default=True,
                 help="Instrument the main function to start trace recording (default).")
 ap_instru.add_argument("--no-main", action='store_false', dest='main')
@@ -91,6 +94,7 @@ boolop_full_instrument = args.full or args.short_circuit_full
 return_instrument = args.full or args.returns
 assume_tailcall = not args.full and args.tailcall_returns
 inline_instrument = args.full or args.inline
+trivial_instrument = args.full or args.trivial
 main_close = args.full or args.close
 anon_instrument = args.anon
 function_instrument = args.full or args.functions
@@ -102,7 +106,7 @@ pointer_call_instrument = args.full or args.pointer_calls
 instrumenter = Instrumenter(database, store_dir, case_instrument=case_instrument,
                             boolop_instrument=boolop_instrument, boolop_full_instrument=boolop_full_instrument,
                             return_instrument=return_instrument, assume_tailcall=assume_tailcall,
-                            inline_instrument=inline_instrument,
+                            inline_instrument=inline_instrument, trivial_instrument=trivial_instrument,
                             main_instrument=main_instrument, main_spelling=main_spelling, main_close=main_close,
                             anon_instrument=anon_instrument,
                             function_instrument=function_instrument, inner_instrument=inner_instrument,

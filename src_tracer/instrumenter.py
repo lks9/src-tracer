@@ -9,7 +9,8 @@ class Instrumenter:
 
     def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
                  boolop_full_instrument=False, assume_tailcall=True,
-                 return_instrument=True, inline_instrument=False, main_instrument=True, main_spelling="main",
+                 return_instrument=True, inline_instrument=False, trivial_instrument=False,
+                 main_instrument=True, main_spelling="main",
                  main_close=False, anon_instrument=False,
                  function_instrument=True, inner_instrument=True, call_instrument=True, pointer_call_instrument=False):
         """
@@ -24,6 +25,7 @@ class Instrumenter:
         self.return_instrument = return_instrument
         self.assume_tailcall = assume_tailcall
         self.inline_instrument = inline_instrument
+        self.trivial_instrument = trivial_instrument
         self.main_instrument = main_instrument
         self.main_spelling = main_spelling
         self.main_close = main_close
@@ -270,6 +272,19 @@ class Instrumenter:
         except:
             pass
         return False
+
+    # treat non-branching functions as trivial
+    def check_trivial_method(self, node):
+
+        if node.spelling == self.main_spelling:
+            # ... except main
+            return False
+
+        for sub in node.walk_preorder():
+            if sub.kind in (CursorKind.IF_STMT, CursorKind.WHILE_STMT, CursorKind.FOR_STMT, CursorKind.DO_STMT, CursorKind.SWITCH_STMT, CursorKind.CXX_TRY_STMT):
+                # function has branching sub
+                return False
+        return True
 
     def check_inline_method(self, node):
         try:
@@ -660,6 +675,8 @@ class Instrumenter:
                     return
                 function_scope = True
                 if not self.inline_instrument and self.check_inline_method(node):
+                    pass
+                elif not self.trivial_instrument and self.check_trivial_method(node):
                     pass
                 else:
                     self.visit_function(node)
