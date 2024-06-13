@@ -20,7 +20,7 @@
   #include <sched.h>
   #include <sys/prctl.h>
   #include <linux/close_range.h>
-  #ifdef TRACEFORK_SYNC_UFFD
+  #if defined TRACEFORK_SYNC_UFFD || defined TRACEFORK_UFFD_BREAK
     #include "sync_uffd.h"
   #endif
   #ifdef TRACEFORK_FUTEX
@@ -88,11 +88,21 @@ static void my_exit(void) {
 #ifdef TRACEFORK_ZSTD
 
 // write and compress
-static void my_write(void *ptr, int len, bool last) {
+static void my_write(void *ptr, int len, bool last, unsigned long last_block) {
     __builtin_memcpy(&z_in[in_desc.size], ptr, len);
 #ifdef TRACEFORK_POLLING
     // reset to 0 for future polling
     *(long long*)ptr = 0;
+#ifdef TRACEFORK_UFFD_BREAK
+    if (!last) {
+        // everything copied, clear potential wp pagefaults
+        struct uffdio_writeprotect wp1;
+        wp1.range.start = last_block;
+        wp1.range.len = 4096;
+        wp1.mode = 0;
+        ioctl(_trace_uffd, UFFDIO_WRITEPROTECT, &wp1);
+    }
+#endif
 #endif
     in_desc.size += len;
 
@@ -137,7 +147,7 @@ static void write_and_exit(unsigned char *ptr, int len) {
     while (end > 0 && ptr[end-1] != 'E') end--;
     // no 'E' found?
     if (end == 0) end = len;
-    my_write(ptr, end, true);
+    my_write(ptr, end, true, 0);
     my_exit();
 }
 
@@ -172,7 +182,7 @@ static void my_sleep(long nsec) {
 }
 #endif // TRACEFORK_BUSY_WAITING
 
-static long long polling(volatile long long *ptr) {
+static long long polling(volatile long long *ptr, unsigned long trace_ptr, unsigned short pos, unsigned short next_pos) {
     long long val;
 #ifdef TRACEFORK_BUSY_WAITING
     next_ptr_static = ptr;
@@ -207,12 +217,22 @@ static long long polling(volatile long long *ptr) {
     }
     // timeout!
 #endif
+#ifdef TRACEFORK_UFFD_BREAK
+    {
+        // insert the trap for the last page
+        struct uffdio_writeprotect wp2;
+        wp2.range.start = (trace_ptr + next_pos - 4096) % TRACE_BUF_SIZE;
+        wp2.range.len = 4096;
+        wp2.mode = UFFDIO_WRITEPROTECT_MODE_WP;
+        ioctl(_trace_uffd, UFFDIO_WRITEPROTECT, &wp2);
+    }
+#endif
     return val;
 }
 
 static void synchronize (unsigned char *ptr, unsigned short pos, unsigned short next_pos) {
     void *next_ptr = &(ptr[next_pos]);
-    long long val = polling((long long*)next_ptr);
+    long long val = polling((long long*)next_ptr, (unsigned long)ptr, pos, next_pos);
 
     if (val == 0ll || val == -1ll) {
         // timeout 0ll or trace end marker -1ll
@@ -334,7 +354,7 @@ static void forked_main (void) {
     while (true) {
         synchronize(ptr, pos, next_pos);
 
-        my_write(&(ptr[pos]), TRACEFORK_WRITE_BLOCK_SIZE, false);
+        my_write(&(ptr[pos]), TRACEFORK_WRITE_BLOCK_SIZE, false, (unsigned long)&(ptr[(unsigned short)(pos+61440)]));
 
         pos = next_pos;
         next_pos += TRACEFORK_WRITE_BLOCK_SIZE;
@@ -390,10 +410,14 @@ static void fork_parent_exit(void) {
 }
 
 static void setup_uffd(void) {
-#ifdef TRACEFORK_SYNC_UFFD
+#if defined TRACEFORK_SYNC_UFFD || defined TRACEFORK_UFFD_BREAK
     // we set up uffd events when (half of) trace pages are filled
     // then trace writer can write in second thread/process
-    _trace_uffd = syscall(SYS_userfaultfd, UFFD_USER_MODE_ONLY);
+    _trace_uffd = syscall(SYS_userfaultfd, UFFD_USER_MODE_ONLY
+#ifdef TRACEFORK_UFFD_BREAK
+                                         | O_NONBLOCK
+#endif
+            );
     if (_trace_uffd < 0) {
 #ifdef TRACEFORK_DEBUG
         errno = -_trace_uffd;
@@ -404,7 +428,9 @@ static void setup_uffd(void) {
     struct uffdio_api uffdio_api = {
         .api = UFFD_API,
         .features = UFFD_FEATURE_EVENT_UNMAP
+#ifdef TRACEFORK_SYNC_UFFD
                   | UFFD_FEATURE_MISSING_SHMEM
+#endif
                   | UFFD_FEATURE_WP_HUGETLBFS_SHMEM,
     };
     if (ioctl(_trace_uffd, UFFDIO_API, &uffdio_api) == -1) {
@@ -412,22 +438,43 @@ static void setup_uffd(void) {
         _exit(0);
     }
 
+#ifdef TRACEFORK_SYNC_UFFD
     // do not generate page fault for first page
     *(unsigned char*)_trace_ptr = 0xff;
+#endif
 
     // register page ranges to track
     struct uffdio_register uffdio_register = {
         .mode = UFFDIO_REGISTER_MODE_WP
-              | UFFDIO_REGISTER_MODE_MISSING,
+#ifdef TRACEFORK_SYNC_UFFD
+              | UFFDIO_REGISTER_MODE_MISSING
+#endif
+              ,
         .range.len = 4096,
     };
     for (int i = 0; i < TRACE_BUF_SIZE; i += TRACEFORK_WRITE_BLOCK_SIZE) {
+#ifdef TRACEFORK_UFFD_BREAK
+        // do not generate a missing page fault, only wp
+        ((unsigned char*)_trace_ptr)[i] = 0;
+        uffdio_register.range.start = (unsigned long) _trace_ptr + i + TRACEFORK_WRITE_BLOCK_SIZE - 4096;
+#else
         uffdio_register.range.start = (unsigned long) _trace_ptr + i;
+#endif
         if (ioctl(_trace_uffd, UFFDIO_REGISTER, &uffdio_register) == -1) {
             perror("uffdio register");
             _exit(0);
         }
     }
+#ifdef TRACEFORK_UFFD_BREAK
+    // insert the trap for the last page
+    {
+        struct uffdio_writeprotect wp2;
+        wp2.range.start = (unsigned long)_trace_ptr + TRACE_BUF_SIZE - 4096;
+        wp2.range.len = 4096;
+        wp2.mode = UFFDIO_WRITEPROTECT_MODE_WP;
+        ioctl(_trace_uffd, UFFDIO_WRITEPROTECT, &wp2);
+    }
+#endif
 #endif
 }
 

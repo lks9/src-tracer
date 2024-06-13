@@ -10,7 +10,7 @@
 #define TRACE_USE_RINGBUFFER
 
 // to write ringbuffer to disk in a separate process
-//#define TRACE_USE_FORK
+#define TRACE_USE_FORK
 
 // Use thread_local storage to allow tracing a single thread, avoids race conditions
 //#define TRACE_USE_THREAD_LOCAL
@@ -75,7 +75,10 @@
         #define TRACEFORK_LONG_SLEEP_MULT 25
 
         // busy waiting if you really want (only available when TRACE_USE_POSIX not set)
-        //#define TRACEFORK_BUSY_WAITING
+        #define TRACEFORK_BUSY_WAITING
+
+        // when the recorded process becomes to fast, slow it down with userfault fd
+        #define TRACEFORK_UFFD_BREAK
     #endif
 
     // finish fork process after a timeout, when trace producer seems inactive

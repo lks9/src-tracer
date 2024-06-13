@@ -74,7 +74,7 @@ static __attribute__((unused)) size_t fname_len_wo_suffix;
 int _trace_fd;
 
 // userfault fd
-#ifdef TRACEFORK_SYNC_UFFD
+#if defined TRACEFORK_SYNC_UFFD || defined TRACEFORK_UFFD_BREAK
   int _trace_uffd;
 #endif
 
