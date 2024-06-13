@@ -141,7 +141,7 @@ static void write_and_exit(unsigned char *ptr, int len) {
     my_exit();
 }
 
-#ifdef TRACEFORK_BUSY_WAITING
+#if 0 // def TRACEFORK_BUSY_WAITING
 
 static volatile long long *next_ptr_static;
 
@@ -175,11 +175,11 @@ static void my_sleep(long nsec) {
 static long long polling(volatile long long *ptr) {
     long long val;
 #ifdef TRACEFORK_BUSY_WAITING
-    next_ptr_static = ptr;
+    //next_ptr_static = ptr;
     while ((val = *ptr) == 0ll) {
         __builtin_ia32_pause();
     }
-    counter += 1;
+    //counter += 1;
 #else
     static bool slept_long_before = false;
     int timeout = SLEEP_COUNT_TIMEOUT;
@@ -305,7 +305,7 @@ static void forked_main (void) {
     unsigned short next_pos = TRACEFORK_WRITE_BLOCK_SIZE;
     unsigned short pos = 0;
 
-#ifdef TRACEFORK_BUSY_WAITING
+#if 0 // def TRACEFORK_BUSY_WAITING
     // register timer to interrupt busy waiting
     struct sigevent sev;
     sev.sigev_notify = SIGEV_SIGNAL;
