@@ -42,7 +42,7 @@ See installation instructions in top-level README.md.
   Replace `xxxx` with the filename of the trace. You can also evaluate it in a for loop:
   ```
   for file in *maxbuggy_assert.c.trace;
-      do ../../retrace.py maxfixed_retrace $file --remove-options CONSERVATIVE_READ_STRATEGY CONSERVATIVE_WRITE_STRATEGY --assertions;
+      do ../../retrace.py maxbuggy_retrace $file --remove-options CONSERVATIVE_READ_STRATEGY CONSERVATIVE_WRITE_STRATEGY --assertions;
   done
   ```
   The result should look like this:
