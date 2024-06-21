@@ -7,7 +7,7 @@
 
 // Ringbuffer for fast tracing (no writing to disk, unless in pthread or fork)
 // assumes char is 8 bit!
-#define TRACE_USE_RINGBUFFER
+//#define TRACE_USE_RINGBUFFER
 
 // to write ringbuffer to disk in a separate process
 //#define TRACE_USE_FORK
