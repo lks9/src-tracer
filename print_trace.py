@@ -22,8 +22,8 @@ ap.add_argument("--count-elems", metavar="ELEMS", type=int, default=1,
                 help="read extra elems after count (default: 1)")
 ap.add_argument("--database",
                 help="path to the function database")
-ap.add_argument("--pretty", type=int, default=5,
-    help="5: pretty (default), 5,4: indent, 5,3: function names, 2: basic, 1: compact, 0: no newline, -1: informative")
+ap.add_argument("--pretty", type=int, default=3,
+    help="5,4: indent, 5,3: function names, 2: basic, 1: compact, 0: no newline, -1: informative, default: 3")
 ap.add_argument("--show-pos", action='store_true',
                 help="for each element show its count offset in the trace")
 ap.add_argument("--extra-indent", metavar="IND", type=int, default=0,

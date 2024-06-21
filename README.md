@@ -39,6 +39,9 @@ Any software which is written in C/C++, with the source code available.
 
 ## Example `checksum.c`
 
+* Optionally: Change configuration in `include/src_tracer/constants.h`.
+  The following assumes the standard-configuration.
+
 * First run the pre-processor
   ```
   cd examples/
@@ -53,28 +56,28 @@ Any software which is written in C/C++, with the source code available.
 ### Recording
 * Compile it with `_TRACE_MODE` (you might also want different compiler optimizations for recording/replaying)
   ```
-  gcc -D_TRACE_MODE -O3 -I../include -L../lib checksum_inst.c -o checksum_trace -lsrc_tracer -lpthread -lzstd
+  gcc -D_TRACE_MODE -O3 -I../include -L../lib checksum_inst.c -o checksum_trace -lsrc_tracer
   ```
-  Note: This version uses `-lpthread` and `-lzstd` for smaller traces with lower overhad.
+  (note: if you enabled `TRACEFORK_ZSTD` in `include/src_tracer/constants.h`, you would need `-lzstd` here)
 * Run it (replace `42` to get another trace) 
   ```
   ./checksum_trace 42
   ```
-  The name of the recorded trace corresponds to the current time, e.g. `2023-04-28-143402-checksum.c.trace.zst`.
+  The name of the recorded trace corresponds to the current time, e.g. `2023-04-28-143402-checksum.c.trace`.
 * Display the trace (replace the trace name with the correct one!)
   ```
-  zstd -d 2023-04-28-143402-checksum.c.trace.zst
   python ../print_trace.py 2023-04-28-143402-checksum.c.trace
   ```
+  (note: if you enabled `TRACEFORK_ZSTD` in `include/src_tracer/constants.h`, you would need to decompress the trace first using `zstd -d`)
 ### Retracing
 * Compile it with `_RETRACE_MODE` (you might also want different compiler optimizations for recording/replaying)
   ```
-  gcc -D_RETRACE_MODE -g -I../include -L../lib checksum_inst.c -o checksum_retrace -lsrc_tracer -lpthread -lzstd
+  gcc -D_RETRACE_MODE -g -I../include -L../lib checksum_inst.c -o checksum_retrace -lsrc_tracer
   ```
 * Retrace it (use `python -i` to work with the traced `state` in the interactive shell)
   ```
   python ../retrace.py checksum_retrace 2023-04-28-143402-checksum.c.trace
-  echo "F1TTN" > sub.trace.txt
+  echo "F1 IIO" > sub.trace.txt
   python ../retrace.py checksum_retrace sub.trace.txt
   ```
   The last one just retraces function `checksum`.
@@ -95,9 +98,10 @@ For a more automatic way that works well with make scripts, make use of `cc_wrap
   export SRC_TRACER_DIR=.........
   export CC="gcc"
   export CFLAGS="-Wno-error -L${SRC_TRACER_DIR}/lib -I${SRC_TRACER_DIR}/include -no-integrated-cpp -B${SRC_TRACER_DIR}/cc_wrapper"
-  export LIBS="-lsrc_tracer -lpthread -lzstd"
+  export LIBS="-lsrc_tracer"
   export SRC_TRACER=""
   ```
+  (note: in addition to `-lsrc_tracer` you might not need `-lzstd` if you configured `include/src_tracer/constant.h`)
 * Now you can ./configure your project...
 * You can copy the build directory here, if you want to reuse the configuration for retracing.
 * Before the actual compilation:

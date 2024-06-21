@@ -48,17 +48,17 @@ See installation instructions in top-level README.md.
   The result should look like this:
 ```
 DEBUG    | src_tracer.retrace | Starting with function "max"
-DEBUG    | src_tracer.retrace | F1 max --count 0
-DEBUG    | src_tracer.retrace | T
-DEBUG    | src_tracer.retrace | N
-DEBUG    | src_tracer.retrace | T
-DEBUG    | src_tracer.retrace | T
-DEBUG    | src_tracer.retrace | N
+DEBUG    | src_tracer.retrace | C1 max --count 0
+DEBUG    | src_tracer.retrace | I
+DEBUG    | src_tracer.retrace | O
+DEBUG    | src_tracer.retrace | I
+DEBUG    | src_tracer.retrace | I
+DEBUG    | src_tracer.retrace | O
 DEBUG    | src_tracer.retrace | Assertion "maxbuggy_assert.c:14" with index 0
 DEBUG    | src_tracer.retrace | Assertion "maxbuggy_assert.c:14" with index 0
 DEBUG    | src_tracer.retrace | Assertion "maxbuggy_assert.c:14" with index 0
 DEBUG    | src_tracer.retrace | R --count 2 (found 3)
-WARNING  | src_tracer.retrace | Could not find T at all in simgr <SimulationManager with 3 deadended>
+WARNING  | src_tracer.retrace | Could not find I at all in simgr <SimulationManager with 3 deadended>
 DEBUG    | src_tracer.retrace | Assertion "maxbuggy_assert.c:14": PASSED
 DEBUG    | src_tracer.retrace | Assertion "maxbuggy_assert.c:14": VIOLATED
 DEBUG    | src_tracer.retrace | Assertion "maxbuggy_assert.c:14": PASSED
@@ -69,15 +69,15 @@ Final assertion check result: POSSIBLY_VIOLATED
   Or like this:
 ```
 DEBUG    | src_tracer.retrace | Starting with function "max"
-DEBUG    | src_tracer.retrace | F1 max --count 0
-DEBUG    | src_tracer.retrace | T
-DEBUG    | src_tracer.retrace | N
-DEBUG    | src_tracer.retrace | T
-DEBUG    | src_tracer.retrace | N
-DEBUG    | src_tracer.retrace | N
+DEBUG    | src_tracer.retrace | C1 max --count 0
+DEBUG    | src_tracer.retrace | I
+DEBUG    | src_tracer.retrace | O
+DEBUG    | src_tracer.retrace | I
+DEBUG    | src_tracer.retrace | O
+DEBUG    | src_tracer.retrace | O
 DEBUG    | src_tracer.retrace | Assertion "maxbuggy_assert.c:14" with index 0
 DEBUG    | src_tracer.retrace | R --count 2
-WARNING  | src_tracer.retrace | Could not find T at all in simgr <SimulationManager with 1 deadended>
+WARNING  | src_tracer.retrace | Could not find I at all in simgr <SimulationManager with 1 deadended>
 DEBUG    | src_tracer.retrace | Assertion "maxbuggy_assert.c:14": PASSED
 
 Final assertion check result: PASSED
@@ -108,24 +108,24 @@ For the new trace recordings, most of the assertion check results should
 either be `PASSED` or `VIOLATED`:
 ```
 DEBUG    | src_tracer.retrace | Starting with function "proc"
-DEBUG    | src_tracer.retrace | F2 proc --count 0
-DEBUG    | src_tracer.retrace | F1 max --count 1
-DEBUG    | src_tracer.retrace | T
-DEBUG    | src_tracer.retrace | N
-DEBUG    | src_tracer.retrace | T
-DEBUG    | src_tracer.retrace | T
-DEBUG    | src_tracer.retrace | N
+DEBUG    | src_tracer.retrace | C2 proc --count 0
+DEBUG    | src_tracer.retrace | C1 max --count 1
+DEBUG    | src_tracer.retrace | I
+DEBUG    | src_tracer.retrace | O
+DEBUG    | src_tracer.retrace | I
+DEBUG    | src_tracer.retrace | I
+DEBUG    | src_tracer.retrace | O
 DEBUG    | src_tracer.retrace | Assertion "maxbuggy_assert.c:14" with index 0
 DEBUG    | src_tracer.retrace | Assertion "maxbuggy_assert.c:14" with index 0
 DEBUG    | src_tracer.retrace | Assertion "maxbuggy_assert.c:14" with index 0
 DEBUG    | src_tracer.retrace | R --count 3 (found 3)
-DEBUG    | src_tracer.retrace | T (found 3)
-DEBUG    | src_tracer.retrace | T (found 3)
-DEBUG    | src_tracer.retrace | T (found 2)
-DEBUG    | src_tracer.retrace | T
-DEBUG    | src_tracer.retrace | N
+DEBUG    | src_tracer.retrace | I (found 3)
+DEBUG    | src_tracer.retrace | I (found 3)
+DEBUG    | src_tracer.retrace | I (found 2)
+DEBUG    | src_tracer.retrace | I
+DEBUG    | src_tracer.retrace | O
 DEBUG    | src_tracer.retrace | R --count 5
-WARNING  | src_tracer.retrace | Could not find T at all in simgr <SimulationManager with 1 deadended>
+WARNING  | src_tracer.retrace | Could not find I at all in simgr <SimulationManager with 1 deadended>
 DEBUG    | src_tracer.retrace | Assertion "maxbuggy_assert.c:14": VIOLATED
 
 Final assertion check result: VIOLATED
