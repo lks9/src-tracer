@@ -30,7 +30,7 @@ extern "C" {
 #ifdef _RETRACE_MODE
     #include "src_tracer/retrace_mode.h"
 #endif
-#ifdef _CMBC_MODE
+#ifdef _CBMC_MODE
     #include "src_tracer/cbmc_mode.h"
 #endif
 
