@@ -75,7 +75,7 @@ static int trace_fd;
 
 __attribute__((noreturn))
 static void my_exit(void) {
-#ifdef TRACEFORK_SYNC_UFFD
+#if defined TRACEFORK_SYNC_UFFD || defined TRACEFORK_UFFD_BREAK
     close(_trace_uffd);
 #endif
     close(trace_fd);
@@ -427,8 +427,9 @@ static void setup_uffd(void) {
     }
     struct uffdio_api uffdio_api = {
         .api = UFFD_API,
-        .features = UFFD_FEATURE_EVENT_UNMAP
+        .features = 0
 #ifdef TRACEFORK_SYNC_UFFD
+                  | UFFD_FEATURE_EVENT_UNMAP
                   | UFFD_FEATURE_MISSING_SHMEM
 #endif
                   | UFFD_FEATURE_WP_HUGETLBFS_SHMEM,
@@ -502,13 +503,13 @@ static int clone_function(void *trace_fname) {
 #ifdef TRACE_USE_POSIX
     /* cannot use sysconf() here, because of race conditions, see man fork(2), signal-safety(7) */
     for (int fd = FIRST_FD; fd <= _POSIX_OPEN_MAX; fd++) {
-  #ifdef TRACEFORK_SYNC_UFFD
+  #if defined TRACEFORK_SYNC_UFFD || defined TRACEFORK_UFFD_BREAK
         if (fd == _trace_uffd) continue;
   #endif
         close(fd);
     }
 #else
-  #ifdef TRACEFORK_SYNC_UFFD
+  #if defined TRACEFORK_SYNC_UFFD || defined TRACEFORK_UFFD_BREAK
     if (FIRST_FD < trace_fd) {
         syscall_3(SYS_close_range, FIRST_FD, _trace_uffd - 1, CLOSE_RANGE_UNSHARE);
     }
@@ -555,7 +556,7 @@ int tracer_create_daemon(char *trace_fname) {
         clone_function(trace_fname);
         _exit(res);
     }
-#ifdef TRACEFORK_UFFD
+#if defined TRACEFORK_SYNC_UFFD || defined TRACFORK_UFFD_BREAK
     // only needed in the child process
     close(_trace_uffd);
 #endif
