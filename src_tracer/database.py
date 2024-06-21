@@ -25,10 +25,10 @@ class Database:
         cursor = self.connection.cursor()
         cursor.execute("SELECT name FROM function_list WHERE rowid=?", (func_num,))
         name = cursor.fetchone()
+        cursor.close()
         if name is None:
             log.error("there is no name (entry) for the func_num (%d)", func_num)
             return None
-        cursor.close()
         return name[0]
 
     def get_numbers(self, func_name):
@@ -39,14 +39,19 @@ class Database:
         return func_nums
 
     def _create_table(self, table_name: str, colum_name_type: List[Tuple[str, str]], key: List[str]):
-        cursor = self.connection.cursor()
         columns = ", ".join([" ".join(col) for col in colum_name_type])
         key_str = ", ".join(key)
-        cursor.execute(f'''
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(f'''
                        CREATE TABLE IF NOT EXISTS {table_name}
                             ( {columns}, PRIMARY KEY ({key_str}) )
                        ''')
+        except sqlite3.OperationalError:
+            # who knows, perhaps the table was created in another process ???
+            pass
         cursor.close()
+        self.connection.commit()
 
     def insert_to_table(self, file, line, name, pre_file=None, offset=None):
         cursor = self.connection.cursor()

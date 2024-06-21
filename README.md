@@ -39,6 +39,9 @@ Any software which is written in C/C++, with the source code available.
 
 ## Example `checksum.c`
 
+* Optionally: Change configuration in `include/src_tracer/constants.h`.
+  The following assumes the standard-configuration.
+
 * First run the pre-processor
   ```
   cd examples/
@@ -55,6 +58,7 @@ Any software which is written in C/C++, with the source code available.
   ```
   gcc -D_TRACE_MODE -O3 -I../include -L../lib checksum_inst.c -o checksum_trace -lsrc_tracer
   ```
+  (note: if you enabled `TRACEFORK_ZSTD` in `include/src_tracer/constants.h`, you would need `-lzstd` here)
 * Run it (replace `42` to get another trace) 
   ```
   ./checksum_trace 42
@@ -64,6 +68,7 @@ Any software which is written in C/C++, with the source code available.
   ```
   python ../print_trace.py 2023-04-28-143402-checksum.c.trace
   ```
+  (note: if you enabled `TRACEFORK_ZSTD` in `include/src_tracer/constants.h`, you would need to decompress the trace first using `zstd -d`)
 ### Retracing
 * Compile it with `_RETRACE_MODE` (you might also want different compiler optimizations for recording/replaying)
   ```
@@ -72,7 +77,7 @@ Any software which is written in C/C++, with the source code available.
 * Retrace it (use `python -i` to work with the traced `state` in the interactive shell)
   ```
   python ../retrace.py checksum_retrace 2023-04-28-143402-checksum.c.trace
-  echo "F1TTN" > sub.trace.txt
+  echo "F1 IIO" > sub.trace.txt
   python ../retrace.py checksum_retrace sub.trace.txt
   ```
   The last one just retraces function `checksum`.
@@ -96,6 +101,7 @@ For a more automatic way that works well with make scripts, make use of `cc_wrap
   export LIBS="-lsrc_tracer"
   export SRC_TRACER=""
   ```
+  (note: in addition to `-lsrc_tracer` you might not need `-lzstd` if you configured `include/src_tracer/constant.h`)
 * Now you can ./configure your project...
 * You can copy the build directory here, if you want to reuse the configuration for retracing.
 * Before the actual compilation:

@@ -5,15 +5,7 @@
 #include <stdbool.h>
 
 // editable constant definitions
-#ifndef ASSERT_BUF_SIZE
-#define ASSERT_BUF_SIZE 4096
-#endif
-#ifndef GHOST_DUMP_BUF_SIZE
-#define GHOST_DUMP_BUF_SIZE 4096
-#endif
-#ifndef RETRACE_SYMBOLIC_SIZE
-#define RETRACE_SYMBOLIC_SIZE 4096
-#endif
+#include <src_tracer/constants.h>
 
 // RETRO_ONLY( code; )
 // Same as retro ghost, but also includeded in nested ghost code

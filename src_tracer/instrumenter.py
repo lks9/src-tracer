@@ -9,7 +9,8 @@ class Instrumenter:
 
     def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
                  boolop_full_instrument=False, assume_tailcall=True,
-                 return_instrument=True, inline_instrument=False, main_instrument=True, main_spelling="main",
+                 return_instrument=True, inline_instrument=False, trivial_instrument=False,
+                 main_instrument=True, main_spelling="main",
                  main_close=False, anon_instrument=False,
                  function_instrument=True, inner_instrument=True, call_instrument=True, pointer_call_instrument=False):
         """
@@ -24,6 +25,7 @@ class Instrumenter:
         self.return_instrument = return_instrument
         self.assume_tailcall = assume_tailcall
         self.inline_instrument = inline_instrument
+        self.trivial_instrument = trivial_instrument
         self.main_instrument = main_instrument
         self.main_spelling = main_spelling
         self.main_close = main_close
@@ -133,7 +135,7 @@ class Instrumenter:
                 (orig_fname, _) = self.orig_file_and_line(node.extent.start)
             except:
                 orig_fname = ""
-            trace_fname = "%F-%H%M%S-%%lx-" + os.path.basename(orig_fname) + ".trace"
+            trace_fname = "%F-%H%M%S-%%lx-" + os.path.basename(orig_fname)
             trace_path = os.path.join(os.path.abspath(self.trace_store_dir), trace_fname)
             self.prepent_annotation(b' _TRACE_OPEN("' + bytes(trace_path, "utf8") + b'") ', body.extent.start, 1)
 
@@ -157,15 +159,15 @@ class Instrumenter:
                     if close:
                         self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
                     semi_off = self.find_next_semi(ret_stmt.extent.end)
-                    self.prepent_annotation(b" }", ret_stmt.extent.end, semi_off + 1)
-                elif self.assume_tailcall:
+                    self.prepent_annotation(b"; }", ret_stmt.extent.end, semi_off)
+                elif self.assume_tailcall and not close:
                     self.add_annotation(b"{ ", ret_stmt.extent.start)
                     if ret:
                         self.add_annotation(b"_FUNC_RETURN_TAIL ", ret_stmt.extent.start)
                     if close:
                         self.add_annotation(b"_TRACE_CLOSE ", ret_stmt.extent.start)
                     semi_off = self.find_next_semi(ret_stmt.extent.end)
-                    self.prepent_annotation(b" }", ret_stmt.extent.end, semi_off + 1)
+                    self.prepent_annotation(b"; }", ret_stmt.extent.end, semi_off)
                 else:
                     childs = [c for c in ret_stmt.get_children()]
                     ret_expr = childs[0]
@@ -270,6 +272,19 @@ class Instrumenter:
         except:
             pass
         return False
+
+    # treat non-branching functions as trivial
+    def check_trivial_method(self, node):
+
+        if node.spelling == self.main_spelling:
+            # ... except main
+            return False
+
+        for sub in node.walk_preorder():
+            if sub.kind in (CursorKind.IF_STMT, CursorKind.WHILE_STMT, CursorKind.FOR_STMT, CursorKind.DO_STMT, CursorKind.SWITCH_STMT, CursorKind.CXX_TRY_STMT):
+                # function has branching sub
+                return False
+        return True
 
     def check_inline_method(self, node):
         try:
@@ -399,9 +414,10 @@ class Instrumenter:
             if (child.kind == CursorKind.COMPOUND_STMT):
                 body = child
 #        self.add_annotation(b" _LOOP_START(" + loop_id + b") ", node.extent.start)
+        self.add_annotation(b" { ", node.extent.start)
         if body:
             self.prepent_annotation(b" _LOOP_BODY(" + loop_id + b") ", body.extent.start, 1)
-            self.prepent_annotation(b" _LOOP_END(" + loop_id + b") ", node.extent.end)
+            self.prepent_annotation(b" _LOOP_END(" + loop_id + b") } ", node.extent.end)
         else:
             childs = [c for c in node.get_children()]
             if len(childs) >= 2:
@@ -411,15 +427,15 @@ class Instrumenter:
                     semi_off2 = self.find_next_semi(node.extent.end)
                     self.prepent_annotation(b" { _LOOP_BODY(" + loop_id + b") ", stmt.extent.start)
                     self.prepent_annotation(b" } ", stmt.extent.end, semi_off + 1)
-                    self.prepent_annotation(b" _LOOP_END(" + loop_id + b") ", node.extent.end, semi_off2 + 1)
+                    self.prepent_annotation(b" _LOOP_END(" + loop_id + b") } ", node.extent.end, semi_off2 + 1)
                 else:
                     stmt = childs[-1]
                     semi_off = self.find_next_semi(node.extent.end)
                     self.prepent_annotation(b" { _LOOP_BODY(" + loop_id + b") ", stmt.extent.start)
-                    self.prepent_annotation(b" } _LOOP_END(" + loop_id + b") ", node.extent.end, semi_off + 1)
+                    self.prepent_annotation(b" } _LOOP_END(" + loop_id + b") } ", node.extent.end, semi_off + 1)
             else:
                 semi_off = self.find_next_semi(node.extent.end)
-                self.prepent_annotation(b" { _LOOP_BODY(" + loop_id + b") } _LOOP_END(" + loop_id + b") ",
+                self.prepent_annotation(b" { _LOOP_BODY(" + loop_id + b") } _LOOP_END(" + loop_id + b") } ",
                                         node.extent.end, semi_off + 1)
 
 #        # handle returns & gotos
@@ -494,7 +510,8 @@ class Instrumenter:
                 # we will add an extra case below
                 case_count = case_count + 1
             bits_needed = bytes(hex(int.bit_length(case_count-1)), "utf-8")
-            self.add_annotation(b" _SWITCH_START(" + switch_id + b", " + bits_needed + b") ", node.extent.start)
+            self.add_annotation(b" { _SWITCH_START(" + switch_id + b", " + bits_needed + b") ", node.extent.start)
+            self.prepent_annotation(b"}", node.extent.end)
 
             for case_index in range(len(case_node_list)):
                 case_node = case_node_list[case_index]
@@ -504,9 +521,11 @@ class Instrumenter:
             # append missing default if necessary
             if not has_default:
                 case_id = bytes(hex(case_count - 1), "utf-8")
-                self.add_annotation(b" break; default: _CASE(" + case_id + b", "
-                                                               + switch_id + b", " + bits_needed + b") ",
-                                    node.extent.end, -1)
+                self.add_annotation(b" { default: _CASE(" + case_id + b", "
+                                                        + switch_id + b", " + bits_needed + b") "
+                                    + b" break; ",
+                                    children[1].extent.start)
+                self.prepent_annotation(b"}", node.extent.end)
         else:
             # simpler, default
             switch_num = children[0]
@@ -550,19 +569,7 @@ class Instrumenter:
         return None
 
     def visit_call(self, node):
-        # Some calls need to be anotated
-        if node.spelling == "fork":
-            self.add_annotation(b"_FORK(", node.extent.start)
-            self.prepent_annotation(b")", node.extent.end)
-        elif node.spelling in ("setjmp", "sigsetjmp", "_setjmp", "__sigsetjmp"):
-            self.add_annotation(b"_SETJMP(", node.extent.start)
-            self.prepent_annotation(b")", node.extent.end)
-        elif node.spelling in ("exit", "_Exit", "_exit"):
-            self.add_annotation(b"(({int exitcode = ", node.extent.start, len(node.spelling))
-            self.prepent_annotation(b"; _TRACE_CLOSE; exitcode; }))", node.extent.end)
-        elif node.spelling == "abort":
-            self.add_annotation(b"_TRACE_CLOSE ", node.extent.start)
-        elif self.pointer_call_instrument and self.is_pointer_call(node):
+        if self.pointer_call_instrument and self.is_pointer_call(node):
             last_call = self.last_call_before(node)
             if last_call is None:
                 self.add_annotation(b"_POINTER_CALL(", node.extent.start)
@@ -571,6 +578,30 @@ class Instrumenter:
                 last_call_type = bytes(last_call.type.spelling, "utf-8")
                 self.prepent_annotation(b"_POINTER_CALL_AFTER(" + last_call_type + b", ", last_call.extent.start)
                 self.add_annotation(b")", last_call.extent.end)
+        # Some calls need to be anotated
+        elif node.spelling == "fork":
+            if not self.pointer_call_instrument and self.is_pointer_call(node):
+                # a pointer named "fork" to some function...
+                return
+            self.add_annotation(b"_FORK(", node.extent.start)
+            self.prepent_annotation(b")", node.extent.end)
+        elif node.spelling in ("setjmp", "sigsetjmp", "_setjmp", "__sigsetjmp"):
+            if not self.pointer_call_instrument and self.is_pointer_call(node):
+                return
+            self.add_annotation(b"_SETJMP(", node.extent.start)
+            self.prepent_annotation(b")", node.extent.end)
+        elif node.spelling in ("exit", "_Exit", "_exit"):
+            if not self.pointer_call_instrument and self.is_pointer_call(node):
+                return
+            content = self.node_content(node)
+            endpos = re.search(node.spelling, content).endpos
+            self.add_annotation(b"(({int exitcode = ", node.extent.start, endpos)
+            self.prepent_annotation(b"; _TRACE_CLOSE; exitcode; }))", node.extent.end)
+        elif node.spelling == "abort":
+            if not self.pointer_call_instrument and self.is_pointer_call(node):
+                return
+            self.add_annotation(b"({_TRACE_CLOSE; ", node.extent.start)
+            self.prepent_annotation(b";})", node.extent.end)
 
     def visit_try(self, node):
         childs = [c for c in node.get_children()]
@@ -635,7 +666,7 @@ class Instrumenter:
 
     def traverse(self, node, function_scope=False):
         try:
-            if node.kind in (CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE):
+            if node.kind in (CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE, CursorKind.CXX_METHOD):
                 # no recursive annotation
                 if "_trace" in node.spelling or "_retrace" in node.spelling:
                     return
@@ -644,6 +675,8 @@ class Instrumenter:
                     return
                 function_scope = True
                 if not self.inline_instrument and self.check_inline_method(node):
+                    pass
+                elif not self.trivial_instrument and self.check_trivial_method(node):
                     pass
                 else:
                     self.visit_function(node)
@@ -678,7 +711,7 @@ class Instrumenter:
                 function_scope = False
         except:
             message = "Failed to annotate a " + str(node.kind)
-            raise Exception(message)
+            #raise Exception(message)
 
         for child in node.get_children():
             self.traverse(child, function_scope=function_scope)
