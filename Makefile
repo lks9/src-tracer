@@ -28,4 +28,4 @@ lib/src_tracer/mmap_to_trace.o: lib/src_tracer/mmap_to_trace.i
 	gcc -Wall -fPIC -c -nostdlib -O3 -o $@ $<
 
 clean:
-	rm -f lib/*.o lib/*.i lib/src_tracer/*.o lib/src_tracer/*.i
+	rm -f lib/*.o lib/*.i lib/src_tracer/*.o lib/src_tracer/*.i lib/libsrc_tracer.a
