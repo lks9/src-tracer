@@ -126,6 +126,8 @@ for elem in trace:
         print_extra(elem.pretty(show_pos=args.show_pos))
     elif elem.bs == b'':
         print_extra(elem.pretty(show_pos=args.show_pos))
+        if elem.letter == 'C':
+            indent += 1
     else:
         num = elem.num
         if elem.letter == 'C':

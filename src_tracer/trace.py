@@ -201,7 +201,7 @@ class Trace:
 
 class TraceText(Trace):
     def __init__(self, trace_str, seek_elems, count_elems, trace_tail):
-        self._trace_str = trace_str
+        self._trace = trace_str
         self._trace_tail = trace_tail
         self.seek_elems = seek_elems
         self.count_elems = count_elems
@@ -210,7 +210,7 @@ class TraceText(Trace):
         """
         Iterate over the elements in the trace, respecting seek and count.
         """
-        it = self.full_iter(self._trace_str)
+        it = self.full_iter(self._trace)
         for _ in range(self.seek_elems):
             next(it)
         for elem in it:
@@ -246,7 +246,7 @@ class TraceText(Trace):
 
     # overwrite for complexity reasons
     def __str__(self):
-        return self._trace_str
+        return self._trace
 
 
 class TraceCompact(Trace):
