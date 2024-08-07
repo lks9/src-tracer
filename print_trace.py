@@ -24,6 +24,8 @@ ap.add_argument("--database",
                 help="path to the function database")
 ap.add_argument("--pretty", type=int, default=3,
     help="5,4: indent, 5,3: function names, 2: basic, 1: compact, 0: no newline, -1: informative, default: 3")
+ap.add_argument("--p01", action='store_true',
+                help="alternative bit trace format with only 0/1 for O/I trace elements")
 ap.add_argument("--show-pos", action='store_true',
                 help="for each element show its count offset in the trace")
 ap.add_argument("--extra-indent", metavar="IND", type=int, default=0,
@@ -31,7 +33,7 @@ ap.add_argument("--extra-indent", metavar="IND", type=int, default=0,
 args = ap.parse_args()
 
 # create connection to database
-if args.pretty in (5,3):
+if not args.p01 and args.pretty in (5,3):
     if args.database is None:
         database_dir = os.path.dirname(args.trace_file)
         database_path = os.path.join(database_dir, 'function_database.db')
@@ -49,6 +51,7 @@ if args.pretty in (0,1) and args.show_pos:
     raise Exception(error)
 
 trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count, count_elems=args.count_elems)
+
 
 previous_newline = True
 indent = args.extra_indent
@@ -93,6 +96,14 @@ def print_extra(s):
 if args.pretty == -1:
     for elem in trace.full_iter(trace._trace):
         print(elem)
+    sys.exit()
+
+if args.p01:
+    for elem in trace:
+        if elem.letter == 'O':
+            print('0', end='')
+        elif elem.letter == 'I':
+            print('1', end='')
     sys.exit()
 
 setjmp_indent = []
