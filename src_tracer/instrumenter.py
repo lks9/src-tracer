@@ -10,6 +10,7 @@ class Instrumenter:
     def __init__(self, database, trace_store_dir, case_instrument=False, boolop_instrument=False,
                  boolop_full_instrument=False, assume_tailcall=True,
                  return_instrument=True, inline_instrument=False, trivial_instrument=False,
+                 exclude=[],
                  main_instrument=True, main_spelling="main",
                  main_close=False, anon_instrument=False,
                  function_instrument=True, inner_instrument=True, call_instrument=True, pointer_call_instrument=False):
@@ -26,6 +27,7 @@ class Instrumenter:
         self.assume_tailcall = assume_tailcall
         self.inline_instrument = inline_instrument
         self.trivial_instrument = trivial_instrument
+        self.exclude = exclude
         self.main_instrument = main_instrument
         self.main_spelling = main_spelling
         self.main_close = main_close
@@ -670,6 +672,9 @@ class Instrumenter:
                 # no recursive annotation
                 if "_trace" in node.spelling or "_retrace" in node.spelling:
                     return
+                # explicit exclusion of functions
+                if node.spelling in self.exclude:
+                    return
                 # no instrumentation of C++ constant functions
                 if self.check_const_method(node):
                     return
@@ -711,6 +716,7 @@ class Instrumenter:
                 function_scope = False
         except:
             message = "Failed to annotate a " + str(node.kind)
+            print(message)
             #raise Exception(message)
 
         for child in node.get_children():

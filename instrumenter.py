@@ -41,6 +41,8 @@ ap_instru.add_argument("--no-inline", action='store_false', dest='inline')
 ap_instru.add_argument("--trivial", action='store_true', default=False,
                 help="Instrument trivial functions (default off).")
 ap_instru.add_argument("--no-trivial", action='store_false', dest='trivial')
+ap_instru.add_argument("--exclude", nargs='*',
+                help="No instrumentation inside these functions")
 ap_instru.add_argument("--main", action='store_true', default=True,
                 help="Instrument the main function to start trace recording (default).")
 ap_instru.add_argument("--no-main", action='store_false', dest='main')
@@ -101,12 +103,14 @@ function_instrument = args.full or args.functions
 inner_instrument = args.full or args.inner
 call_instrument = args.full or args.calls
 pointer_call_instrument = args.full or args.pointer_calls
+exclude = args.exclude or []
 
 # do the instrumentation
 instrumenter = Instrumenter(database, store_dir, case_instrument=case_instrument,
                             boolop_instrument=boolop_instrument, boolop_full_instrument=boolop_full_instrument,
                             return_instrument=return_instrument, assume_tailcall=assume_tailcall,
                             inline_instrument=inline_instrument, trivial_instrument=trivial_instrument,
+                            exclude=exclude,
                             main_instrument=main_instrument, main_spelling=main_spelling, main_close=main_close,
                             anon_instrument=anon_instrument,
                             function_instrument=function_instrument, inner_instrument=inner_instrument,
