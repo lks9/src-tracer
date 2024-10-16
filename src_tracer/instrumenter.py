@@ -634,17 +634,18 @@ class Instrumenter:
 
         self.traverse(root)
 
-    def annotate_all(self, filename):
+    def annotate_all(self, filename, output=None):
         if filename in self.annotations:
             annotation = self.annotations[filename]
             content = annotation["content"]
+            output = output or filename
             # overwrite
             if (b'#include <src_tracer/_after_instrument.h>' in content):
                 # print("Skipping " + filename + " (already annotated)")
                 return False
             # print("Overwriting " + filename + "...")
             prevchar = b' '
-            with open(filename, "wb") as f:
+            with open(output, "wb") as f:
                 for offset, char_int in enumerate(content):
                     char = char_int.to_bytes(1, "little")
                     if offset in annotation:

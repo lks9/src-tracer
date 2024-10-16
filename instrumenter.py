@@ -15,6 +15,8 @@ ap.add_argument("store_dir", nargs='?',
                 help="Where to store database and traces.")
 ap.add_argument("--database",
                 help="Custom database path.")
+ap.add_argument("--output",
+                help="Output file (default same as input)")
 ap_instru = ap.add_argument_group('instrumentation options')
 ap_instru.add_argument("--returns", action='store_true', default=False,
                 help="Instrument returns (default off).")
@@ -116,5 +118,5 @@ instrumenter = Instrumenter(database, store_dir, case_instrument=case_instrument
                             function_instrument=function_instrument, inner_instrument=inner_instrument,
                             call_instrument=call_instrument, pointer_call_instrument=pointer_call_instrument)
 instrumenter.parse(args.filename)
-instrumenter.annotate_all(args.filename)
+instrumenter.annotate_all(args.filename, args.output)
 database.close_connection()
