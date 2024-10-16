@@ -60,6 +60,8 @@ if args.fname is None:
         error = f"Could not open database from {database_path}, try --fname or --database"
         raise Exception(error)
     database = Database(store_dir=None, path=database_path)
+else:
+    database = None
 
 # retracing
 
@@ -128,4 +130,5 @@ if assertion_checks:
     print(f"Final assertion check result: {res.name}")
     print()
 
-database.close_connection()
+if database:
+    database.close_connection()
