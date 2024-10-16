@@ -320,6 +320,9 @@ class TraceCompact(Trace):
                 else:
                     length = 0
                     bs = b''
+            elif b == 0:
+                # skip 0
+                continue
             else:
                 # function number
                 endian = "big"

@@ -191,7 +191,32 @@ static void create_trace_process(void) {
     }
 }
 
-#endif // TRACE_USE_FORK
+
+#endif // TRACE_USE_RINGBUFFER && ! TRACE_USE_FORK
+
+void _trace_bugreport(void) {
+    // Make the file name time dependent
+    char timed_fname[60];
+    char trace_fname[70];
+    struct timespec now;
+    if (clock_gettime(CLOCK_REALTIME, &now) < 0) {
+        perror("clock_gettime");
+        return;
+    }
+    strftime(timed_fname, 60, "bugreport-%F-%H%M%S-%%lx.trace", gmtime(&now.tv_sec));
+    snprintf(trace_fname, 70, timed_fname, now.tv_nsec);
+
+    debug("Bugreport trace to: %s\n", trace_fname);
+
+    int fd = open(trace_fname, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
+
+    // write after the last written byte
+    write(fd, &_trace_buf[_trace_buf_pos], TRACE_BUF_SIZE - _trace_buf_pos);
+    // write until the last written byte
+    write(fd, _trace_buf, _trace_buf_pos);
+
+    close(fd);
+}
 
 #if !defined TRACE_USE_RINGBUFFER || defined TRACE_USE_FORK
 

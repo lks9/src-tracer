@@ -41,9 +41,11 @@
 
 // write trace to disk
 #ifndef TRACE_USE_RINGBUFFER
-    // no disk-writing for ringbuffers
+    // no repeated disk-writing for ringbuffers
     extern void _trace_write(void);
 #endif
+// write current contents of the (ring)buffer to disk for a bug report
+extern void _trace_bugreport(void);
 
 extern void _trace_pause(void);
 extern void _trace_resume(void);
