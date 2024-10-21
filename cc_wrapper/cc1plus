@@ -59,15 +59,18 @@ if [ "$1" = "-E" ]; then
         $(${COLLECT_GCC} --print-prog-name=cc1plus) $@
 
         # save the pre-pocessed output
-        cp "${outfile}" "${outfile}.tmp.cpp"
+        cp "${outfile}" "${outfile}.tmp.cc"
 
         # do the instrumentation
-        python3 "${SRC_TRACER_DIR}/instrumenter.py" "${outfile}.tmp.cpp" "${SRC_TRACER_STORE_DIR}" || exit $?
+        python3 "${SRC_TRACER_DIR}/instrumenter.py" "${outfile}.tmp.cc" "${SRC_TRACER_STORE_DIR}" || exit $?
 
         # rerun preprocessor to resolve instrumentation macros
-        #echo cpp ${SRC_TRACER} "${outfile}.tmp.cpp" -o "${outfile}.tmp.ii" -I "${SRC_TRACER_DIR}/include/"
-        cpp ${SRC_TRACER} "${outfile}.tmp.cpp" -o "${outfile}.tmp.ii" -I "${SRC_TRACER_DIR}/include/"
+        cpp ${SRC_TRACER} "${outfile}.tmp.cc" -o "${outfile}.tmp.ii" -I "${SRC_TRACER_DIR}/include/"
         cp "${outfile}.tmp.ii" "${outfile}"
+
+        # delete temporary files
+        rm "${outfile}.tmp.cc"
+        rm "${outfile}.tmp.ii"
     fi
 elif [ "$1" = "-fpreprocessed" ]; then
     # just compile it

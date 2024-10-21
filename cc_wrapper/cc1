@@ -99,6 +99,10 @@ if [ "$1" = "-E" ]; then
         #echo cpp ${SRC_TRACER} "${outfile}.tmp.c" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/include/"
         cpp ${SRC_TRACER} "${outfile}.tmp.c" -o "${outfile}.tmp.i" -I "${SRC_TRACER_DIR}/include/"
         cp "${outfile}.tmp.i" "${outfile}"
+
+        # delete temporary files
+        rm "${outfile}.tmp.c"
+        rm "${outfile}.tmp.i"
     fi
 elif [ "$1" = "-fpreprocessed" ]; then
     # just compile it
