@@ -168,7 +168,10 @@ class Trace:
         else:
             with open(filename, 'rb') as f:
                 f.seek(seek_bytes)
-                trace_bytes = f.read()
+                if count_bytes > 0:
+                    trace_bytes = f.read(count_bytes + 9*count_elems)
+                else:
+                    trace_bytes = f.read()
                 if count_bytes < 0:
                     count_bytes = len(trace_bytes)
                     count_elems = 0
