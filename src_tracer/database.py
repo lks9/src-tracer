@@ -63,6 +63,24 @@ class Database:
         cursor.close()
         self.connection.commit()
 
+    def from_number(self, func_num):
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT file FROM function_list WHERE rowid=?", (func_num,))
+        file = cursor.fetchone()
+        cursor.close()
+        if file is None:
+            log.error("there is no name (entry) for the func_num (%d)", func_num)
+            return None
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT line FROM function_list WHERE rowid=?", (func_num,))
+        line = cursor.fetchone()
+        cursor.close()
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT name FROM function_list WHERE rowid=?", (func_num,))
+        name = cursor.fetchone()
+        cursor.close()
+        return (file[0],line[0],name[0])
+
     def get_number(self, file, name):
         cursor = self.connection.cursor()
         func_num = cursor.execute('''
