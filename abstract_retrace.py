@@ -27,6 +27,8 @@ ap_out.add_argument("--lines", action='store_true', default=False,
                     help="Output the lines (default)")
 ap_out.add_argument("--cbmc", action='store_true', default=False,
                     help="Output a control flow trace for CBMC's new --retrace option")
+ap_out.add_argument("--cbmc-trace-only", action='store_true', default=False,
+                    help="Bare CBMC control flow trace without command to run")
 ap_instru = ap.add_argument_group('instrumentation options')
 ap_instru.add_argument("--returns", action='store_true', default=False,
                        help="Instrument returns (default off).")
@@ -36,9 +38,13 @@ output_format="lines"
 
 if args.lines:
     output_format="lines"
-elif args.cbmc:
+elif args.cbmc or args.cbmc_trace_only:
     output_format="cbmc"
-    
+
+if args.cbmc_trace_only:
+    silent=True
+else:
+    silent=False
 
 return_instrument = args.returns
 
@@ -58,7 +64,7 @@ except:
 
 trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count, count_elems=args.count_elems)
 
-retracer = Line_Retracer(database, return_instrument=return_instrument, output_format=output_format)
+retracer = Line_Retracer(database, return_instrument=return_instrument, output_format=output_format, silent=silent)
 
 retracer.abstract_retrace(iter(trace))
 
