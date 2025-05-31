@@ -53,6 +53,7 @@ class Line_Retracer:
             if node.location.line != line:
                 continue
             return node
+        print("could not resolve " + file + ":" + str(line) + " " + name)
         raise
 
     def print_start(self, node):
@@ -92,11 +93,24 @@ class Line_Retracer:
             return
         print(str(number), end='')
 
+    def retrace_expr(self, node, trace_iter):
+        for child in node.walk_preorder():
+            if child.kind == CursorKind.CALL_EXPR:
+                self.print_location(node)
+                self.retrace_function(trace_iter)
+
+    def has_call(self, node):
+        for child in node.walk_preorder():
+            if child.kind == CursorKind.CALL_EXPR:
+                return True
+        return False
+
     def retrace_node(self, node, trace_iter):
         """
         General method to retrace along a node of any kind
         """
         if node.kind == CursorKind.RETURN_STMT:
+            self.retrace_expr(node, trace_iter)
             if self.return_instrument:
                 elem = next(trace_iter)
                 assert elem.letter == 'R'
@@ -115,10 +129,11 @@ class Line_Retracer:
         elif node.kind == CursorKind.DO_STMT:
             return self.retrace_do(node, trace_iter)
 
-        elif node.kind == CursorKind.CALL_EXPR:
-            self.print_location(node)
-            self.retrace_function(trace_iter)
-            return False
+        elif node.kind == CursorKind.FOR_STMT:
+            return self.retrace_for(node, trace_iter)
+
+        else:
+            self.retrace_expr(node, trace_iter)
 
         # final print
         self.print_location(node)
@@ -143,6 +158,7 @@ class Line_Retracer:
             else:
                 return False
         # other letter?
+        print(elem)
         raise
 
     def retrace_while(self, node, trace_iter):
@@ -190,6 +206,33 @@ class Line_Retracer:
             self.print_location(condition)
             branch = True
 
+    def retrace_for(self, node, trace_iter):
+        childs = [c for c in node.get_children()]
+        if len(childs) != 4:
+            raise
+        initialization = childs[0]
+        condition = childs[1]
+        update = childs[2]
+        body = childs[-1]
+
+        self.print_location(initialization)
+        self.retrace_node(initialization, trace_iter)
+
+        while True:
+            self.print_location(condition)
+            elem = next(trace_iter)
+            if elem.letter == 'I':
+                self.print_cbmc(0)
+                if self.retrace_node(body, trace_iter):
+                    # propagate RETURN_STMT
+                    return True
+            elif elem.letter == 'O':
+                self.print_cbmc(1)
+                return False
+            else:
+                raise
+            self.print_location(update)
+
     def retrace_block(self, node, trace_iter):
         cur_file = node.location.file.name
         cur_start = None
@@ -208,7 +251,7 @@ class Line_Retracer:
                 cur_start = child_line
                 cur_end = None
 
-            if child.kind in (CursorKind.RETURN_STMT, CursorKind.COMPOUND_STMT, CursorKind.IF_STMT, CursorKind.WHILE_STMT, CursorKind.DO_STMT, CursorKind.CALL_EXPR):
+            if child.kind in (CursorKind.RETURN_STMT, CursorKind.COMPOUND_STMT, CursorKind.IF_STMT, CursorKind.WHILE_STMT, CursorKind.DO_STMT, CursorKind.FOR_STMT) or self.has_call(child):
                 self.print_line(cur_file, cur_start, cur_end)
                 if self.retrace_node(child, trace_iter):
                     # propagate RETURN_STMT
@@ -229,7 +272,8 @@ class Line_Retracer:
     def retrace_function(self, trace_iter, start=False):
         elem = next(trace_iter)
         if elem.letter != 'C':
-            raise
+            # function not recorded, skip
+            return False
         # print(first)
 
         (file, line, name) = self.database.from_number(elem.num)

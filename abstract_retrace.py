@@ -22,16 +22,23 @@ ap_in.add_argument("--count-elems", metavar="ELEMS", type=int, default=1,
                    help="read extra elems after count (default: 1)")
 ap_in.add_argument("--database",
                    help="path to the function database")
+ap_out = ap.add_argument_group('output options')
+ap_out.add_argument("--lines", action='store_true', default=False,
+                    help="Output the lines (default)")
+ap_out.add_argument("--cbmc", action='store_true', default=False,
+                    help="Output a control flow trace for CBMC's new --retrace option")
 ap_instru = ap.add_argument_group('instrumentation options')
 ap_instru.add_argument("--returns", action='store_true', default=False,
                        help="Instrument returns (default off).")
-ap_out = ap.add_argument_group('output options')
-ap_out.add_argument("--output-lines",
-                    help="Output the lines (default)")
-ap_out.add_argument("--output-cbmc",
-                    help="Output a control flow trace for CBMC's new --retrace option")
 args = ap.parse_args()
 
+output_format="lines"
+
+if args.lines:
+    output_format="lines"
+elif args.cbmc:
+    output_format="cbmc"
+    
 
 return_instrument = args.returns
 
@@ -51,7 +58,7 @@ except:
 
 trace = Trace.from_file(args.trace_file, seek_bytes=args.seek, count_bytes=args.count, count_elems=args.count_elems)
 
-retracer = Line_Retracer(database, return_instrument=return_instrument)
+retracer = Line_Retracer(database, return_instrument=return_instrument, output_format=output_format)
 
 retracer.abstract_retrace(iter(trace))
 

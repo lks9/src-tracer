@@ -5,6 +5,8 @@ Instrument your software with `instrumenter.py`. When running instrumented softw
 The format is basically one character (plus an optional number)
 for each source code block on the trace.
 For accurate retracing, `retrace.py` uses symbolic execution.
+`abstract_retrace.py` is an experimental abstract retracing, using no
+symbolic execution and just the AST from libclang parser.
 
 ## Which Software to Trace
 
@@ -87,10 +89,11 @@ Any software which is written in C/C++, with the source code available.
   retrace.py checksum_retrace sub.trace.txt
   ```
   The last one just retraces function `checksum`.
-
-## Other Example
-
-An example to instrument and retrace busybox with musl-libc can be found in the [wiki](https://github.com/lks9/src-tracer/wiki/Busybox-with-musl%E2%80%90libc)
+### Abstract Retracing
+* For abstract retracing, you don't need to recompile. Make sure that you are in the folder of the database:
+  ```
+  abstract_retrace.py 2023-04-28-143402-checksum.c.trace
+  ```
 
 ## Other Software
 
