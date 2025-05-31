@@ -226,6 +226,7 @@ class Line_Retracer:
                 if self.retrace_node(body, trace_iter):
                     # propagate RETURN_STMT
                     return True
+                self.print_cbmc(1)
             elif elem.letter == 'O':
                 self.print_cbmc(1)
                 return False
