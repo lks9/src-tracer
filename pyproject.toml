@@ -1,7 +1,7 @@
 [project]
 name = "src_tracer"
 authors = [
-    {name = "Lukas Gratz", email = "lukas.graetz@tu-darmstadt.de"},
+    {name = "NAME REMOVED", email = "x@example.com"},
 ]
 description = "My package description"
 dynamic = ["version"]
