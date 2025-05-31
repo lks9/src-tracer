@@ -10,7 +10,8 @@ class Line_Retracer:
     def __init__(self, database,
                  return_instrument=True,
                  exclude=[],
-                 output_format="cbmc"):
+                 output_format="cbmc",
+                 silent=False):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
@@ -19,6 +20,7 @@ class Line_Retracer:
         self.return_instrument = return_instrument
         self.exclude = exclude
         self.output_format = output_format
+        self.silent = silent
 
         self.ifs = []
         self.loops = []
@@ -57,6 +59,8 @@ class Line_Retracer:
         raise
 
     def print_start(self, node):
+        if self.silent:
+            return
         if self.output_format == "cbmc":
             print()
             print("cbmc " + node.location.file.name
@@ -64,6 +68,8 @@ class Line_Retracer:
                   + " --retrace ", end='')
 
     def print_end(self, node):
+        if self.silent:
+            return
         if self.output_format == "cbmc":
             # new line
             print()
@@ -231,6 +237,7 @@ class Line_Retracer:
                 self.print_cbmc(1)
                 return False
             else:
+                print(elem)
                 raise
             self.print_location(update)
 
