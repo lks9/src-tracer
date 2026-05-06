@@ -13,7 +13,8 @@ class Instrumenter:
                  exclude=[],
                  main_instrument=True, main_spelling="main",
                  main_close=False, anon_instrument=False,
-                 function_instrument=True, inner_instrument=True, call_instrument=True, pointer_call_instrument=False):
+                 function_instrument=True, inner_instrument=True, call_instrument=True, pointer_call_instrument=False,
+                 signature_instrument=False):
         """
         Instrument a C compilation unit (pre-processed C source code).
         :param case_instrument: instrument each switch case, not the switch (experimental)
@@ -36,6 +37,7 @@ class Instrumenter:
         self.inner_instrument = inner_instrument
         self.call_instrument = call_instrument
         self.pointer_call_instrument = pointer_call_instrument
+        self.signature_instrument = signature_instrument
 
         self.ifs = []
         self.loops = []
@@ -112,13 +114,30 @@ class Instrumenter:
             func_annotation += bytes(hex(func_num), "utf-8") + b") "
         self.add_annotation(func_annotation, body.extent.start, 1)
 
+    def visit_signature(self, node):
+        if not self.signature_instrument:
+            return
+        if not node.storage_class == StorageClass.EXTERN:
+            return
+        # TODO: check that this is really only a signature without an implementation
+
+        func_annotation = b" _FUNC("
+        func_num = self.func_num(node)
+        func_annotation += bytes(hex(func_num), "utf-8") + b") "
+        func_name = bytes(node.spelling, "utf-8")
+        off = self.find_next_semi(node.extent.end)
+
+        self.add_annotation(b"\n#undef " + func_name + b"\n", node.extent.start)
+        macro = b"\n#define " + func_name + b"(...) ({ " + func_annotation + func_name + b"(__VA_ARGS__); })\n"
+        self.add_annotation(macro, node.extent.end, off+1)
+
     def visit_function(self, node):
         body = None
         for child in node.get_children():
             if child.kind == CursorKind.COMPOUND_STMT:
                 body = child
         if not body:
-            return
+            return self.visit_signature(node)
         if not self.check_location(body.extent.start, [b"{"]):
             print("Check location failed for function " + node.spelling)
             return
@@ -238,6 +257,10 @@ class Instrumenter:
             i -= 1
         return i
 
+    def find_first(self, node, pattern):
+        content = self.node_content(node)
+        return re.search(pattern, content).start()
+
     def search(self, b_str, start, end):
         content = self.get_content(start, end)
         return re.search(b_str, content)
@@ -280,6 +303,9 @@ class Instrumenter:
 
         if node.spelling == self.main_spelling:
             # ... except main
+            return False
+
+        if self.signature_instrument and node.storage_class == StorageClass.EXTERN:
             return False
 
         for sub in node.walk_preorder():

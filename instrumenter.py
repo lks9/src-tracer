@@ -65,6 +65,9 @@ ap_instru.add_argument("--no-calls", action='store_false', dest='calls')
 ap_instru.add_argument("--pointer-calls", action='store_true', default=False,
                 help="Instrument all function calls via pointers (default off). "
                 "In effect, other function calls and returns wont be traced.")
+ap_instru.add_argument("--signatures", action='store_true', default=False,
+                help="Instrument signatures of extern functions (default off).")
+ap_instru.add_argument("--no-signatures", action='store_false', dest='signatures')
 ap.add_argument("--full", action='store_true',
                 help="Instrument whatever possible. Implies most positive instrumentation options.")
 args = ap.parse_args()
@@ -105,6 +108,7 @@ function_instrument = args.full or args.functions
 inner_instrument = args.full or args.inner
 call_instrument = args.full or args.calls
 pointer_call_instrument = args.full or args.pointer_calls
+signature_instrument = args.full or args.signatures
 exclude = args.exclude or []
 
 # do the instrumentation
@@ -116,7 +120,8 @@ instrumenter = Instrumenter(database, store_dir, case_instrument=case_instrument
                             main_instrument=main_instrument, main_spelling=main_spelling, main_close=main_close,
                             anon_instrument=anon_instrument,
                             function_instrument=function_instrument, inner_instrument=inner_instrument,
-                            call_instrument=call_instrument, pointer_call_instrument=pointer_call_instrument)
+                            call_instrument=call_instrument, pointer_call_instrument=pointer_call_instrument,
+                            signature_instrument=signature_instrument)
 instrumenter.parse(args.filename)
 instrumenter.annotate_all(args.filename, args.output)
 database.close_connection()
