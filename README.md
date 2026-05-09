@@ -1,6 +1,6 @@
 # Source Tracer
 
-This is a draft of a control flow tracer based on source code instrumentation with a low overhead.
+[src-tracer](https://github.com/lks9/src-tracer) is a prototype control flow tracer based on source code instrumentation with a low overhead.
 Instrument your software with `instrumenter.py`. When running instrumented software, the trace is written into a file.
 The format is basically one character (plus an optional number)
 for each source code block on the trace.
